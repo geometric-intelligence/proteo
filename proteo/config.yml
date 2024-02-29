@@ -23,6 +23,8 @@ gat-v4:
   adj_thresh: 0.08
   alpha: 0.2
   patience: 0.005
+  task_type: classification # Placeholder
+  minimize: true #Placeholder
   # Optimizer Configuration
   lr_scheduler: LambdaLR
 
@@ -48,7 +50,13 @@ higher-gat:
     lr_scheduler_min: 0.00001
     verbose: true
 
-  early_stop: true
+gat:
+  hidden_channels: 64
+  heads: 1
+  task_type: classification # Placeholder
+  minimize: true #Placeholder
+
+early_stop: true
 
 
 
