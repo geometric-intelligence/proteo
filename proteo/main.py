@@ -44,7 +44,7 @@ class Proteo(pl.LightningModule):
         if config.model == 'gat':
             self.model = MyGAT(
                 in_channels=in_channels,
-                hidden_channels=config.hidden_channels, #TODO This will break as is.
+                hidden_channels=config.hidden_channels,  # TODO This will break as is.
                 out_channels=out_channels,
                 heads=config.heads,
             )
@@ -58,7 +58,7 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GAT(opt=config[config.model]) #TODO Check if this is correct
+            self.model = GAT(opt=config[config.model])  # TODO Check if this is correct
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -80,7 +80,9 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
-            _, _, pred = self.model(x, adj, x.batch, self.config[self.config.model])  # TODO define other inputs
+            _, _, pred = self.model(
+                x, adj, x.batch, self.config[self.config.model]
+            )  # TODO define other inputs
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
@@ -130,7 +132,7 @@ class Proteo(pl.LightningModule):
         scheduler_params = config[config.model]['lr_scheduler_params']
 
         if scheduler_type == 'LambdaLR':
-            #TO DO: Define num epochs? 
+            # TO DO: Define num epochs?
             def lambda_rule(epoch):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
@@ -138,7 +140,9 @@ class Proteo(pl.LightningModule):
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
 
         elif scheduler_type == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode = mode, **scheduler_params)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode=mode, **scheduler_params
+            )
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
