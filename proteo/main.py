@@ -62,15 +62,14 @@ class Proteo(pl.LightningModule):
         else:
             raise NotImplementedError('Model not implemented yet')
 
-    def forward(self, batch_idx, x):
+    def forward(self, x):
         if self.config.model == 'gat':
             return self.model(x, dim=self.config.dim)
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
-            # TODO: Can't we just pass in load_csv_data as our x?
             _, _, _, _, adj = load_csv_data(1, self.config)
-            return self.model(x, adj, batch_idx, self.config[self.config.model])
+            return self.model(x, adj, x.batch, self.config[self.config.model])
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -80,7 +79,8 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, pred = self.model(batch_idx)  # TODO define other inputs
+            _, _, _, _, adj = load_csv_data(1, self.config)
+            _, _, pred = self.model(x, adj, x.batch, self.config[self.config.model])  # TODO define other inputs
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
