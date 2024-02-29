@@ -55,6 +55,16 @@ gat:
   heads: 1
   task_type: classification # Placeholder
   minimize: true #Placeholder
+  # Optimizer Configuration
+  lr: 0.001
+  lr_scheduler: ReduceLROnPlateau
+  lr_scheduler_params:
+    mode: #TO DO
+    lr_scheduler_patience: 20
+    lr_scheduler_decay_steps: 50
+    lr_scheduler_decay_rate: 0.5
+    lr_scheduler_min: 0.00001
+    verbose: true
 
 early_stop: true
 

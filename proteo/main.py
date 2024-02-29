@@ -123,8 +123,10 @@ class Proteo(pl.LightningModule):
     def configure_optimizers(self, config: Config):
         # Do not change this
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config.lr)
-        mode = 'min' if self.model_parameters['minimize'] else 'max'
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.model_parameters['lr'])
+        mode = (
+            'min' if self.model_parameters['minimize'] else 'max'
+        )  # Could set this in the config file
 
         scheduler_type = self.model_parameters['lr_scheduler']
         scheduler_params = self.model_parameters['lr_scheduler_params']
