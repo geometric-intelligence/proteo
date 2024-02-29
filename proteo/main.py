@@ -80,9 +80,7 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
-            _, _, pred = self.model(
-                x, adj, x.batch, self.config[self.config.model]
-            )  # TODO define other inputs
+            _, _, pred = self.model(batch, adj, batch.batch, self.config[self.config.model])
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
@@ -103,7 +101,8 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            pred = self.model(batch)  # TODO define other inputs
+            _, _, _, _, adj = load_csv_data(1, self.config)
+            pred = self.model(batch, adj, batch.batch, self.config[self.config.model])
 
         targets = batch.y
 
@@ -132,7 +131,7 @@ class Proteo(pl.LightningModule):
         scheduler_params = config[config.model]['lr_scheduler_params']
 
         if scheduler_type == 'LambdaLR':
-            # TO DO: Define num epochs?
+            # TODO: Define num epochs?
             def lambda_rule(epoch):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
