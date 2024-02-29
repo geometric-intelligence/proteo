@@ -4,34 +4,54 @@
 # Model Configuration
 model: gat-v4
 
-nonlinearity: relu
-num_layers: 4
-readout: sum
-readout_dims: (0, 1, 2)
-max_ring_size: 18
-task_type: classification
-minimize: true
-hidden_channels: 64
-heads: 1
+gat-v4:
+  lambda_cox: 1.0
+  lambda_reg: 0.0003
+  lambda_nll: 1.0
+  task: 'grad'
+  label_dim: 3
+  input_dim: 1
+  lin_input_dim: 720
+  which_layer: 'all'
+  cnv_dim: 0
+  omic_dim: 32
+  act_type: 'none'
+  lr: 0.002
+  final_lr: 0.1
+  weight_decay: 0.0005
+  fc_dropout: 0.2  # was dropout
+  adj_thresh: 0.08
+  alpha: 0.2
+  patience: 0.005
+  # Optimizer Configuration
+  lr_scheduler: LambdaLR
 
-lambda_cox: 1.0
-lambda_reg: 0.0003
-lambda_nll: 1.0
-task: 'grad'
-label_dim: 3
-input_dim: 1
-lin_input_dim: 720
-which_layer: 'all'
-cnv_dim: 0
-omic_dim: 32
-act_type: 'none'
-lr: 0.002
-final_lr: 0.1
-weight_decay: 0.0005
-fc_dropout: 0.2  # was dropout
-adj_thresh: 0.08
-alpha: 0.2
-patience: 0.005
+higher-gat:
+  nonlinearity: relu
+  num_layers: 4
+  readout: sum
+  readout_dims: (0, 1, 2)
+  max_ring_size: 18
+  task_type: classification
+  minimize: true
+  hidden_channels: 64
+  heads: 1
+  # Optimizer Configuration
+  lr: 0.001
+  graph_norm: bn
+  lr_scheduler: ReduceLROnPlateau
+  lr_scheduler_params:
+    mode: #TO DO
+    lr_scheduler_patience: 20
+    lr_scheduler_decay_steps: 50
+    lr_scheduler_decay_rate: 0.5
+    lr_scheduler_min: 0.00001
+    verbose: true
+
+  early_stop: true
+
+
+
 
 # Dataset Configuration
 exp_name: cwn-zinc
@@ -55,15 +75,6 @@ use_coboundaries: true
 use_edge_features: true
 
 
-# Optimizer Configuration
-lr: 0.001
-graph_norm: bn
-lr_scheduler: 'ReduceLROnPlateau' 
-early_stop: true
-lr_scheduler_patience: 20
-lr_scheduler_decay_steps: 50
-lr_scheduler_decay_rate: 0.5
-lr_scheduler_min: 0.00001
 
 # Training Configuration
 epochs: 1000

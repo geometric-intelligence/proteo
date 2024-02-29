@@ -38,11 +38,13 @@ class Proteo(pl.LightningModule):
     def __init__(self, config: Config, in_channels, out_channels):
         super().__init__()
         self.config = config
+        self.model_name = config.model
+        model_parameters = getattr(config, config.model)
 
         if config.model == 'gat':
             self.model = MyGAT(
                 in_channels=in_channels,
-                hidden_channels=config.hidden_channels,
+                hidden_channels=config.hidden_channels, #TODO This will break as is.
                 out_channels=out_channels,
                 heads=config.heads,
             )
@@ -52,23 +54,23 @@ class Proteo(pl.LightningModule):
                 GNN=GAT,
                 in_channels=in_channels,
                 hidden_channels=config.hidden_channels,
-                num_layers=config.num_layers,
+                num_layers=config[config.model]['num_layers'],
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GAT(opt=config)
+            self.model = GAT(opt=config[config.model]) #TODO Check if this is correct
         else:
             raise NotImplementedError('Model not implemented yet')
 
-    def forward(self, x):
+    def forward(self, batch_idx, x):
         if self.config.model == 'gat':
             return self.model(x, dim=self.config.dim)
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
+            # TODO: Can't we just pass in load_csv_data as our x?
             _, _, _, _, adj = load_csv_data(1, self.config)
-            batch = "todo"  # TODO
-            return self.model(x, adj, batch, self.config)
+            return self.model(x, adj, batch_idx, self.config[self.config.model])
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -78,7 +80,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, pred = self.model(batch)  # TODO define other inputs
+            _, _, pred = self.model(batch_idx)  # TODO define other inputs
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
@@ -117,26 +119,27 @@ class Proteo(pl.LightningModule):
 
         return loss
 
-    def configure_optimizers(self):
+    def configure_optimizers(self, config: Config):
         # Do not change this
+        self.config = config
+
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config.lr)
         mode = 'min' if self.config.minimize else 'max'
 
-        if self.config.model == "higher-gat":
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer,
-                mode=mode,
-                factor=self.config.lr_scheduler_decay_rate,
-                patience=self.config.lr_scheduler_patience,
-                verbose=True,
-            )
-        elif self.config.model == "gat-v4":
+        scheduler_type = config[config.model]['lr_scheduler']
+        scheduler_params = config[config.model]['lr_scheduler_params']
 
+        if scheduler_type == 'LambdaLR':
+            #TO DO: Define num epochs? 
             def lambda_rule(epoch):
-                lr_l = 1.0 - max(0, epoch + 1) / float(self.config.num_epochs + 1)
+                lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
 
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+
+        elif scheduler_type == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode = mode, **scheduler_params)
+
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
