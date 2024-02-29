@@ -1,0 +1,107 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "proteo"
+version = "0.0.1"
+description = ""
+authors = ["Geometric Intellince Lab"]
+readme = "README.md"
+repository = "https://github.com/geometry-intellince/proteo"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+numpy = "^1.23.2"
+click = "<9.0"
+aioboto3 = ">=10.0.0"
+aiobotocore = {extras = ["boto3"], version = "^2.4.0"}
+boto3 = ">=1.24.0"
+timm = "^0.9.12"
+einops = "^0.7.0"
+fsspec = {extras = ["s3"], version = "^2022.11.0"}
+joblib = "^1.2.0"
+matplotlib = "^3.7.1"
+pandas = "^2.0"
+tqdm = "^4.65.0"
+rich = "^13.3.4"
+zarr = "^2.14.2"
+pydantic = "^1.10.7"
+s3fs = ">=2021.08.0"
+bokeh = "^3.1.0"
+pytorch-lightning = "^2.1.2"
+wandb = "^0.15.3"
+pyyaml = "^6.0"
+cdsapi = "^0.6.1"
+mypy = "^1.4.1"
+torch-geometric = "^2.4.0"
+six = "^1.16.0"
+ogb = "^1.3.6"
+scikit-learn = "^1.3.2"
+gudhi = "^3.9.0"
+opencv-python = "^4.0"
+PyWGCNA = "^2.0"
+
+[[tool.poetry.source]]
+name = "torch-gpu"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
+
+[[tool.poetry.source]]
+name = "torch-geometric-gpu"
+url = "https://pytorch-geometric.com/whl/torch-2.1.0+cu121.html"
+priority = "explicit"
+
+[tool.poetry.group.gpu.dependencies]
+torch = {version = "^2.1.0+cu121", source = "torch-gpu"}
+torchvision = {version = "^0.16.1+cu121", source = "torch-gpu"}
+
+
+torch-cluster = {version = "^1.6.3+pt21cu121", source = "torch-geometric-gpu"}
+torch-scatter = {version = "^2.1.2+pt21cu121", source = "torch-geometric-gpu"}
+torch-sparse = {version = "^0.6.18+pt21cu121", source = "torch-geometric-gpu"}
+torch-spline-conv = {version = "^1.2.2+pt21cu121", source = "torch-geometric-gpu"}
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+isort = "^5.12.0"
+pytest = "^7.3.1"
+pytest-cov = "^4.0.0"
+flake8 = "^6.0.0"
+autoflake8 = "^0.4.0"
+ipython = "^8.12.0"
+jupyter = "^1.0.0"
+jupyterlab = "^4.0"
+jupyter-server-proxy = "^4.0.0"
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+skip-string-normalization = true
+include = '\.pyi?$'
+
+[tool.coverage]
+run.omit = ["*_test.py"]
+
+[tool.bandit]
+skips = ['B101']
+assert_used.skips = ['test_*.py', '*_test.py']
+
+[tool.isort]
+py_version = 39
+profile = "black"  # be nice with black
+line_length = 100
+skip = ['.gitignore', '.dockerignore']
+
+[tool.pytest.ini_options]
+python_files = "*_test.py"
+filterwarnings = [
+    "ignore::DeprecationWarning:pkg_resources.*:",
+]
+
+[tool.mypy]
+python_version = "3.9"
+show_error_codes = true
+show_column_numbers = true
+show_error_context = true
+ignore_missing_imports = true  # prefer explicit ignores

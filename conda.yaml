@@ -1,0 +1,10 @@
+---
+name: proteo
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11.*
+  - nomkl
+  - numpy
+  - pip
+  - poetry>=1.5.0
