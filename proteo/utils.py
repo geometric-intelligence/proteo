@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import pandas as pd
@@ -15,6 +16,11 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import LabelBinarizer
 from torch.utils.data.dataset import Dataset
+from torch_geometric.data import Data
+
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 # import lifelines
 # from lifelines.utils import concordance_index
@@ -24,6 +30,43 @@ from torch.utils.data.dataset import Dataset
 ################
 # Data Utils
 ################
+
+
+class FADDataset(InMemoryDataset):
+    """This is ZINC from the Benchmarking GNNs paper. This is a graph regression task.
+    
+    root will be something like os.path.join(ROOT_DIR, "data", "FAD")
+    """
+
+    def __init__(self, root):
+        self.name = 'FAD'
+
+        super(FADDataset, self).__init__(root)
+        self.load(self.processed_paths[0])
+
+
+    @property
+    def raw_file_names(self):
+        return ['test.csv']
+
+    @property
+    def processed_file_names(self):
+        return ['data.pt']
+
+    def process(self):
+        # Read data into huge `Data` list which will be a list of graphs
+        data_list = []
+        tr_features, tr_labels, te_features, te_labels, adj_matrix = load_csv_data(..)
+        for feature, label in zip(tr_features, tr_labels):
+            x = feature  #protein concentrations: what is on the nodes
+            edge_index = convert_to_list_of_pairs_of_nodes(adj_matrix)  
+            #^^^ find function that does is for you, see how its done in pytorch-geometric examples
+            # maybe numpy sparse functions, or else, or ask chatgpt
+            data = Data(x=x, edge_index=edge_index, y=label)
+            data_list.append(data)
+
+        self.save(data_list, self.processed_paths[0])
+
 
 
 def load_csv_data(k, opt):
@@ -72,6 +115,13 @@ def load_csv_data(k, opt):
         )
 
     return tr_features, tr_labels, te_features, te_labels, adj_matrix
+
+
+def load_dataset(k, config):
+    train_features, train_labels, test_features, test_labels, _ = load_csv_data(1, config)
+    # transform these vsriables to create an object of dataset class
+    dataset = MyDataset(train_features, train_labels, test_features, test_labels, _)
+    return dataset
 
 
 ################

@@ -179,6 +179,10 @@ def main():
     out_channels = dataset.num_classes
 
     train_features, train_labels, test_features, test_labels, _ = load_csv_data(1, config)
+    # TODO: replacce line above with something like:
+    dataset = FADDataset(os.path.join(ROOT_DIR, "data", "FAD")
+    # ehere load_dataset is your new function, and dataset is an object
+    # that is of the class InMemoryDataset from pytorch geometric
 
     train_loader = DataLoader(
         # DEBUG: Set to "valid" to go faster through epoch 1
