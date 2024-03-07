@@ -12,7 +12,7 @@ class GATv4(torch.nn.Module):
     def __init__(self, opt):
         super(GATv4, self).__init__()
         self.fc_dropout = opt.fc_dropout
-        self.GAT_dropout = opt.fc_dropout # opt.GAT_dropout: TODO Check where GAT_dropout is
+        self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
 
         self.nhids = [8, 16, 12]
@@ -76,6 +76,8 @@ class GATv4(torch.nn.Module):
 
     def forward(self, x, adj, batch, opt):
         ### layer1
+        print("ERROR")
+        print(type(x))  # <class 'torch_geometric.data.batch.DataBatch'>
         x = x.requires_grad_()
         x0 = to_dense_batch(torch.mean(x, dim=-1), batch=batch)[0]  # [bs, nodes]
 
