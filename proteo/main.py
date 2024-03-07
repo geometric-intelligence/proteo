@@ -11,9 +11,12 @@ from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-from torch.utils.data import DataLoader
+
+# from torch.utils.data import DataLoader
+from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
 from utils import ROOT_DIR, MLAGNNDataset, load_csv_data
+
 
 class AttrDict(dict):
     """Convert a dict into an object where attributes are accessed with "."
@@ -24,6 +27,7 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
 
 class Proteo(pl.LightningModule):
     """Proteo Lightning Module.
@@ -46,9 +50,8 @@ class Proteo(pl.LightningModule):
     def __init__(self, config: Config, in_channels, out_channels):
         super().__init__()
         self.config = config
-        self.model_parameters = getattr(config, config.model) 
+        self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
-        print(self.model_parameters["fc_dropout"])
 
         if config.model == 'gat':
             self.model = MyGAT(
@@ -67,27 +70,27 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GATv4(opt=self.model_parameters) 
+            self.model = GATv4(opt=self.model_parameters)
         else:
             raise NotImplementedError('Model not implemented yet')
 
     def forward(self, x):
-        if self.model_name == 'gat':
+        if self.config.model == 'gat':
             return self.model(x, dim=self.config.dim)
-        elif self.model_name == 'higher-gat':
+        elif self.config.model == 'higher-gat':
             return self.model(x)
-        elif self.model_name == "gat-v4":
+        elif self.config.model == "gat-v4":
             _, _, _, _, adj = load_csv_data(1, self.config)
             return self.model(x, adj, x.batch, self.model_parameters)
         else:
             raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch, batch_idx):
-        if self.model_name == 'gat':
+        if self.config.model == 'gat':
             pred = self.model(batch, dim=self.config.dim)
-        elif self.model_name == 'higher-gat':
+        elif self.config.model == 'higher-gat':
             pred = self.model(batch)
-        elif self.model_name == 'gat-v4':
+        elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
             _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
         targets = batch.y.view(pred.shape)
@@ -105,11 +108,11 @@ class Proteo(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.model_name == 'gat':
+        if self.config.model == 'gat':
             pred = self.model(batch, dim=self.config.dim)
-        elif self.model_name == 'higher-gat':
+        elif self.config.model == 'higher-gat':
             pred = self.model(batch)
-        elif self.model_name == 'gat-v4':
+        elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
             pred = self.model(batch, adj, batch.batch, self.model_parameters)
 
@@ -133,9 +136,7 @@ class Proteo(pl.LightningModule):
         # Do not change this
 
         optimizer = torch.optim.Adam(self.parameters(), lr=self.model_parameters.lr)
-        mode = (
-            'min' if self.config.minimize else 'max'
-        )  # Could set this in the config file
+        mode = 'min' if self.config.minimize else 'max'  # Could set this in the config file
 
         scheduler_type = self.model_parameters.lr_scheduler
         scheduler_params = self.model_parameters.lr_scheduler_params
@@ -167,24 +168,22 @@ def main():
 
     pl.seed_everything(config.seed)
 
-    train_features, train_labels, test_features, test_labels, _ = load_csv_data(1, config)
-    # TODO: replacce line above with something like:
-    dataset = MLAGNNDataset(os.path.join(ROOT_DIR, "data", "FAD"), config)
-    # ehere load_dataset is your new function, and dataset is an object
-    # that is of the class InMemoryDataset from pytorch geometric
-    in_channels = dataset.feature_dim
-    out_channels = dataset.label_dim
+    root = os.path.join(ROOT_DIR, "data", "FAD")
+    train_dataset = MLAGNNDataset(root, "train", config)
+    test_dataset = MLAGNNDataset(root, "test", config)
+
+    in_channels = train_dataset.feature_dim
+    out_channels = train_dataset.label_dim
 
     train_loader = DataLoader(
-        # DEBUG: Set to "valid" to go faster through epoch 1
-        dataset.get_split("train"),
+        train_dataset,
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
     )
     test_loader = DataLoader(
-        dataset.get_split("test"),
+        test_dataset,
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=config.num_workers,
