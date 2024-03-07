@@ -8,11 +8,11 @@ from torch_geometric.utils import to_dense_adj, to_dense_batch
 from utils import *
 
 
-class GAT(torch.nn.Module):
+class GATv4(torch.nn.Module):
     def __init__(self, opt):
-        super(GAT, self).__init__()
+        super(GATv4, self).__init__()
         self.fc_dropout = opt.fc_dropout
-        self.GAT_dropout = opt.GAT_dropout
+        self.GAT_dropout = opt.fc_dropout # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
 
         self.nhids = [8, 16, 12]

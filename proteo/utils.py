@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import torch.utils.data as Data
 from sklearn.metrics import (
     auc,
     cohen_kappa_score,
@@ -15,11 +14,13 @@ from sklearn.metrics import (
     roc_curve,
 )
 from sklearn.preprocessing import LabelBinarizer
-from torch.utils.data.dataset import Dataset
-from torch_geometric.data import Data
-
+from torch_geometric.data import Data, InMemoryDataset
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(ROOT_DIR)
+print(PARENT_DIR)
+FEATURES_LABELS_FOLDER = os.path.join(PARENT_DIR, "MLA-GNN/example_data/input_features_labels/split")
+ADJACENCY_FOLDER = os.path.join(PARENT_DIR, "MLA-GNN/example_data/input_adjacency_matrix/split")
 
 
 # import lifelines
@@ -32,18 +33,24 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 ################
 
 
-class FADDataset(InMemoryDataset):
+class MLAGNNDataset(InMemoryDataset):
     """This is ZINC from the Benchmarking GNNs paper. This is a graph regression task.
-    
+
     root will be something like os.path.join(ROOT_DIR, "data", "FAD")
     """
 
-    def __init__(self, root):
+    def __init__(self, root, config):
         self.name = 'FAD'
-
-        super(FADDataset, self).__init__(root)
+        self.root = root
+        self.config =  config
+        super(MLAGNNDataset, self).__init__(root)
         self.load(self.processed_paths[0])
+        self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
+        self.label_dim = 1  # survival is a scalar, ie, dim 1
 
+        self.data, idx = self.load_dataset()
+        self.train_ids = idx[0]
+        self.test_ids = idx[1]
 
     @property
     def raw_file_names(self):
@@ -51,70 +58,120 @@ class FADDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ['data.pt']
+        name = self.name
+        return [f'{name}_graph.pt', f'{name}_idx.pt']
+
+    def createst_graph_data(self, feature, label, adj_matrix):
+        x = feature  # protein concentrations: what is on the nodes
+        adj_tensor = torch.tensor(adj_matrix)
+        # Find the indices where the matrix has non-zero elements
+        pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
+        # Extract the pairs of connected nodes
+        edge_index = pairs_indices.tolist()
+        # ^^^ find function that does is for you, see how its done in pytorch-geometric examples
+        # maybe numpy sparse functions, or else, or ask chatgpt
+        return Data(x=x, edge_index=edge_index, y=label)
 
     def process(self):
         # Read data into huge `Data` list which will be a list of graphs
-        data_list = []
-        tr_features, tr_labels, te_features, te_labels, adj_matrix = load_csv_data(..)
-        for feature, label in zip(tr_features, tr_labels):
-            x = feature  #protein concentrations: what is on the nodes
-            edge_index = convert_to_list_of_pairs_of_nodes(adj_matrix)  
-            #^^^ find function that does is for you, see how its done in pytorch-geometric examples
-            # maybe numpy sparse functions, or else, or ask chatgpt
-            data = Data(x=x, edge_index=edge_index, y=label)
-            data_list.append(data)
+        train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(1, self.config)
+
+        train_data_list = []
+        for feature, label in zip(train_features, train_labels):
+            data = self.createst_graph_data(feature, label, adj_matrix)
+            train_data_list.append(data)
+        n_train = len(train_data_list)
+        self.train_ids = list(range(n_train))  #[0, 1, ...., n_train-1]
+
+        test_data_list = []
+        for feature, label in zip(test_features, test_labels):
+            data = self.createst_graph_data(feature, label, adj_matrix)
+            test_data_list.append(data) 
+        n_test = len(test_data_list)
+        self.test_ids = list(range(n_train, n_train+n_test))  #[n_train, ..., n_test+n_train-1]
+
+        idx = [self.train_ids, self.test_ids]
+        data_list = [train_data_list, test_data_list]
+
+        path = self.processed_paths[0]
+        print(f'Saving processed dataset in {path}....')
+        torch.save(data_list, path)
+
+        path = self.processed_paths[1]
+        print(f'Saving idx in {path}....')
+        torch.save(idx, path)
 
         self.save(data_list, self.processed_paths[0])
 
+    def get_idx_split(self):
+        idx_split = {'train': self.train_ids, 'test': self.test_ids}
+        return idx_split
+    
+    def get_split(self, split):
+        if split not in ['train', 'test']:
+            raise ValueError(f'Unknown split {split}.')
+        idx = self.get_idx_split()[split]
+        if idx is None:
+            raise AssertionError("No split information found.")
+        # if self.__indices__ is not None:
+        #     raise AssertionError("Cannot get the split for a subset of the original dataset.")
+        return self[idx]
+
+    def load_dataset(self):
+        """Load the dataset from here and process it if it doesn't exist"""
+        print("Loading dataset from disk...")
+        data = torch.load(self.processed_paths[0])
+        idx = torch.load(self.processed_paths[1])
+        return data, idx
 
 
-def load_csv_data(k, opt):
-    folder_path = './example_data/input_features_labels/split'
-    print("Loading data from:", folder_path + str(k))
-    train_data_path = folder_path + str(k) + '_train_320d_features_labels.csv'
+def load_csv_data(k, config):
+    print("Loading data from:", FEATURES_LABELS_FOLDER  + str(k))
+    train_data_path = FEATURES_LABELS_FOLDER  + str(k) + '_train_320d_features_labels.csv'
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
 
-    tr_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
-    tr_labels = torch.LongTensor(train_data[:, 320:])
-    print("Training features and labels:", tr_features.shape, tr_labels.shape)
+    train_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
+    train_labels = torch.LongTensor(train_data[:, 320:])
+    print("Training features and labels:", train_features.shape, train_labels.shape)
 
-    test_data_path = folder_path + str(k) + '_test_320d_features_labels.csv'
+    test_data_path = FEATURES_LABELS_FOLDER  + str(k) + '_test_320d_features_labels.csv'
     test_data = np.array(pd.read_csv(test_data_path, header=None))[1:, 2:].astype(float)
 
-    te_features = torch.FloatTensor(test_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
-    te_labels = torch.LongTensor(test_data[:, 320:])
-    print("Testing features and labels:", te_features.shape, te_labels.shape)
+    test_features = torch.FloatTensor(test_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
+    test_labels = torch.LongTensor(test_data[:, 320:])
+    print("Testing features and labels:", test_features.shape, test_labels.shape)
 
     similarity_matrix = np.array(
         pd.read_csv(
-            './example_data/input_adjacency_matrix/split' + str(k) + '_adjacency_matrix.csv'
+            ADJACENCY_FOLDER + str(k) + '_adjacency_matrix.csv'
         )
     ).astype(float)
-    adj_matrix = torch.LongTensor(np.where(similarity_matrix > opt.adj_thresh, 1, 0))
+    adj_matrix = torch.LongTensor(np.where(similarity_matrix > config.adj_thresh, 1, 0))
     print("Adjacency matrix:", adj_matrix.shape)
     print("Number of edges:", adj_matrix.sum())
 
-    if opt.task == "grad":
-        tr_idx = tr_labels[:, 2] >= 0
-        tr_labels = tr_labels[tr_idx]
-        tr_features = tr_features[tr_idx]
+    if config.task == "grad":
+        train_ids = train_labels[:, 2] >= 0
+        train_labels = train_labels[train_ids]
+        train_features = train_features[train_ids]
         print(
             "Training features and grade labels after deleting NA labels:",
-            tr_features.shape,
-            tr_labels.shape,
+            train_features.shape,
+            train_labels.shape,
         )
 
-        te_idx = te_labels[:, 2] >= 0
-        te_labels = te_labels[te_idx]
-        te_features = te_features[te_idx]
+        test_ids = test_labels[:, 2] >= 0
+        test_labels = test_labels[test_ids]
+        test_features = test_features[test_ids]
         print(
             "Testing features and grade labels after deleting NA labels:",
-            te_features.shape,
-            te_labels.shape,
+            test_features.shape,
+            test_labels.shape,
         )
+    train_labels = train_labels[:, 1]  # only taking survival
+    test_labels = test_labels[:, 1]  # only taking survival
 
-    return tr_features, tr_labels, te_features, te_labels, adj_matrix
+    return train_features, train_labels, test_features, test_labels, adj_matrix
 
 
 def load_dataset(k, config):
@@ -136,14 +193,14 @@ def accuracy(output, labels):
 
 def print_model(model, optimizer):
     print(model)
-    print("Model's state_dict:")
-    # Print model's state_dict
-    for param_tensor in model.state_dict():
-        print(param_tensor, "\t", model.state_dict()[param_tensor].size())
-    print("optimizer's state_dict:")
-    # Print optimizer's state_dict
-    for var_name in optimizer.state_dict():
-        print(var_name, "\t", optimizer.state_dict()[var_name])
+    print("Model's statest_dict:")
+    # Print model's statest_dict
+    for param_tensor in model.statest_dict():
+        print(param_tensor, "\t", model.statest_dict()[param_tensor].size())
+    print("optimizer's statest_dict:")
+    # Print optimizer's statest_dict
+    for var_name in optimizer.statest_dict():
+        print(var_name, "\t", optimizer.statest_dict()[var_name])
 
 
 def init_max_weights(module):
@@ -154,7 +211,7 @@ def init_max_weights(module):
             m.bias.data.zero_()
 
 
-def compute_ROC_AUC(test_pred, gt_labels):
+def computest_ROC_AUC(test_pred, gt_labels):
     enc = LabelBinarizer()
     enc.fit(gt_labels)
     labels_oh = enc.transform(gt_labels)  ## convert to one_hot grade labels.
@@ -165,7 +222,7 @@ def compute_ROC_AUC(test_pred, gt_labels):
     return aucroc
 
 
-def compute_metrics(test_pred, gt_labels):
+def computest_metrics(test_pred, gt_labels):
     enc = LabelBinarizer()
     enc.fit(gt_labels)
     labels_oh = enc.transform(gt_labels)  ## convert to one_hot grade labels.

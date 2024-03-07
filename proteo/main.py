@@ -5,17 +5,25 @@ import pytorch_lightning.loggers as pl_loggers
 import torch
 import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
-from data import complex
-from data.data_loading import DataLoader, load_dataset
-from models.gat_v4 import GAT
+from models.gat_v4 import GATv4
 from models.gats import MyGAT
 from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
+from torch.utils.data import DataLoader
 from torch_geometric.nn import GAT
-from utils import load_csv_data
+from utils import ROOT_DIR, MLAGNNDataset, load_csv_data
 
+class AttrDict(dict):
+    """Convert a dict into an object where attributes are accessed with "."
+
+    This is needed for the utils.load() function.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
 
 class Proteo(pl.LightningModule):
     """Proteo Lightning Module.
@@ -38,27 +46,28 @@ class Proteo(pl.LightningModule):
     def __init__(self, config: Config, in_channels, out_channels):
         super().__init__()
         self.config = config
-        self.model_name = config.model
-        self.model_parameters = config[config.model]
+        self.model_parameters = getattr(config, config.model) 
+        self.model_parameters = AttrDict(self.model_parameters)
+        print(self.model_parameters["fc_dropout"])
 
         if config.model == 'gat':
             self.model = MyGAT(
                 in_channels=in_channels,
-                hidden_channels=self.model_parameters['hidden_channels'],
+                hidden_channels=self.model_parameters.hidden_channels,
                 out_channels=out_channels,
-                heads=self.model_parameters['heads'],
+                heads=self.model_parameters.heads,
             )
         elif config.model == 'higher-gat':
             self.model = Higher(
                 max_dim=config.max_dim,
                 GNN=GAT,
                 in_channels=in_channels,
-                hidden_channels=self.model_parameters['hidden_channels'],
-                num_layers=self.model_parameters['num_layers'],
+                hidden_channels=self.model_parameters.hidden_channels,
+                num_layers=self.model_parameters.num_layers,
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GAT(opt=self.model_parameters)  # TODO Check if this is correct
+            self.model = GATv4(opt=self.model_parameters) 
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -83,7 +92,7 @@ class Proteo(pl.LightningModule):
             _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
         targets = batch.y.view(pred.shape)
 
-        loss_fn = self.LOSS_MAP[self.model_parameters['task_type']]
+        loss_fn = self.LOSS_MAP[self.config.task_type]
         loss = loss_fn(pred, targets)
         self.log(
             'train_loss',
@@ -106,7 +115,7 @@ class Proteo(pl.LightningModule):
 
         targets = batch.y
 
-        loss_fn = self.LOSS_MAP[self.model_parameters['task_type']]
+        loss_fn = self.LOSS_MAP[self.config.task_type]
         loss = loss_fn(pred, targets)
         self.log(
             'val_loss',
@@ -120,16 +129,16 @@ class Proteo(pl.LightningModule):
 
         return loss
 
-    def configure_optimizers(self, config: Config):
+    def configure_optimizers(self):
         # Do not change this
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.model_parameters['lr'])
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.model_parameters.lr)
         mode = (
-            'min' if self.model_parameters['minimize'] else 'max'
+            'min' if self.config.minimize else 'max'
         )  # Could set this in the config file
 
-        scheduler_type = self.model_parameters['lr_scheduler']
-        scheduler_params = self.model_parameters['lr_scheduler_params']
+        scheduler_type = self.model_parameters.lr_scheduler
+        scheduler_params = self.model_parameters.lr_scheduler_params
 
         if scheduler_type == 'LambdaLR':
             # TODO: Define num epochs?
@@ -158,48 +167,28 @@ def main():
 
     pl.seed_everything(config.seed)
 
-    dataset = load_dataset(
-        config.dataset,
-        max_dim=config.max_dim,
-        fold=config.fold,
-        init_method=config.init_method,
-        emb_dim=config.emb_dim,
-        flow_points=config.flow_points,
-        flow_classes=config.flow_classes,
-        max_ring_size=config.max_ring_size,
-        use_edge_features=config.use_edge_features,
-        include_down_adj=config.include_down_adj,
-        simple_features=config.simple_features,
-        n_jobs=config.preproc_jobs,
-        train_orient=config.train_orient,
-        test_orient=config.test_orient,
-    )
-
-    in_channels = dataset.num_node_type
-    out_channels = dataset.num_classes
-
     train_features, train_labels, test_features, test_labels, _ = load_csv_data(1, config)
     # TODO: replacce line above with something like:
-    dataset = FADDataset(os.path.join(ROOT_DIR, "data", "FAD")
+    dataset = MLAGNNDataset(os.path.join(ROOT_DIR, "data", "FAD"), config)
     # ehere load_dataset is your new function, and dataset is an object
     # that is of the class InMemoryDataset from pytorch geometric
+    in_channels = dataset.feature_dim
+    out_channels = dataset.label_dim
 
     train_loader = DataLoader(
         # DEBUG: Set to "valid" to go faster through epoch 1
-        [train_features, train_labels],  # TODO: transform this into a InMemoryDataset object
+        dataset.get_split("train"),
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
-        max_dim=dataset.max_dim,
     )
     test_loader = DataLoader(
-        dataset.get_split("test"),  # TODO do the same for the test
+        dataset.get_split("test"),
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
-        max_dim=dataset.max_dim,
     )
 
     # Almost don't touch what's below here
