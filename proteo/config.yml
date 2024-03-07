@@ -1,6 +1,12 @@
 # Description of parameters: 
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
+
+adj_thresh: 0.08
+task: 'grad'
+task_type: classification # Placeholder
+minimize: true #Placeholder
+
 # Model Configuration
 model: gat-v4
 
@@ -8,7 +14,6 @@ gat-v4:
   lambda_cox: 1.0
   lambda_reg: 0.0003
   lambda_nll: 1.0
-  task: 'grad'
   label_dim: 3
   input_dim: 1
   lin_input_dim: 720
@@ -20,13 +25,12 @@ gat-v4:
   final_lr: 0.1
   weight_decay: 0.0005
   fc_dropout: 0.2  # was dropout
-  adj_thresh: 0.08
   alpha: 0.2
   patience: 0.005
-  task_type: classification # Placeholder
-  minimize: true #Placeholder
   # Optimizer Configuration
   lr_scheduler: LambdaLR
+  lr_scheduler_params: None
+  num_nodes: 240
 
 higher-gat:
   nonlinearity: relu
@@ -34,7 +38,6 @@ higher-gat:
   readout: sum
   readout_dims: (0, 1, 2)
   max_ring_size: 18
-  task_type: classification
   minimize: true
   hidden_channels: 64
   heads: 1
@@ -53,7 +56,6 @@ higher-gat:
 gat:
   hidden_channels: 64
   heads: 1
-  task_type: classification # Placeholder
   minimize: true #Placeholder
   # Optimizer Configuration
   lr: 0.001
@@ -114,7 +116,7 @@ train_eval_period: 20
 eval_metric: mae
 
 # WandB Configuration
-project_name: "fine"
+project_name: "proteo"
 wandb_api_key_path: "wandb_api_key.txt"
 wandb_offline: false
 log_every_n_steps: 5
