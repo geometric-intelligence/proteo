@@ -72,9 +72,6 @@ class MLAGNNDataset(InMemoryDataset):
         pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
         # Extract the pairs of connected nodes
         edge_index = pairs_indices.tolist()
-        print(edge_index)
-        # ^^^ find function that does is for you, see how its done in pytorch-geometric examples
-        # maybe numpy sparse functions, or else, or ask chatgpt
         return Data(x=x, edge_index=edge_index, y=label)
 
     def process(self):
@@ -98,7 +95,7 @@ class MLAGNNDataset(InMemoryDataset):
 
 def load_csv_data(k, config):
     print("Loading data from:", FEATURES_LABELS_FOLDER + str(k))
-    train_data_path = FEATURES_LABELS_FOLDER + str(k) + '_train_320d_features_labels.csv'
+    train_data_path = FEATURES_LABELS_FOLDER + str(k) + '_train_320d_features_labels.csv' #TODO: Put into os.path.join format
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
 
     train_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1)).requires_grad_()

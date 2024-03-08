@@ -85,7 +85,7 @@ class Proteo(pl.LightningModule):
         else:
             raise NotImplementedError('Model not implemented yet')
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         if self.config.model == 'gat':
             pred = self.model(batch, dim=self.config.dim)
         elif self.config.model == 'higher-gat':
@@ -107,7 +107,7 @@ class Proteo(pl.LightningModule):
         )
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         if self.config.model == 'gat':
             pred = self.model(batch, dim=self.config.dim)
         elif self.config.model == 'higher-gat':

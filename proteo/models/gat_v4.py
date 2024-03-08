@@ -76,13 +76,15 @@ class GATv4(torch.nn.Module):
 
     def forward(self, x, adj, batch, opt):
         ### layer1
-        print("ERROR")
-        print(type(x))  # <class 'torch_geometric.data.batch.DataBatch'>
-        x = x.requires_grad_()
-        x0 = to_dense_batch(torch.mean(x, dim=-1), batch=batch)[0]  # [bs, nodes]
+        print(x.size())
+        x.x = x.x.requires_grad_()
+        print(x.size())
+        x0 = to_dense_batch(torch.mean(x.x, dim=-1), batch=batch)[0]  # [bs, nodes]
 
         ### layer2
-        x = F.dropout(x, p=0.2, training=self.training)
+        x = F.dropout(x.x, p=0.2, training=self.training)
+        print(x.size())
+        print("ERROR")
         x = F.elu(self.conv1(x, adj))  # [bs*nodes, nhids[0]*nheads[0]]
 
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0]  # [bs, nodes]
