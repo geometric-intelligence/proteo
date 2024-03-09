@@ -12,11 +12,11 @@ from model_GAT import *
 
 
 
-def test(opt, model, te_features, te_labels, adj_matrix):
+def test(opt, model, test_features, test_labels, adj_matrix):
 
     model.eval()
 
-    test_dataset = Data.TensorDataset(te_features, te_labels)
+    test_dataset = Data.TensorDataset(test_features, test_labels)
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=opt.batch_size, shuffle=False)
 
     risk_pred_all, censor_all, survtime_all = np.array([]), np.array([]), np.array([])
@@ -31,19 +31,19 @@ def test(opt, model, te_features, te_labels, adj_matrix):
         surv_batch_labels = survtime
         # print(surv_batch_labels)
         grad_batch_labels = grade.cuda() if "grad" in opt.task else grade
-        te_features, te_fc_features, te_preds, gradients, feature_importance = model(
+        test_features, te_fc_features, te_preds, gradients, feature_importance = model(
             batch_features.cuda(), adj_matrix.cuda(), grad_batch_labels, opt)
 
         # print("surv_batch_labels:", surv_batch_labels)
         # print("te_preds:", te_preds)
 
         if batch_idx == 0:
-            features_all = te_features.detach().cpu().numpy()
+            features_all = test_features.detach().cpu().numpy()
             fc_features_all = te_fc_features.detach().cpu().numpy()
         else:
-            features_all = np.concatenate((features_all, te_features.detach().cpu().numpy()), axis=0)
+            features_all = np.concatenate((features_all, test_features.detach().cpu().numpy()), axis=0)
             fc_features_all = np.concatenate((fc_features_all, te_fc_features.detach().cpu().numpy()), axis=0)
-        # print(features_all.shape, te_features.shape)
+        # print(features_all.shape, test_features.shape)
 
         loss_cox = CoxLoss(surv_batch_labels, censor_batch_labels, te_preds) if opt.task == "surv" else 0
         loss_reg = define_reg(model)

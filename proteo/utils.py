@@ -18,7 +18,6 @@ from torch_geometric.data import Data, InMemoryDataset
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(ROOT_DIR)
-print(PARENT_DIR)
 FEATURES_LABELS_FOLDER = os.path.join(
     PARENT_DIR, "MLA-GNN/example_data/input_features_labels/split"
 )
@@ -67,6 +66,7 @@ class MLAGNNDataset(InMemoryDataset):
 
     def createst_graph_data(self, feature, label, adj_matrix):
         x = feature  # protein concentrations: what is on the nodes
+        print
         adj_tensor = torch.tensor(adj_matrix)
         # Find the indices where the matrix has non-zero elements
         pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
@@ -95,10 +95,13 @@ class MLAGNNDataset(InMemoryDataset):
 
 def load_csv_data(k, config):
     print("Loading data from:", FEATURES_LABELS_FOLDER + str(k))
-    train_data_path = FEATURES_LABELS_FOLDER + str(k) + '_train_320d_features_labels.csv' #TODO: Put into os.path.join format
+    train_data_path = (
+        FEATURES_LABELS_FOLDER + str(k) + '_train_320d_features_labels.csv'
+    )  # TODO: Put into os.path.join format
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
 
-    train_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
+    #TODO Error emerges here
+    train_features = torch.FloatTensor(train_data[:, :320].T).requires_grad_()
     train_labels = torch.LongTensor(train_data[:, 320:])
     print("Training features and labels:", train_features.shape, train_labels.shape)
 
@@ -110,7 +113,7 @@ def load_csv_data(k, config):
     print("Testing features and labels:", test_features.shape, test_labels.shape)
 
     similarity_matrix = np.array(
-        pd.read_csv(ADJACENCY_FOLDER + str(k) + '_adjacency_matrix.csv')
+        pd.read_csv(ADJACENCY_FOLDER + str(k) + '_adjacency_matrix.csv', header=None),
     ).astype(float)
     adj_matrix = torch.LongTensor(np.where(similarity_matrix > config.adj_thresh, 1, 0))
     print("Adjacency matrix:", adj_matrix.shape)
@@ -119,7 +122,7 @@ def load_csv_data(k, config):
     if config.task == "grad":
         train_ids = train_labels[:, 2] >= 0
         train_labels = train_labels[train_ids]
-        train_features = train_features[train_ids]
+        train_features = train_features[:, train_ids]
         print(
             "Training features and grade labels after deleting NA labels:",
             train_features.shape,

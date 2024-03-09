@@ -24,7 +24,7 @@ for k in range(1, num_splits+1):
 	print("************** SPLIT (%d/%d) **************" % (k, num_splits))
 	print("*******************************************")
 
-	tr_features, tr_labels, te_features, te_labels, adj_matrix = load_csv_data(k, opt)
+	train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(k, opt)
 	# Define pre-trained model path.
 	load_path = opt.model_dir + '/split' + str(k) + '_' + opt.task + '_' + str(
 				opt.lin_input_dim) + 'd_all_' + str(opt.num_epochs) + 'epochs.pt'
@@ -54,13 +54,13 @@ for k in range(1, num_splits+1):
 
 
 	### 3.2 Test the model.
-	loss_test, cindex_test, pvalue_test, surv_acc_test, grad_acc_test, pred_test, te_features, te_fc_features = test(
-		opt, model, te_features, te_labels, adj_matrix)
-	GAT_te_features_labels = np.concatenate((te_features, te_fc_features, te_labels), axis=1)
+	loss_test, cindex_test, pvalue_test, surv_acc_test, grad_acc_test, pred_test, test_features, te_fc_features = test(
+		opt, model, test_features, test_labels, adj_matrix)
+	GAT_te_features_labels = np.concatenate((test_features, te_fc_features, test_labels), axis=1)
 
 	# print("model preds:", list(np.argmax(pred_test[3], axis=1)))
 	# print("ground truth:", pred_test[4])
-	# print(te_labels[:, 2])
+	# print(test_labels[:, 2])
 	if not os.path.exists("./results/"+opt.task+"/GAT_features_"+str(opt.lin_input_dim)+"d_model/"):
 		os.makedirs("./results/"+opt.task+"/GAT_features_"+str(opt.lin_input_dim)+"d_model/")
     
