@@ -16,7 +16,7 @@ gat-v4:
   lambda_nll: 1.0
   label_dim: 3
   input_dim: 1
-  lin_input_dim: 720
+  lin_input_dim: 960
   which_layer: 'all'
   cnv_dim: 0
   omic_dim: 32
@@ -30,7 +30,9 @@ gat-v4:
   # Optimizer Configuration
   lr_scheduler: LambdaLR
   lr_scheduler_params: None
-  num_nodes: 240
+  num_nodes: 320
+  layer_norm: true
+  
 
 higher-gat:
   nonlinearity: relu

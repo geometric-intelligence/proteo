@@ -101,7 +101,7 @@ def load_csv_data(k, config):
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
 
     #TODO Error emerges here
-    train_features = torch.FloatTensor(train_data[:, :320].T).requires_grad_()
+    train_features = torch.FloatTensor(train_data[:, :320]).requires_grad_()
     train_labels = torch.LongTensor(train_data[:, 320:])
     print("Training features and labels:", train_features.shape, train_labels.shape)
 
@@ -122,7 +122,7 @@ def load_csv_data(k, config):
     if config.task == "grad":
         train_ids = train_labels[:, 2] >= 0
         train_labels = train_labels[train_ids]
-        train_features = train_features[:, train_ids]
+        train_features = train_features[train_ids, :]
         print(
             "Training features and grade labels after deleting NA labels:",
             train_features.shape,
