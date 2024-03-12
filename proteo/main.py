@@ -85,7 +85,6 @@ class Proteo(pl.LightningModule):
             _, _, _, _, adj = load_csv_data(1, self.config)
             print("x=")
             print(x)
-            print(x.shape)
             return self.model(x, adj, x.batch, self.model_parameters)
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -121,7 +120,6 @@ class Proteo(pl.LightningModule):
             _, _, _, _, adj = load_csv_data(1, self.config)
             print("Batch")
             print(batch)
-            print(batch.shape)
             _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
 
         targets = batch.y
