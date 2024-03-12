@@ -116,14 +116,12 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
-            _,_, pred = self.model(
-                batch, adj, batch.batch, self.model_parameters
-            )
+            _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
 
         targets = batch.y
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
-        device = torch.device("cpu") #Should be ("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cpu")  # Should be ("cuda" if torch.cuda.is_available() else "cpu")
         pred = pred.to(device)
         targets = targets.to(device)
         loss = loss_fn(pred, targets)

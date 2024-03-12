@@ -121,7 +121,7 @@ def load_csv_data(k, config):
 
     if config.task == "grad":
         train_ids = train_labels[:, 2] >= 0
-        train_labels = train_labels[train_ids] #Tensor of format [   1, 1448,    2]
+        train_labels = train_labels[train_ids]  # Tensor of format [   1, 1448,    2]
         train_features = train_features[train_ids, :]
         print(
             "Training features and grade labels after deleting NA labels:",
@@ -137,8 +137,12 @@ def load_csv_data(k, config):
             test_features.shape,
             test_labels.shape,
         )
-    train_labels = train_labels[:, 2]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
-    test_labels = test_labels[:, 2]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
+    train_labels = train_labels[
+        :, 2
+    ]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
+    test_labels = test_labels[
+        :, 2
+    ]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
 
     return train_features, train_labels, test_features, test_labels, adj_matrix
 

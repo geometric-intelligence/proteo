@@ -77,7 +77,7 @@ class GATv4(torch.nn.Module):
     def forward(self, x, adj, batch, opt):
         ### layer1
         print(type(x))
-        #print(x.__dict__.keys())
+        # print(x.__dict__.keys())
         edge_index = torch.tensor(x.edge_index).cuda()
         print("Edge index shape")
         print(edge_index.shape)  # should be list of (12, 24), pairs of nodes
