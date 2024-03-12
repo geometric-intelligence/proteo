@@ -72,7 +72,7 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GATv4(opt=self.model_parameters)
+            self.model = GATv4(opt=self.model_parameters, out_channels=out_channels)
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -122,20 +122,17 @@ class Proteo(pl.LightningModule):
             print(batch)
             _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
 
-        targets = batch.y
+        targets = batch.y.view(pred.shape)
         print("Task type=")
         print(self.config.task_type)
         print("Pred shape=")
         print(pred.shape)
-        print(pred)
+        print(pred[:5])
         print("Targets shape=")
         print(targets.shape)
-        print(targets)
+        print(targets[:5])
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
-        device = torch.device("cpu")  # Should be ("cuda" if torch.cuda.is_available() else "cpu")
-        pred = pred.to(device)
-        targets = targets.to(device)
         loss = loss_fn(pred, targets)
         self.log(
             'val_loss',
@@ -146,7 +143,6 @@ class Proteo(pl.LightningModule):
             sync_dist=True,
             prog_bar=True,
         )
-
         return loss
 
     def configure_optimizers(self):

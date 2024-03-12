@@ -9,7 +9,7 @@ from utils import *
 
 
 class GATv4(torch.nn.Module):
-    def __init__(self, opt):
+    def __init__(self, opt, out_channels):
         super(GATv4, self).__init__()
         self.fc_dropout = opt.fc_dropout
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
@@ -18,6 +18,7 @@ class GATv4(torch.nn.Module):
         self.nhids = [8, 16, 12]
         self.nheads = [4, 3, 4]
         self.fc_dim = [64, 48, 32]
+        self.out_channels = out_channels
 
         self.conv1 = GATConv(
             opt.input_dim, self.nhids[0], heads=self.nheads[0], dropout=self.GAT_dropout
@@ -69,7 +70,7 @@ class GATv4(torch.nn.Module):
         )
 
         self.encoder = nn.Sequential(fc1, fc2, fc3, fc4)
-        self.classifier = nn.Sequential(nn.Linear(opt.omic_dim, opt.label_dim))
+        self.last_layer = nn.Sequential(nn.Linear(opt.omic_dim, self.out_channels))
 
         self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
@@ -117,10 +118,10 @@ class GATv4(torch.nn.Module):
         elif opt.which_layer == 'layer3':
             x = x2
 
-        GAT_features = x
+        gat_features = x
 
         features = self.encoder(x)
-        out = self.classifier(features)
+        out = self.last_layer(features)
 
         fc_features = features
 
@@ -128,9 +129,10 @@ class GATv4(torch.nn.Module):
             out = self.act(out)
 
             if isinstance(self.act, nn.Sigmoid):
+
                 out = out * self.output_range + self.output_shift
 
-        return GAT_features, fc_features, out
+        return gat_features, fc_features, out
 
 
 def define_optimizer(opt, model):
