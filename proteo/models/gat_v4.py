@@ -129,7 +129,6 @@ class GATv4(torch.nn.Module):
             out = self.act(out)
 
             if isinstance(self.act, nn.Sigmoid):
-
                 out = out * self.output_range + self.output_shift
 
         return gat_features, fc_features, out
