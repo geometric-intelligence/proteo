@@ -76,26 +76,22 @@ class GATv4(torch.nn.Module):
 
     def forward(self, x, adj, batch, opt):
         ### layer1
-        #print(x)
         print(type(x))
-        print(x.__dict__.keys())
+        #print(x.__dict__.keys())
         edge_index = torch.tensor(x.edge_index).cuda()
-        print(edge_index.shape) # should be list of (12, 24), pairs of nodes
+        print("Edge index shape")
+        print(edge_index.shape)  # should be list of (12, 24), pairs of nodes
         edge_index = torch.transpose(edge_index, 2, 0)
         edge_index = torch.reshape(edge_index, (2, -1))
         x.x = x.x.requires_grad_()
-        x0 = to_dense_batch(torch.mean(x.x, dim=-1), batch=batch)[0]  # [bs, nodes]
+        print("ERROR here")
+        print(x.x.shape)
+        x0 = torch.mean(x.x, dim=-1)
+        print(x0)
+        x0 = to_dense_batch(torch.mean(x.x, dim=-1), batch=batch)[0]  # [batch_size, nodes]
 
         ### layer2
         x = F.dropout(x.x, p=0.2, training=self.training)
-        print("ERROR")
-        print(x.shape)  # should be [nodes, feature_dim]
-        print(edge_index.shape) # should be list of (12, 24), pairs of nodes
-        #adj_tensor = torch.tensor(adj)
-        # Find the indices where the matrix has non-zero elements
-        #pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
-        # Extract the pairs of connected nodes
-        #edge_index = pairs_indices.tolist()
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
 
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0]  # [bs, nodes]
@@ -109,13 +105,9 @@ class GATv4(torch.nn.Module):
             x0 = self.layer_norm0(x0)
             x1 = self.layer_norm1(x1)
             x2 = self.layer_norm0(x2)
-            print(x2.shape)
-
 
         if opt.which_layer == 'all':
-            print("inside loop")
             x = torch.cat([x0, x1, x2], dim=1)
-            print(x.shape)
 
         elif opt.which_layer == 'layer1':
             x = x0

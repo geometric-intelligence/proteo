@@ -66,7 +66,6 @@ class MLAGNNDataset(InMemoryDataset):
 
     def createst_graph_data(self, feature, label, adj_matrix):
         x = feature  # protein concentrations: what is on the nodes
-        print
         adj_tensor = torch.tensor(adj_matrix)
         # Find the indices where the matrix has non-zero elements
         pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
@@ -79,6 +78,8 @@ class MLAGNNDataset(InMemoryDataset):
         train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(
             1, self.config
         )
+        print("Inside process")
+        print(train_labels)
 
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
@@ -100,7 +101,6 @@ def load_csv_data(k, config):
     )  # TODO: Put into os.path.join format
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
 
-    #TODO Error emerges here
     train_features = torch.FloatTensor(train_data[:, :320]).requires_grad_()
     train_labels = torch.LongTensor(train_data[:, 320:])
     print("Training features and labels:", train_features.shape, train_labels.shape)
@@ -108,7 +108,7 @@ def load_csv_data(k, config):
     test_data_path = FEATURES_LABELS_FOLDER + str(k) + '_test_320d_features_labels.csv'
     test_data = np.array(pd.read_csv(test_data_path, header=None))[1:, 2:].astype(float)
 
-    test_features = torch.FloatTensor(test_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
+    test_features = torch.FloatTensor(test_data[:, :320]).requires_grad_()
     test_labels = torch.LongTensor(test_data[:, 320:])
     print("Testing features and labels:", test_features.shape, test_labels.shape)
 
@@ -121,7 +121,7 @@ def load_csv_data(k, config):
 
     if config.task == "grad":
         train_ids = train_labels[:, 2] >= 0
-        train_labels = train_labels[train_ids]
+        train_labels = train_labels[train_ids] #Tensor of format [   1, 1448,    2]
         train_features = train_features[train_ids, :]
         print(
             "Training features and grade labels after deleting NA labels:",
@@ -131,14 +131,14 @@ def load_csv_data(k, config):
 
         test_ids = test_labels[:, 2] >= 0
         test_labels = test_labels[test_ids]
-        test_features = test_features[test_ids]
+        test_features = test_features[test_ids, :]
         print(
             "Testing features and grade labels after deleting NA labels:",
             test_features.shape,
             test_labels.shape,
         )
-    train_labels = train_labels[:, 1]  # only taking survival
-    test_labels = test_labels[:, 1]  # only taking survival
+    train_labels = train_labels[:, 2]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
+    test_labels = test_labels[:, 2]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
 
     return train_features, train_labels, test_features, test_labels, adj_matrix
 
