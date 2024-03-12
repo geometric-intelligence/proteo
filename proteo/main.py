@@ -118,8 +118,6 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
-            print("Batch")
-            print(batch)
             _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
 
         targets = batch.y.view(pred.shape)
