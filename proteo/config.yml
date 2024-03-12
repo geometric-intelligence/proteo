@@ -4,7 +4,7 @@
 
 adj_thresh: 0.08
 task: 'grad'
-task_type: classification # Placeholder
+task_type: regression # Placeholder
 minimize: true #Placeholder
 
 # Model Configuration
@@ -14,7 +14,6 @@ gat-v4:
   lambda_cox: 1.0
   lambda_reg: 0.0003
   lambda_nll: 1.0
-  label_dim: 3
   input_dim: 1
   lin_input_dim: 960
   which_layer: 'all'
