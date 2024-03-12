@@ -88,6 +88,7 @@ class GATv4(torch.nn.Module):
         print(x.x.shape)
         x0 = torch.mean(x.x, dim=-1)
         print(x0)
+        print(batch)
         x0 = to_dense_batch(torch.mean(x.x, dim=-1), batch=batch)[0]  # [batch_size, nodes]
 
         ### layer2

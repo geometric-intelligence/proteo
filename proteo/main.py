@@ -83,6 +83,9 @@ class Proteo(pl.LightningModule):
             return self.model(x)
         elif self.config.model == "gat-v4":
             _, _, _, _, adj = load_csv_data(1, self.config)
+            print("x=")
+            print(x)
+            print(x.shape)
             return self.model(x, adj, x.batch, self.model_parameters)
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -116,9 +119,20 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, _, _, adj = load_csv_data(1, self.config)
+            print("Batch")
+            print(batch)
+            print(batch.shape)
             _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
 
         targets = batch.y
+        print("Task type=")
+        print(self.config.task_type)
+        print("Pred shape=")
+        print(pred.shape)
+        print(pred)
+        print("Targets shape=")
+        print(targets.shape)
+        print(targets)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
         device = torch.device("cpu")  # Should be ("cuda" if torch.cuda.is_available() else "cpu")
