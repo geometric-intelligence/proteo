@@ -75,21 +75,12 @@ class GATv4(torch.nn.Module):
         self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
-    def forward(self, x, adj, batch, opt):
+    def forward(self, x, batch, opt):
         ### layer1
-        print(type(x))
-        # print(x.__dict__.keys())
         edge_index = torch.tensor(x.edge_index).cuda()
-        print("Edge index shape")
-        print(edge_index.shape)  # should be list of (12, 24), pairs of nodes
         edge_index = torch.transpose(edge_index, 2, 0)
         edge_index = torch.reshape(edge_index, (2, -1))
         x.x = x.x.requires_grad_()
-        print("ERROR here")
-        print(x.x.shape)
-        x0 = torch.mean(x.x, dim=-1)
-        print(x0)
-        print(batch)
         x0 = to_dense_batch(torch.mean(x.x, dim=-1), batch=batch)[0]  # [batch_size, nodes]
 
         ### layer2

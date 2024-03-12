@@ -82,10 +82,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
-            _, _, _, _, adj = load_csv_data(1, self.config)
-            print("x=")
-            print(x)
-            return self.model(x, adj, x.batch, self.model_parameters)
+            return self.model(x, x.batch, self.model_parameters)
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -95,8 +92,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, _, _, adj = load_csv_data(1, self.config)
-            _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
+            _, _, pred = self.model(batch, batch.batch, self.model_parameters)
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
@@ -117,18 +113,9 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, _, _, adj = load_csv_data(1, self.config)
-            _, _, pred = self.model(batch, adj, batch.batch, self.model_parameters)
+            _, _, pred = self.model(batch, batch.batch, self.model_parameters)
 
         targets = batch.y.view(pred.shape)
-        print("Task type=")
-        print(self.config.task_type)
-        print("Pred shape=")
-        print(pred.shape)
-        print(pred[:5])
-        print("Targets shape=")
-        print(targets.shape)
-        print(targets[:5])
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
         loss = loss_fn(pred, targets)
@@ -244,7 +231,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=config.devices_count,
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),  # Debug later
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,

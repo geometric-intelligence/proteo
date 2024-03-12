@@ -99,14 +99,14 @@ def load_csv_data(k, config):
     )  # TODO: Put into os.path.join format
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
 
-    train_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
+    train_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1))
     train_labels = torch.LongTensor(train_data[:, 320:])
     print("Training features and labels:", train_features.shape, train_labels.shape)
 
     test_data_path = FEATURES_LABELS_FOLDER + str(k) + '_test_320d_features_labels.csv'
     test_data = np.array(pd.read_csv(test_data_path, header=None))[1:, 2:].astype(float)
 
-    test_features = torch.FloatTensor(test_data[:, :320].reshape(-1, 320, 1)).requires_grad_()
+    test_features = torch.FloatTensor(test_data[:, :320].reshape(-1, 320, 1))
     test_labels = torch.LongTensor(test_data[:, 320:])
     print("Testing features and labels:", test_features.shape, test_labels.shape)
 

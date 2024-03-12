@@ -98,7 +98,7 @@ use_edge_features: true
 
 
 # Training Configuration
-epochs: 1000
+epochs: 200
 batch_size: 128
 in_drop_rate: 0.0
 drop_rate: 0.0
