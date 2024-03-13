@@ -135,12 +135,8 @@ def load_csv_data(k, config):
             test_features.shape,
             test_labels.shape,
         )
-    train_labels = train_labels[
-        :, 1
-    ]  # Taking survival time
-    test_labels = test_labels[
-        :, 1
-    ]  # Taking survival time
+    train_labels = train_labels[:, 1]  # Taking survival time
+    test_labels = test_labels[:, 1]  # Taking survival time
 
     return train_features, train_labels, test_features, test_labels, adj_matrix
 

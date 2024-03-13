@@ -115,7 +115,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'gat-v4':
             _, _, pred = self.model(batch, batch.batch, self.model_parameters)
 
-        targets = batch.y.view(pred.shape) #Nina fix, makes sure targets and pred have same shape.
+        targets = batch.y.view(pred.shape)  # Nina fix, makes sure targets and pred have same shape.
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
         loss = loss_fn(pred, targets)
@@ -161,15 +161,15 @@ def main():
 
     config = read_config_from_file(CONFIG_FILE)
 
-   # this is where we pick the CUDA device(s) to use
-    if isinstance(config.device,list):
+    # this is where we pick the CUDA device(s) to use
+    if isinstance(config.device, list):
         device_count = len(config.device)
         os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
     else:
         print(f"Using device {config.device}")
         device_count = 1
         os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
-    
+
     pl.seed_everything(config.seed)
 
     root = os.path.join(ROOT_DIR, "data", "FAD")

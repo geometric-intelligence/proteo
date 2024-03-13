@@ -74,31 +74,8 @@ early_stop: true
 
 
 
-# Dataset Configuration
-exp_name: cwn-zinc
-dataset: ZINC
-max_dim: 2
-final_readout: sum
-init_method: sum
-fold: None
-folds: None
-tune: false
-flow_points: 400
-flow_classes: 3
-train_orient: "default"
-test_orient: "default"
-fully_orient_invar: false
-simple_features: false
-dim: 0
-use_down_adj: true
-include_down_adj: true
-use_coboundaries: true
-use_edge_features: true
-
-
-
 # Training Configuration
-epochs: 200
+epochs: 300
 batch_size: 128
 in_drop_rate: 0.0
 drop_rate: 0.0
