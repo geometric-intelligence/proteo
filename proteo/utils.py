@@ -136,11 +136,11 @@ def load_csv_data(k, config):
             test_labels.shape,
         )
     train_labels = train_labels[
-        :, 2
-    ]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
+        :, 1
+    ]  # Taking survival time
     test_labels = test_labels[
-        :, 2
-    ]  # only taking ground-truth class for the histological grading task (0, 1, 2 denotes grade II, III, IV, respectively)
+        :, 1
+    ]  # Taking survival time
 
     return train_features, train_labels, test_features, test_labels, adj_matrix
 

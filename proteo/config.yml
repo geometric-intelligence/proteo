@@ -123,9 +123,8 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # GPU Configuration
-device: 8
+device: [0,1,2,3,4,5,6,7,8,9]
 trainer_accelerator: "gpu"
-devices_count: 1
 seed: 43
 start_seed: 0
 stop_seed: 9
