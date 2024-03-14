@@ -15,7 +15,7 @@ gat-v4:
   lambda_reg: 0.0003
   lambda_nll: 1.0
   input_dim: 1
-  lin_input_dim: 960
+  lin_input_dim: 720
   which_layer: 'all'
   cnv_dim: 0
   omic_dim: 32
@@ -29,7 +29,7 @@ gat-v4:
   # Optimizer Configuration
   lr_scheduler: LambdaLR
   lr_scheduler_params: None
-  num_nodes: 320
+  num_nodes: 240
   layer_norm: true
   
 
@@ -75,8 +75,8 @@ early_stop: true
 
 
 # Training Configuration
-epochs: 300
-batch_size: 128
+epochs: 100
+batch_size: 64
 in_drop_rate: 0.0
 drop_rate: 0.0
 drop_position: lin2
@@ -100,7 +100,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # GPU Configuration
-device: [0,1,2,3,4,5,6,7,8,9]
+device: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 trainer_accelerator: "gpu"
 seed: 43
 start_seed: 0

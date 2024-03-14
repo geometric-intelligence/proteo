@@ -92,7 +92,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, pred = self.model(batch, batch.batch, self.model_parameters)
+            _, _, pred = self.model(batch, self.model_parameters)
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
@@ -113,7 +113,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, pred = self.model(batch, batch.batch, self.model_parameters)
+            _, _, pred = self.model(batch, self.model_parameters)
 
         targets = batch.y.view(pred.shape)  # Nina fix, makes sure targets and pred have same shape.
 
@@ -176,10 +176,11 @@ def main():
     train_dataset = MLAGNNDataset(root, "train", config)
     test_dataset = MLAGNNDataset(root, "test", config)
 
-    in_channels = train_dataset.feature_dim
-    out_channels = train_dataset.label_dim
+    in_channels = train_dataset.feature_dim  # 1 dim of input
 
-    train_loader = DataLoader(
+    out_channels = train_dataset.label_dim  # 1 dim of result
+
+    train_loader = DataLoader(  # makes into one big graph
         train_dataset,
         batch_size=config.batch_size,
         shuffle=True,

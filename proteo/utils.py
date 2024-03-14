@@ -50,7 +50,7 @@ class MLAGNNDataset(InMemoryDataset):
         super(MLAGNNDataset, self).__init__(root)
         # self.load(self.processed_paths[0])
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
-        self.label_dim = 1  # survival is a scalar, ie, dim 1
+        self.label_dim = 1  # survival is a scalar, ie, dim 1, CHANGE THIS FOR CLASSIFICATION, # of classes you have in grading
 
         path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
         self.load(path)
@@ -98,15 +98,18 @@ def load_csv_data(k, config):
         FEATURES_LABELS_FOLDER + str(k) + '_train_320d_features_labels.csv'
     )  # TODO: Put into os.path.join format
     train_data = np.array(pd.read_csv(train_data_path, header=None))[1:, 2:].astype(float)
-
-    train_features = torch.FloatTensor(train_data[:, :320].reshape(-1, 320, 1))
+    print(train_data[:, 80:320].shape)  # 81-320 becomes 80-319ie, 80:320 because last one not taken
+    train_features = torch.FloatTensor(
+        train_data[:, 80:320].reshape(-1, 240, 1)
+    )  # reshape goes from (840, 320) to [840, 320, 1]
+    print(train_features.shape)
     train_labels = torch.LongTensor(train_data[:, 320:])
     print("Training features and labels:", train_features.shape, train_labels.shape)
 
     test_data_path = FEATURES_LABELS_FOLDER + str(k) + '_test_320d_features_labels.csv'
     test_data = np.array(pd.read_csv(test_data_path, header=None))[1:, 2:].astype(float)
-
-    test_features = torch.FloatTensor(test_data[:, :320].reshape(-1, 320, 1))
+    print(test_data[:, 81:320].shape)
+    test_features = torch.FloatTensor(test_data[:, 80:320].reshape(-1, 240, 1))
     test_labels = torch.LongTensor(test_data[:, 320:])
     print("Testing features and labels:", test_features.shape, test_labels.shape)
 
@@ -114,6 +117,7 @@ def load_csv_data(k, config):
         pd.read_csv(ADJACENCY_FOLDER + str(k) + '_adjacency_matrix.csv', header=None),
     ).astype(float)
     adj_matrix = torch.LongTensor(np.where(similarity_matrix > config.adj_thresh, 1, 0))
+    adj_matrix = adj_matrix[80:, 80:]
     print("Adjacency matrix:", adj_matrix.shape)
     print("Number of edges:", adj_matrix.sum())
 
@@ -136,7 +140,9 @@ def load_csv_data(k, config):
             test_labels.shape,
         )
     train_labels = train_labels[:, 1]  # Taking survival time
+    print(train_labels.shape)
     test_labels = test_labels[:, 1]  # Taking survival time
+    print(test_labels.shape)
 
     return train_features, train_labels, test_features, test_labels, adj_matrix
 
