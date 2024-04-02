@@ -78,6 +78,9 @@ class MLAGNNDataset(InMemoryDataset):
         train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(
             1, self.config
         )
+        self.test_features = test_features
+        self.test_labels = test_labels
+        self.adj_matrix = adj_matrix
 
         train_data_list = []
         for feature, label in zip(train_features, train_labels):

@@ -13,8 +13,7 @@ from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-
-# from torch.utils.data import DataLoader
+from test_model import test
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
 from utils import ROOT_DIR, MLAGNNDataset, load_csv_data
@@ -128,7 +127,40 @@ class Proteo(pl.LightningModule):
             sync_dist=True,
             prog_bar=True,
         )
+
         return loss
+
+    def on_validation_epoch_end(self):
+        (
+            loss_test,
+            cindex_test,
+            pvalue_test,
+            surv_acc_test,
+            grad_acc_test,
+            pred_test,
+            te_features,
+            te_fc_features,
+        ) = test(
+            self.config,
+            self.model,
+            test_dataset.test_features,
+            test_dataset.test_labels,
+            test_dataset.adj_matrix,
+        )
+
+        # Log values in wandb
+        # TODO: would self.log automaticaly call wandb.log and would be preffered?
+        # https://stackoverflow.com/questions/70790473/pytorch-lightning-epoch-end-validation-epoch-end
+        if self.config.wandb_api_key_path:
+            wandb.log(
+                {
+                    "test_loss": loss_test,
+                    "test_cindex": cindex_test,
+                    "test_pvalue": pvalue_test,
+                    "test_surv_acc": surv_acc_test,
+                    "test_grad_acc": grad_acc_test,
+                }
+            )
 
     def configure_optimizers(self):
         # Do not change this
@@ -254,9 +286,9 @@ def main():
         if env.global_rank() != 0 and env.local_rank() == 0:
             wandb.init(config=config, **wandb_config)
 
-    model = Proteo(config, in_channels, out_channels)
-    print(model)
-    trainer.fit(model, train_loader, test_loader)
+    module = Proteo(config, in_channels, out_channels)
+    print(module)
+    trainer.fit(module, train_loader, test_loader)
 
 
 if __name__ == "__main__":
