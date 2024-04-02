@@ -133,7 +133,12 @@ class Proteo(pl.LightningModule):
     def configure_optimizers(self):
         # Do not change this
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.model_parameters.lr)
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=self.model_parameters.lr,
+            betas=(0.9, 0.999),
+            weight_decay=self.model_parameters.weight_decay,
+        )
         mode = 'min' if self.config.minimize else 'max'  # Could set this in the config file
 
         scheduler_type = self.model_parameters.lr_scheduler
@@ -146,7 +151,6 @@ class Proteo(pl.LightningModule):
                 return lr_l
 
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-
         elif scheduler_type == 'ReduceLROnPlateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, mode=mode, **scheduler_params
