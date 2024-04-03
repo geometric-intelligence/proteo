@@ -210,10 +210,10 @@ def main():
     pl.seed_everything(config.seed)
 
     root = os.path.join(ROOT_DIR, "data", "FAD")
-    train_dataset = MLAGNNDataset(root, "train", config)
-    print("TESTING")
-    print(train_dataset.__dict__.keys())
     test_dataset = MLAGNNDataset(root, "test", config)
+    print("TEST DATASET")
+    print(test_dataset.test_features.shape)
+    train_dataset = MLAGNNDataset(root, "train", config)
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
 

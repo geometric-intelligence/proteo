@@ -77,10 +77,12 @@ class MLAGNNDataset(InMemoryDataset):
 
     def process(self):
         # Read data into huge `Data` list which will be a list of graphs
+        print("I AM IN PROCESS")
         train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(
             1, self.config
         )
         self.test_features = test_features
+        print("Test features shape:", test_features.shape)
         self.test_labels = test_labels
         self.adj_matrix = adj_matrix
 
