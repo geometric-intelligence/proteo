@@ -48,11 +48,12 @@ class Proteo(pl.LightningModule):
         "mse_regression": torch.nn.MSELoss(),
     }
 
-    def __init__(self, config: Config, in_channels, out_channels):
+    def __init__(self, config: Config, in_channels, out_channels, test_dataset):
         super().__init__()
         self.config = config
         self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
+        self.test_dataset = test_dataset
 
         if config.model == 'gat':
             self.model = MyGAT(
@@ -143,9 +144,9 @@ class Proteo(pl.LightningModule):
         ) = test(
             self.config,
             self.model,
-            test_dataset.test_features,
-            test_dataset.test_labels,
-            test_dataset.adj_matrix,
+            self.test_dataset.test_features,
+            self.test_dataset.test_labels,
+            self.test_dataset.adj_matrix,
         )
 
         # Log values in wandb
@@ -210,6 +211,8 @@ def main():
 
     root = os.path.join(ROOT_DIR, "data", "FAD")
     train_dataset = MLAGNNDataset(root, "train", config)
+    print("TESTING")
+    print(train_dataset.__dict__.keys())
     test_dataset = MLAGNNDataset(root, "test", config)
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
@@ -286,7 +289,7 @@ def main():
         if env.global_rank() != 0 and env.local_rank() == 0:
             wandb.init(config=config, **wandb_config)
 
-    module = Proteo(config, in_channels, out_channels)
+    module = Proteo(config, in_channels, out_channels, test_dataset)
     print(module)
     trainer.fit(module, train_loader, test_loader)
 

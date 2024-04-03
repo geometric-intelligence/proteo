@@ -51,7 +51,9 @@ class MLAGNNDataset(InMemoryDataset):
         # self.load(self.processed_paths[0])
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # survival is a scalar, ie, dim 1, CHANGE THIS FOR CLASSIFICATION, # of classes you have in grading
-
+        self.test_features = None
+        self.test_labels = None
+        self.adj_matrix = None
         path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
         self.load(path)
 
