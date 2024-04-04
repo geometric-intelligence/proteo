@@ -1,38 +1,41 @@
 import argparse
 import random
 
-import models.gat_v4
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.utils.data as Data
 import utils
+from models.gat_v4 import define_reg
 from sklearn.model_selection import StratifiedKFold
 
 
-def test(opt, model, test_features, test_labels, adj_matrix):
+def test(config, model, test_features, test_labels, adj_matrix, out_channels):
     model.eval()
 
     test_dataset = Data.TensorDataset(test_features, test_labels)
+    print("Dimensions of test dataset:", test_features.shape, test_labels.shape)
     test_loader = torch.utils.data.DataLoader(
-        dataset=test_dataset, batch_size=opt.batch_size, shuffle=False
+        dataset=test_dataset, batch_size=config.batch_size, shuffle=False
     )
 
     risk_pred_all, censor_all, survtime_all = np.array([]), np.array([]), np.array([])
     probs_all, gt_all = None, np.array([])
     loss_test, grad_acc_test = 0, 0
-
     for batch_idx, (batch_features, batch_labels) in enumerate(test_loader):
+        print("Batch labels shape", batch_labels.shape)
         censor = batch_labels[:, 0]
         survtime = batch_labels[:, 1]
         grade = batch_labels[:, 2]
-        censor_batch_labels = censor.cuda() if "surv" in opt.task else censor
+        censor_batch_labels = censor.cuda() if "surv" in config.task else censor
         surv_batch_labels = survtime
         # print(surv_batch_labels)
-        grad_batch_labels = grade.cuda() if "grad" in opt.task else grade
+        grad_batch_labels = grade.cuda() if "grad" in config.task else grade
+        # TO DO: Fix this and understand what line 37 is doing.
+        model_parameters = getattr(config, config.model)
         test_features, te_fc_features, te_preds, gradients, feature_importance = model(
-            batch_features.cuda(), adj_matrix.cuda(), grad_batch_labels, opt
+            model_parameters
         )
 
         # print("surv_batch_labels:", surv_batch_labels)
@@ -52,20 +55,24 @@ def test(opt, model, test_features, test_labels, adj_matrix):
 
         loss_cox = (
             utils.CoxLoss(surv_batch_labels, censor_batch_labels, te_preds)
-            if opt.task == "surv"
+            if config.task == "surv"
             else 0
         )
-        loss_reg = models.gat_v4.define_reg(model)
+        loss_reg = define_reg(model)
         loss_func = nn.CrossEntropyLoss()
-        grad_loss = loss_func(te_preds, grad_batch_labels) if opt.task == "grad" else 0
-        loss = opt.lambda_cox * loss_cox + opt.lambda_nll * grad_loss + opt.lambda_reg * loss_reg
+        grad_loss = loss_func(te_preds, grad_batch_labels) if config.task == "grad" else 0
+        loss = (
+            config.lambda_cox * loss_cox
+            + config.lambda_nll * grad_loss
+            + config.lambda_reg * loss_reg
+        )
         loss_test += loss.data.item()
 
         gt_all = np.concatenate(
             (gt_all, grad_batch_labels.detach().cpu().numpy().reshape(-1))
         )  # Logging Information
 
-        if opt.task == "surv":
+        if config.task == "surv":
             risk_pred_all = np.concatenate(
                 (risk_pred_all, te_preds.detach().cpu().numpy().reshape(-1))
             )  # Logging Information
@@ -76,7 +83,7 @@ def test(opt, model, test_features, test_labels, adj_matrix):
                 (survtime_all, surv_batch_labels.detach().cpu().numpy().reshape(-1))
             )  # Logging Information
 
-        elif opt.task == "grad":
+        elif config.task == "grad":
             pred = te_preds.argmax(dim=1, keepdim=True)
             grad_acc_test += pred.eq(grad_batch_labels.view_as(pred)).sum().item()
             probs_np = te_preds.detach().cpu().numpy()
@@ -91,14 +98,16 @@ def test(opt, model, test_features, test_labels, adj_matrix):
     loss_test /= len(test_loader.dataset)
     cindex_test = (
         utils.CIndex_lifeline(risk_pred_all, censor_all, survtime_all)
-        if opt.task == 'surv'
+        if config.task == 'surv'
         else None
     )
     pvalue_test = (
-        utils.cox_log_rank(risk_pred_all, censor_all, survtime_all) if opt.task == 'surv' else None
+        utils.cox_log_rank(risk_pred_all, censor_all, survtime_all)
+        if config.task == 'surv'
+        else None
     )
-    surv_acc_test = utils.accuracy_cox(risk_pred_all, censor_all) if opt.task == 'surv' else None
-    grad_acc_test = grad_acc_test / len(test_loader.dataset) if opt.task == 'grad' else None
+    surv_acc_test = utils.accuracy_cox(risk_pred_all, censor_all) if config.task == 'surv' else None
+    grad_acc_test = grad_acc_test / len(test_loader.dataset) if config.task == 'grad' else None
     pred_test = [risk_pred_all, survtime_all, censor_all, probs_all, gt_all]
 
     return (

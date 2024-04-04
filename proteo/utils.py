@@ -47,13 +47,25 @@ class MLAGNNDataset(InMemoryDataset):
         self.split = split
         assert split in ["train", "test"]
         self.config = config
+        (
+            train_features,
+            train_labels,
+            test_features,
+            test_labels,
+            adj_matrix,
+            test_labels_all,
+        ) = load_csv_data(1, config)
+        print("Calling load_csv_data every run")
+        self.train_features = train_features
+        self.train_labels = train_labels
+        self.test_features = test_features
+        self.test_labels = test_labels
+        self.adj_matrix = adj_matrix
+        self.test_labels_all = test_labels_all
         super(MLAGNNDataset, self).__init__(root)
         # self.load(self.processed_paths[0])
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # survival is a scalar, ie, dim 1, CHANGE THIS FOR CLASSIFICATION, # of classes you have in grading
-        self.test_features = None
-        self.test_labels = None
-        self.adj_matrix = None
         path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
         self.load(path)
 
@@ -77,23 +89,14 @@ class MLAGNNDataset(InMemoryDataset):
 
     def process(self):
         # Read data into huge `Data` list which will be a list of graphs
-        print("I AM IN PROCESS")
-        train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(
-            1, self.config
-        )
-        self.test_features = test_features
-        print("Test features shape:", test_features.shape)
-        self.test_labels = test_labels
-        self.adj_matrix = adj_matrix
-
         train_data_list = []
-        for feature, label in zip(train_features, train_labels):
-            data = self.createst_graph_data(feature, label, adj_matrix)
+        for feature, label in zip(self.train_features, self.train_labels):
+            data = self.createst_graph_data(feature, label, self.adj_matrix)
             train_data_list.append(data)
 
         test_data_list = []
-        for feature, label in zip(test_features, test_labels):
-            data = self.createst_graph_data(feature, label, adj_matrix)
+        for feature, label in zip(self.test_features, self.test_labels):
+            data = self.createst_graph_data(feature, label, self.adj_matrix)
             test_data_list.append(data)
         self.save(train_data_list, os.path.join(self.processed_dir, f'{self.name}_train.pt'))
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
@@ -148,10 +151,11 @@ def load_csv_data(k, config):
         )
     train_labels = train_labels[:, 1]  # Taking survival time
     print(train_labels.shape)
+    test_labels_all = test_labels
     test_labels = test_labels[:, 1]  # Taking survival time
     print(test_labels.shape)
 
-    return train_features, train_labels, test_features, test_labels, adj_matrix
+    return train_features, train_labels, test_features, test_labels, adj_matrix, test_labels_all
 
 
 def load_dataset(k, config):
