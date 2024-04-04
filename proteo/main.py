@@ -147,7 +147,7 @@ class Proteo(pl.LightningModule):
             self.test_dataset.test_features,
             self.test_dataset.test_labels_all,
             self.test_dataset.adj_matrix,
-            out_channels,
+            self.model_parameters
         )
 
         # Log values in wandb
@@ -213,8 +213,6 @@ def main():
     root = os.path.join(ROOT_DIR, "data", "FAD")
     # The first time you call this it creates train.pt and test.pt files, and afterwards it loads them
     test_dataset = MLAGNNDataset(root, "test", config)
-    print("TEST DATASET")
-    print(test_dataset.test_features.shape)
     train_dataset = MLAGNNDataset(root, "train", config)
 
     in_channels = train_dataset.feature_dim  # 1 dim of input

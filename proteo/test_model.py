@@ -11,7 +11,7 @@ from models.gat_v4 import define_reg
 from sklearn.model_selection import StratifiedKFold
 
 
-def test(config, model, test_features, test_labels, adj_matrix, out_channels):
+def test(config, model, test_features, test_labels, adj_matrix, model_parameters):
     model.eval()
 
     test_dataset = Data.TensorDataset(test_features, test_labels)
@@ -33,13 +33,10 @@ def test(config, model, test_features, test_labels, adj_matrix, out_channels):
         # print(surv_batch_labels)
         grad_batch_labels = grade.cuda() if "grad" in config.task else grade
         # TO DO: Fix this and understand what line 37 is doing.
-        model_parameters = getattr(config, config.model)
-        test_features, te_fc_features, te_preds, gradients, feature_importance = model(
-            model_parameters
-        )
+        test_features, te_fc_features, test_predictions, gradients, feature_importance = model(batch_features, batch_labels, model_parameters)
 
         # print("surv_batch_labels:", surv_batch_labels)
-        # print("te_preds:", te_preds)
+        # print("test_predictions:", test_predictions)
 
         if batch_idx == 0:
             features_all = test_features.detach().cpu().numpy()
@@ -54,13 +51,13 @@ def test(config, model, test_features, test_labels, adj_matrix, out_channels):
         # print(features_all.shape, test_features.shape)
 
         loss_cox = (
-            utils.CoxLoss(surv_batch_labels, censor_batch_labels, te_preds)
+            utils.CoxLoss(surv_batch_labels, censor_batch_labels, test_predictions)
             if config.task == "surv"
             else 0
         )
         loss_reg = define_reg(model)
         loss_func = nn.CrossEntropyLoss()
-        grad_loss = loss_func(te_preds, grad_batch_labels) if config.task == "grad" else 0
+        grad_loss = loss_func(test_predictions, grad_batch_labels) if config.task == "grad" else 0
         loss = (
             config.lambda_cox * loss_cox
             + config.lambda_nll * grad_loss
@@ -74,7 +71,7 @@ def test(config, model, test_features, test_labels, adj_matrix, out_channels):
 
         if config.task == "surv":
             risk_pred_all = np.concatenate(
-                (risk_pred_all, te_preds.detach().cpu().numpy().reshape(-1))
+                (risk_pred_all, test_predictions.detach().cpu().numpy().reshape(-1))
             )  # Logging Information
             censor_all = np.concatenate(
                 (censor_all, censor_batch_labels.detach().cpu().numpy().reshape(-1))
@@ -84,9 +81,9 @@ def test(config, model, test_features, test_labels, adj_matrix, out_channels):
             )  # Logging Information
 
         elif config.task == "grad":
-            pred = te_preds.argmax(dim=1, keepdim=True)
+            pred = test_predictions.argmax(dim=1, keepdim=True)
             grad_acc_test += pred.eq(grad_batch_labels.view_as(pred)).sum().item()
-            probs_np = te_preds.detach().cpu().numpy()
+            probs_np = test_predictions.detach().cpu().numpy()
             probs_all = (
                 probs_np if probs_all is None else np.concatenate((probs_all, probs_np), axis=0)
             )  # Logging Information
