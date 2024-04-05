@@ -23,7 +23,7 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
     risk_pred_all, censor_all, survtime_all = np.array([]), np.array([]), np.array([])
     probs_all, gt_all = None, np.array([])
     loss_test, grad_acc_test = 0, 0
-    for (batch_idx, batch), (batch_features_torch, batch_labels_torch) in zip(enumerate(test_loader), enumerate(test_loader_torch)):
+    for (batch_idx, batch), (batch_idx_torch, (batch_features_torch, batch_labels_torch)) in zip(enumerate(test_loader), enumerate(test_loader_torch)):
         print("Batch labels ", batch_labels_torch)
         censor = batch_labels_torch[:, 0]
         survtime = batch_labels_torch[:, 1]
