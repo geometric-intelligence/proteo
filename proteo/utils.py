@@ -230,7 +230,7 @@ def computest_metrics(test_pred, gt_labels):
 ################
 # Survival Utils
 ################
-def CoxLoss(survtime, censor, hazard_pred):
+def CoxLoss(survtime, hazard_pred):
     # This calculation credit to Travers Ching https://github.com/traversc/cox-nnet
     # Cox-nnet: An artificial neural network method for prognosis prediction of high-throughput omics data
     current_batch_len = len(survtime)
@@ -243,7 +243,6 @@ def CoxLoss(survtime, censor, hazard_pred):
     R_mat = torch.FloatTensor(R_mat).cuda()
     theta = hazard_pred.reshape(-1)
     exp_theta = torch.exp(theta)
-    # print("censor and theta shape:", censor.shape, theta.shape)
     loss_cox = -torch.mean((theta - torch.log(torch.sum(exp_theta * R_mat, dim=1))) * censor)
     return loss_cox
 
