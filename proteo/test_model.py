@@ -23,19 +23,25 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
     risk_pred_all, censor_all, survtime_all = np.array([]), np.array([]), np.array([])
     probs_all, gt_all = None, np.array([])
     loss_test, grad_acc_test = 0, 0
-    for (batch_idx, batch), (batch_idx_torch, (batch_features_torch, batch_labels_torch)) in zip(enumerate(test_loader), enumerate(test_loader_torch)):
+    for (batch_idx, batch), (batch_idx_torch, (batch_features_torch, batch_labels_torch)) in zip(
+        enumerate(test_loader), enumerate(test_loader_torch)
+    ):
         print("Batch labels ", batch_labels_torch)
         censor = batch_labels_torch[:, 0]
         survtime = batch_labels_torch[:, 1]
         grade = batch_labels_torch[:, 2]
-        censor_batch_labels = censor.cuda() if "surv" in config.task else censor
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        censor_batch_labels = censor.to(device) if "surv" in config.task else censor
         surv_batch_labels = survtime
         # print(surv_batch_labels)
-        grad_batch_labels = grade.cuda() if "grad" in config.task else grade
+        grad_batch_labels = grade.to(device) if "grad" in config.task else grade
         # TO DO: Fix this and understand what line 37 is doing.
-        test_features, te_fc_features, test_predictions, gradients, feature_importance = model(
+        batch.to(device)
+        test_features, te_fc_features, test_predictions = model(
             batch, model_parameters
         )
+        test_predictions.to(device)
+
 
         # print("surv_batch_labels:", surv_batch_labels)
         # print("test_predictions:", test_predictions)
@@ -53,9 +59,7 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
         # print(features_all.shape, test_features.shape)
 
         loss_cox = (
-            utils.CoxLoss(surv_batch_labels, test_predictions)
-            if config.task == "surv"
-            else 0
+            utils.CoxLoss(surv_batch_labels, test_predictions) if config.task == "surv" else 0
         )
         loss_reg = define_reg(model)
         loss_func = nn.CrossEntropyLoss()
