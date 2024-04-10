@@ -148,14 +148,14 @@ class GAT(nn.Module):
             if isinstance(self.act, nn.Sigmoid):
                 out = out * self.output_range + self.output_shift
 
-        if opt.task == "grad":
+        if opt.task == "grade":
             one_hot_labels = (
                 torch.zeros(grad_labels.shape[0], 3)
                 .cuda()
                 .scatter(1, grad_labels.reshape(-1, 1), 1)
             )
             y_c = torch.sum(one_hot_labels * out)
-        elif opt.task == "surv":
+        elif opt.task == "survival":
             y_c = torch.sum(out)
         # print(out, y_c)
         GAT_features.grad = None

@@ -88,12 +88,16 @@ class GATv4(torch.nn.Module):
         x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
 
-        x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(edge_index.device)  # [bs, nodes]
+        x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
+            edge_index.device
+        )  # [bs, nodes]
 
         x = F.dropout(x, p=0.2, training=self.training)
         x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
 
-        x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0].to(edge_index.device)  # [bs, nodes]
+        x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0].to(
+            edge_index.device
+        )  # [bs, nodes]
 
         if opt.layer_norm:
             x0 = self.layer_norm0(x0)

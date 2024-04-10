@@ -157,13 +157,13 @@ class Proteo(pl.LightningModule):
         # TODO: would self.log automaticaly call wandb.log and would be preffered?
         # https://stackoverflow.com/questions/70790473/pytorch-lightning-epoch-end-validation-epoch-end
         if self.config.wandb_api_key_path:
+            wandb.init()
             wandb.log(
                 {
                     "test_loss": loss_test,
                     "test_cindex": cindex_test,
                     "test_pvalue": pvalue_test,
                     "test_surv_acc": surv_acc_test,
-                    "test_grad_acc": grad_acc_test,
                 }
             )
 

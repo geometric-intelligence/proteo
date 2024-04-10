@@ -3,7 +3,7 @@
 
 
 adj_thresh: 0.08
-task: 'grad'
+task: 'survival'
 task_type: regression # Placeholder
 minimize: true #Placeholder
 

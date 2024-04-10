@@ -1,4 +1,5 @@
 import argparse
+import os
 import random
 
 import numpy as np
@@ -10,12 +11,13 @@ import utils
 from models.gat_v4 import define_reg
 from sklearn.model_selection import StratifiedKFold
 
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 
 def test(config, model, test_features, test_labels, adj_matrix, model_parameters, test_loader):
     model.eval()
 
     test_dataset = Data.TensorDataset(test_features, test_labels)
-    print("Dimensions of test dataset:", test_features.shape, test_labels.shape)
     test_loader_torch = torch.utils.data.DataLoader(
         dataset=test_dataset, batch_size=config.batch_size, shuffle=False
     )
@@ -26,22 +28,18 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
     for (batch_idx, batch), (batch_idx_torch, (batch_features_torch, batch_labels_torch)) in zip(
         enumerate(test_loader), enumerate(test_loader_torch)
     ):
-        print("Batch labels ", batch_labels_torch)
         censor = batch_labels_torch[:, 0]
         survtime = batch_labels_torch[:, 1]
         grade = batch_labels_torch[:, 2]
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        censor_batch_labels = censor.to(device) if "surv" in config.task else censor
+        censor_batch_labels = censor.to(device) if "survival" in config.task else censor
         surv_batch_labels = survtime
         # print(surv_batch_labels)
-        grad_batch_labels = grade.to(device) if "grad" in config.task else grade
+        grad_batch_labels = grade.to(device) if "grade" in config.task else grade
         # TO DO: Fix this and understand what line 37 is doing.
         batch.to(device)
-        test_features, te_fc_features, test_predictions = model(
-            batch, model_parameters
-        )
+        test_features, te_fc_features, test_predictions = model(batch, model_parameters)
         test_predictions.to(device)
-
 
         # print("surv_batch_labels:", surv_batch_labels)
         # print("test_predictions:", test_predictions)
@@ -59,15 +57,17 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
         # print(features_all.shape, test_features.shape)
 
         loss_cox = (
-            utils.CoxLoss(surv_batch_labels, test_predictions) if config.task == "surv" else 0
+            utils.CoxLoss(surv_batch_labels, censor_batch_labels, test_predictions)
+            if config.task == "survival"
+            else 0
         )
         loss_reg = define_reg(model)
         loss_func = nn.CrossEntropyLoss()
-        grad_loss = loss_func(test_predictions, grad_batch_labels) if config.task == "grad" else 0
+        grad_loss = loss_func(test_predictions, grad_batch_labels) if config.task == "grade" else 0
         loss = (
-            config.lambda_cox * loss_cox
-            + config.lambda_nll * grad_loss
-            + config.lambda_reg * loss_reg
+            model_parameters.lambda_cox * loss_cox
+            + model_parameters.lambda_nll * grad_loss
+            + model_parameters.lambda_reg * loss_reg
         )
         loss_test += loss.data.item()
 
@@ -75,7 +75,7 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
             (gt_all, grad_batch_labels.detach().cpu().numpy().reshape(-1))
         )  # Logging Information
 
-        if config.task == "surv":
+        if config.task == "survival":
             risk_pred_all = np.concatenate(
                 (risk_pred_all, test_predictions.detach().cpu().numpy().reshape(-1))
             )  # Logging Information
@@ -86,7 +86,7 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
                 (survtime_all, surv_batch_labels.detach().cpu().numpy().reshape(-1))
             )  # Logging Information
 
-        elif config.task == "grad":
+        elif config.task == "grade":
             pred = test_predictions.argmax(dim=1, keepdim=True)
             grad_acc_test += pred.eq(grad_batch_labels.view_as(pred)).sum().item()
             probs_np = test_predictions.detach().cpu().numpy()
@@ -101,16 +101,18 @@ def test(config, model, test_features, test_labels, adj_matrix, model_parameters
     loss_test /= len(test_loader.dataset)
     cindex_test = (
         utils.CIndex_lifeline(risk_pred_all, censor_all, survtime_all)
-        if config.task == 'surv'
+        if config.task == 'survival'
         else None
     )
     pvalue_test = (
         utils.cox_log_rank(risk_pred_all, censor_all, survtime_all)
-        if config.task == 'surv'
+        if config.task == 'survival'
         else None
     )
-    surv_acc_test = utils.accuracy_cox(risk_pred_all, censor_all) if config.task == 'surv' else None
-    grad_acc_test = grad_acc_test / len(test_loader.dataset) if config.task == 'grad' else None
+    surv_acc_test = (
+        utils.accuracy_cox(risk_pred_all, censor_all) if config.task == 'survival' else None
+    )
+    grad_acc_test = grad_acc_test / len(test_loader.dataset) if config.task == 'grade' else None
     pred_test = [risk_pred_all, survtime_all, censor_all, probs_all, gt_all]
 
     return (

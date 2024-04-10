@@ -1,10 +1,13 @@
 import math
 import os
 
+import lifelines
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+from lifelines.statistics import logrank_test
+from lifelines.utils import concordance_index
 from sklearn.metrics import (
     auc,
     cohen_kappa_score,
@@ -22,11 +25,6 @@ FEATURES_LABELS_FOLDER = os.path.join(
     PARENT_DIR, "MLA-GNN/example_data/input_features_labels/split"
 )
 ADJACENCY_FOLDER = os.path.join(PARENT_DIR, "MLA-GNN/example_data/input_adjacency_matrix/split")
-
-
-# import lifelines
-# from lifelines.utils import concordance_index
-# from lifelines.statistics import logrank_test
 
 
 ################
@@ -131,7 +129,7 @@ def load_csv_data(k, config):
     print("Adjacency matrix:", adj_matrix.shape)
     print("Number of edges:", adj_matrix.sum())
 
-    if config.task == "grad":
+    if config.task == "grade" or config.task == "survival":
         train_ids = train_labels[:, 2] >= 0
         train_labels = train_labels[train_ids]  # Tensor of format [   1, 1448,    2]
         train_features = train_features[train_ids, :]
@@ -230,7 +228,7 @@ def computest_metrics(test_pred, gt_labels):
 ################
 # Survival Utils
 ################
-def CoxLoss(survtime, hazard_pred):
+def CoxLoss(survtime, censor, hazard_pred):
     # This calculation credit to Travers Ching https://github.com/traversc/cox-nnet
     # Cox-nnet: An artificial neural network method for prognosis prediction of high-throughput omics data
     current_batch_len = len(survtime)
