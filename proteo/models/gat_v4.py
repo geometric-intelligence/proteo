@@ -5,7 +5,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import LayerNorm, Parameter
 from torch_geometric.nn import GATConv, SAGPooling
 from torch_geometric.utils import to_dense_adj, to_dense_batch
-from utils import *
+from proteo.datasets import *
 
 
 class GATv4(torch.nn.Module):
@@ -105,29 +105,26 @@ class GATv4(torch.nn.Module):
             x2 = self.layer_norm0(x2)
 
         if opt.which_layer == 'all':
-            x = torch.cat([x0, x1, x2], dim=1)
+            multiscale_features = torch.cat([x0, x1, x2], dim=1)
 
         elif opt.which_layer == 'layer1':
-            x = x0
+            multiscale_features = x0
         elif opt.which_layer == 'layer2':
-            x = x1
+            multiscale_features = x1
         elif opt.which_layer == 'layer3':
-            x = x2
+            multiscale_features = x2
 
-        gat_features = x
+        encoded_features = self.encoder(multiscale_features)
 
-        features = self.encoder(x)
-        out = self.last_layer(features)
-
-        fc_features = features
+        pred = self.last_layer(encoded_features)
 
         if self.act is not None:
-            out = self.act(out)
+            pred = self.act(pred)
 
             if isinstance(self.act, nn.Sigmoid):
-                out = out * self.output_range + self.output_shift
+                pred = pred * self.output_range + self.output_shift
 
-        return gat_features, fc_features, out
+        return multiscale_features, encoded_features, pred
 
 
 def define_optimizer(opt, model):

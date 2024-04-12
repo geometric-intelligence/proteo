@@ -13,10 +13,10 @@ from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-from test_model import test
+import proteo.evaluate
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
-from utils import ROOT_DIR, MLAGNNDataset, load_csv_data
+from proteo.datasets import ROOT_DIR, MLAGNNDataset, load_csv_data
 
 
 class AttrDict(dict):
@@ -98,7 +98,8 @@ class Proteo(pl.LightningModule):
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
-        loss = loss_fn(pred, targets)
+        # HACK ALERT: only training on survival even though we predict censor and survival
+        loss = loss_fn(pred[:, 1], targets[:, 1])
         self.log(
             'train_loss',
             loss,
@@ -139,16 +140,11 @@ class Proteo(pl.LightningModule):
             cindex_test,
             pvalue_test,
             surv_acc_test,
-            grad_acc_test,
-            pred_test,
-            te_features,
-            te_fc_features,
-        ) = test(
+        ) = proteo.evaluate.compute_metrics(
             self.config,
             self.model,
             self.test_dataset.test_features,
             self.test_dataset.test_labels_all,
-            self.test_dataset.adj_matrix,
             self.model_parameters,
             self.test_loader,
         )
