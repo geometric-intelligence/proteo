@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 import proteo.evaluate
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
-from proteo.datasets import ROOT_DIR, MLAGNNDataset, load_csv_data
+from proteo.proteo.mlagnn_datasets import ROOT_DIR, MLAGNNDataset, load_csv_data
 
 
 class AttrDict(dict):

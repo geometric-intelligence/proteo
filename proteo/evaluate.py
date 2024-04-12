@@ -7,7 +7,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.utils.data as Data
-import proteo.datasets as datasets
+import proteo.proteo.mlagnn_datasets as mlagnn_datasets
 from models.gat_v4 import define_reg
 from sklearn.model_selection import StratifiedKFold
 
@@ -29,7 +29,7 @@ def compute_metrics(config, model, model_parameters, test_loader):
         _, _, test_pred = model(batch, model_parameters)
 
         loss_cox = (
-            datasets.CoxLoss(survtime, censor, test_pred)
+            mlagnn_datasets.CoxLoss(survtime, censor, test_pred)
             if config.task == "survival"
             else 0
         )
@@ -55,17 +55,17 @@ def compute_metrics(config, model, model_parameters, test_loader):
 
     loss_test /= len(test_loader.dataset)
     cindex_test = (
-        datasets.CIndex_lifeline(risk_pred_all, censor_all, survtime_all)
+        mlagnn_datasets.CIndex_lifeline(risk_pred_all, censor_all, survtime_all)
         if config.task == 'survival'
         else None
     )
     pvalue_test = (
-        datasets.cox_log_rank(risk_pred_all, censor_all, survtime_all)
+        mlagnn_datasets.cox_log_rank(risk_pred_all, censor_all, survtime_all)
         if config.task == 'survival'
         else None
     )
     surv_acc_test = (
-        datasets.accuracy_cox(risk_pred_all, censor_all) if config.task == 'survival' else None
+        mlagnn_datasets.accuracy_cox(risk_pred_all, censor_all) if config.task == 'survival' else None
     )
     return (
         loss_test,

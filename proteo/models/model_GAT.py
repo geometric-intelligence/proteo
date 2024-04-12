@@ -9,7 +9,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import Parameter, init
 from torch.optim import Adam
 from torch_geometric.nn import global_mean_pool as gap
-from proteo.datasets import *
+from proteo.proteo.mlagnn_datasets import *
 
 
 class GAT(nn.Module):
