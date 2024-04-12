@@ -27,11 +27,6 @@ FEATURES_LABELS_FOLDER = os.path.join(
 ADJACENCY_FOLDER = os.path.join(PARENT_DIR, "MLA-GNN/example_data/input_adjacency_matrix/split")
 
 
-################
-# Data Utils
-################
-
-
 class MLAGNNDataset(InMemoryDataset):
     """This is dataset used in MLAGNN.
     This is a graph regression task.
@@ -45,21 +40,6 @@ class MLAGNNDataset(InMemoryDataset):
         self.split = split
         assert split in ["train", "test"]
         self.config = config
-        (
-            train_features,
-            train_labels,
-            test_features,
-            test_labels,
-            adj_matrix,
-            test_labels_all,
-        ) = load_csv_data(1, config)
-        print("Calling load_csv_data every run")
-        self.train_features = train_features
-        self.train_labels = train_labels
-        self.test_features = test_features
-        self.test_labels = test_labels
-        self.adj_matrix = adj_matrix
-        self.test_labels_all = test_labels_all
         super(MLAGNNDataset, self).__init__(root)
         # self.load(self.processed_paths[0])
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -87,14 +67,21 @@ class MLAGNNDataset(InMemoryDataset):
 
     def process(self):
         # Read data into huge `Data` list which will be a list of graphs
+        (
+            train_features,
+            train_labels,
+            test_features,
+            test_labels,
+            adj_matrix,
+        ) = load_csv_data(1, self.config)
         train_data_list = []
-        for feature, label in zip(self.train_features, self.train_labels):
-            data = self.createst_graph_data(feature, label, self.adj_matrix)
+        for feature, label in zip(train_features, train_labels):
+            data = self.createst_graph_data(feature, label, adj_matrix)
             train_data_list.append(data)
 
         test_data_list = []
-        for feature, label in zip(self.test_features, self.test_labels):
-            data = self.createst_graph_data(feature, label, self.adj_matrix)
+        for feature, label in zip(test_features, test_labels):
+            data = self.createst_graph_data(feature, label, adj_matrix)
             test_data_list.append(data)
         self.save(train_data_list, os.path.join(self.processed_dir, f'{self.name}_train.pt'))
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
@@ -129,38 +116,29 @@ def load_csv_data(k, config):
     print("Adjacency matrix:", adj_matrix.shape)
     print("Number of edges:", adj_matrix.sum())
 
-    if config.task == "grade" or config.task == "survival":
-        train_ids = train_labels[:, 2] >= 0
-        train_labels = train_labels[train_ids]  # Tensor of format [   1, 1448,    2]
-        train_features = train_features[train_ids, :]
-        print(
-            "Training features and grade labels after deleting NA labels:",
-            train_features.shape,
-            train_labels.shape,
-        )
+    train_ids = train_labels[:, 2] >= 0
+    train_labels = train_labels[train_ids]  # Tensor of format [   1, 1448,    2]
+    train_features = train_features[train_ids, :]
+    print(
+        "Training features and grade labels after deleting NA labels:",
+        train_features.shape,
+        train_labels.shape,
+    )
 
-        test_ids = test_labels[:, 2] >= 0
-        test_labels = test_labels[test_ids]
-        test_features = test_features[test_ids, :]
-        print(
-            "Testing features and grade labels after deleting NA labels:",
-            test_features.shape,
-            test_labels.shape,
-        )
-    train_labels = train_labels[:, 1]  # Taking survival time
+    test_ids = test_labels[:, 2] >= 0
+    test_labels = test_labels[test_ids]
+    test_features = test_features[test_ids, :]
+    print(
+        "Testing features and grade labels after deleting NA labels:",
+        test_features.shape,
+        test_labels.shape,
+    )
+    train_labels = train_labels[:, 0:2]  # Taking censor and survival time
     print(train_labels.shape)
-    test_labels_all = test_labels
-    test_labels = test_labels[:, 1]  # Taking survival time
+    test_labels = test_labels[:, 0:2]  # Taking censor and survival time
     print(test_labels.shape)
 
-    return train_features, train_labels, test_features, test_labels, adj_matrix, test_labels_all
-
-
-def load_dataset(k, config):
-    train_features, train_labels, test_features, test_labels, _ = load_csv_data(1, config)
-    # transform these vsriables to create an object of dataset class
-    dataset = MyDataset(train_features, train_labels, test_features, test_labels, _)
-    return dataset
+    return train_features, train_labels, test_features, test_labels, adj_matrix
 
 
 ################
