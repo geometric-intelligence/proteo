@@ -1,7 +1,7 @@
 # Description of parameters: 
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
-dataset_name: "allftd"
+dataset_name: "ftd"
 adj_thresh: 0.08
 wgcna_power: 9
 wgcna_minModuleSize: 10
@@ -103,7 +103,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # GPU Configuration
-device: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+device: 0  #[0, 1] #, 2, 3, 4, 5, 6, 7, 8, 9]
 trainer_accelerator: "gpu"
 seed: 43
 start_seed: 0

@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import LayerNorm, Parameter
-from torch_geometric.nn import GATConv, SAGPooling
-from torch_geometric.utils import to_dense_adj, to_dense_batch
-from proteo.mlagnn_datasets import *
+from torch_geometric.nn import GATConv
+from torch_geometric.utils import to_dense_batch
+from proteo.datasets.mlagnn import *
 
 
 class GATv4(torch.nn.Module):
@@ -76,16 +76,16 @@ class GATv4(torch.nn.Module):
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
     def forward(self, data, opt):
-        batch = data.batch
+        batch = data.batchs  # [batch_size * nodes]
         ### layer1
         edge_index = torch.tensor(data.edge_index).cuda()
         edge_index = torch.transpose(edge_index, 2, 0)
         edge_index = torch.reshape(edge_index, (2, -1))
-        data.x = data.x.requires_grad_()
-        x0 = to_dense_batch(torch.mean(data.x, dim=-1), batch=batch)[0]  # [batch_size, nodes]
+        data.x = torch.tensor(data.x).requires_grad_()
+        x0 = data.x  # [batch_size, nodes]
 
         ### layer2
-        x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)
+        x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
 
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
