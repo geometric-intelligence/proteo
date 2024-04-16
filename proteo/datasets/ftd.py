@@ -95,7 +95,6 @@ class FTDDataset(InMemoryDataset):
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
             data = self.create_graph_data(feature, label, adj_matrix)
-            print(f"type of data.x: {type(data.x)}")
             train_data_list.append(data)
 
         test_data_list = []

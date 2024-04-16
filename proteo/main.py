@@ -82,7 +82,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
-            return self.model(x, x.batch, self.model_parameters)
+            return self.model(x, x.batch, self.model_parameters) #TO DO: understand why 3 inputs here but 2 in gatv4
         else:
             raise NotImplementedError('Model not implemented yet')
 

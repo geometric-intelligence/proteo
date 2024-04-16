@@ -15,10 +15,9 @@ class GATv4(torch.nn.Module):
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
 
-        self.nhids = [8, 16, 12]
-        self.nheads = [4, 3, 4]
-        self.fc_dim = [64, 48, 32]
-        self.out_channels = out_channels
+        self.nhids = [8, 16, 12] #number of hidden units for each layer
+        self.nheads = [4, 3, 4] #number of attention heads for each GAT layer.
+        self.out_channels = out_channels #dimensions of fully connected (FC) layers that are part of the model's encoder
 
         self.conv1 = GATConv(
             opt.input_dim, self.nhids[0], heads=self.nheads[0], dropout=self.GAT_dropout
@@ -76,7 +75,7 @@ class GATv4(torch.nn.Module):
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
     def forward(self, data, opt):
-        batch = data.batchs  # [batch_size * nodes]
+        batch = data.batch  # [batch_size * nodes]
         ### layer1
         edge_index = torch.tensor(data.edge_index).cuda()
         edge_index = torch.transpose(edge_index, 2, 0)
