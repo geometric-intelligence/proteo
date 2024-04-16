@@ -1,6 +1,6 @@
 **/__pycache__/
 proteo/checkpoints/
-proteo/datasets/
+proteo/data/
 proteo/lightning_logs/
 proteo/wandb/
 wandb_api_key.txt
