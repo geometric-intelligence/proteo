@@ -15,29 +15,30 @@ class GATv4(torch.nn.Module):
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
 
-        self.nhids = [8, 16, 12] #number of hidden units for each layer
-        self.nheads = [4, 3, 4] #number of attention heads for each GAT layer.
+        self.hidden_channels = opt.hidden_channels #[8, 16, 12] #number of hidden units for each layer
+        self.heads = opt.heads #number of attention heads for each GAT layer.
+        self.fc_dim = opt.fc_dim #defines the dimensions (or the number of neurons/units) for a series of fully connected (FC) layers
         self.out_channels = out_channels #dimensions of fully connected (FC) layers that are part of the model's encoder
 
         self.conv1 = GATConv(
-            opt.input_dim, self.nhids[0], heads=self.nheads[0], dropout=self.GAT_dropout
+            opt.input_dim, self.hidden_channels[0], heads=self.heads[0], dropout=self.GAT_dropout
         )
         self.conv2 = GATConv(
-            self.nhids[0] * self.nheads[0],
-            self.nhids[1],
-            heads=self.nheads[1],
+            self.hidden_channels[0] * self.heads[0],
+            self.hidden_channels[1],
+            heads=self.heads[1],
             dropout=self.GAT_dropout,
         )
         self.conv3 = GATConv(
-            self.nhids[1] * self.nheads[1],
-            self.nhids[2],
-            heads=self.nheads[2],
+            self.hidden_channels[1] * self.heads[1],
+            self.hidden_channels[2],
+            heads=self.heads[2],
             dropout=self.GAT_dropout,
         )
 
-        self.pool1 = torch.nn.Linear(self.nhids[0] * self.nheads[0], 1)
-        self.pool2 = torch.nn.Linear(self.nhids[1] * self.nheads[1], 1)
-        self.pool3 = torch.nn.Linear(self.nhids[2] * self.nheads[2], 1)
+        self.pool1 = torch.nn.Linear(self.hidden_channels[0] * self.heads[0], 1)
+        self.pool2 = torch.nn.Linear(self.hidden_channels[1] * self.heads[1], 1)
+        self.pool3 = torch.nn.Linear(self.hidden_channels[2] * self.heads[2], 1)
 
         self.layer_norm0 = LayerNorm(opt.num_nodes)
         self.layer_norm1 = LayerNorm(opt.num_nodes)
@@ -85,14 +86,14 @@ class GATv4(torch.nn.Module):
 
         ### layer2
         x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
-        x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
+        x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
 
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
 
         x = F.dropout(x, p=0.2, training=self.training)
-        x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
+        x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
 
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
