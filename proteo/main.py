@@ -1,7 +1,5 @@
 import os
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"  # For debugging
-
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
@@ -16,7 +14,8 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 import proteo.evaluate
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
-from proteo.proteo.mlagnn_datasets import ROOT_DIR, MLAGNNDataset, load_csv_data
+from proteo.mlagnn_datasets import ROOT_DIR, MLAGNNDataset
+from proteo.allftd_datasets import ROOT_DIR, AllFTDDataset
 
 
 class AttrDict(dict):
@@ -95,11 +94,12 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, pred = self.model(batch, self.model_parameters)
+
         targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
         # HACK ALERT: only training on survival even though we predict censor and survival
-        loss = loss_fn(pred[:, 1], targets[:, 1])
+        loss = loss_fn(pred, targets)
         self.log(
             'train_loss',
             loss,
@@ -117,10 +117,10 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             _, _, pred = self.model(batch, self.model_parameters)
-
-        targets = batch.y.view(pred.shape)  # Nina fix, makes sure targets and pred have same shape.
+        targets = batch.y.view(pred.shape)
 
         loss_fn = self.LOSS_MAP[self.config.task_type]
+        # HACK ALERT: only training on survival even though we predict censor and survival
         loss = loss_fn(pred, targets)
         self.log(
             'val_loss',
@@ -133,35 +133,6 @@ class Proteo(pl.LightningModule):
         )
 
         return loss
-
-    def on_validation_epoch_end(self):
-        (
-            loss_test,
-            cindex_test,
-            pvalue_test,
-            surv_acc_test,
-        ) = proteo.evaluate.compute_metrics(
-            self.config,
-            self.model,
-            self.test_dataset.test_features,
-            self.test_dataset.test_labels_all,
-            self.model_parameters,
-            self.test_loader,
-        )
-
-        # Log values in wandb
-        # TODO: would self.log automaticaly call wandb.log and would be preffered?
-        # https://stackoverflow.com/questions/70790473/pytorch-lightning-epoch-end-validation-epoch-end
-        if self.config.wandb_api_key_path:
-            wandb.init()
-            wandb.log(
-                {
-                    "test_loss": loss_test,
-                    "test_cindex": cindex_test,
-                    "test_pvalue": pvalue_test,
-                    "test_surv_acc": surv_acc_test,
-                }
-            )
 
     def configure_optimizers(self):
         # Do not change this
@@ -209,10 +180,17 @@ def main():
 
     pl.seed_everything(config.seed)
 
-    root = os.path.join(ROOT_DIR, "data", "FAD")
     # The first time you call this it creates train.pt and test.pt files, and afterwards it loads them
-    test_dataset = MLAGNNDataset(root, "test", config)
-    train_dataset = MLAGNNDataset(root, "train", config)
+    
+    if config.dataset_name == "mlagnn":
+        root = os.path.join(ROOT_DIR, "data", "FAD")
+        test_dataset = MLAGNNDataset(root, "test", config)
+        train_dataset = MLAGNNDataset(root, "train", config)
+
+    elif config.dataset_name == "allftd":
+        root = os.path.join(ROOT_DIR, "data", "AllFTD")
+        test_dataset = AllFTDDataset(root, "test", config)
+        train_dataset = AllFTDDataset(root, "train", config)
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
 

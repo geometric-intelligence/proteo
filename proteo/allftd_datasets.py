@@ -1,28 +1,21 @@
-import math
+
 import os
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-from sklearn.metrics import (
-    auc,
-    cohen_kappa_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_curve,
-)
+
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelBinarizer
 from torch_geometric.data import Data, InMemoryDataset
 import PyWGCNA
 
-# TODO: decide on folder
-ADJACENCY_FOLDER = os.path.join(
-    PARENT_DIR, "MLA-GNN/example_data/input_adjacency_matrix/split") #To Do need to find exact path
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CSV_PATH = "/home/data/ALLFTD_dataset_for_nina_louisa.csv"
+ADJACENCY_FOLDER = os.path.join(
+    ROOT_DIR, "data", "AllFTD", "processed") #To Do need to find exact path
+ADJACENCY_PATH = os.path.join(ADJACENCY_FOLDER, "adjacency_matrix.csv")
+
+CSV_PATH = os.path.join(ROOT_DIR, "data", "ALLFTD_dataset_for_nina_louisa.csv")
 
 class AllFTDDataset(InMemoryDataset):
     """This is dataset used in AllFTD.
@@ -86,7 +79,7 @@ class AllFTDDataset(InMemoryDataset):
         return [f'{name}_train.pt', f'{name}_test.pt']
 
 
-    def createst_graph_data(self, feature, label, adj_matrix):
+    def create_graph_data(self, feature, label, adj_matrix):
         x = feature  # protein concentrations: what is on the nodes
         adj_tensor = torch.tensor(adj_matrix)
         # Find the indices where the matrix has non-zero elements
@@ -98,23 +91,23 @@ class AllFTDDataset(InMemoryDataset):
     def process(self):
         # Read data into huge `Data` list which will be a list of graphs
         train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(
-            1, self.config
+            self.config
         )
 
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
-            data = self.createst_graph_data(feature, label, adj_matrix)
+            data = self.create_graph_data(feature, label, adj_matrix)
             train_data_list.append(data)
 
         test_data_list = []
         for feature, label in zip(test_features, test_labels):
-            data = self.createst_graph_data(feature, label, adj_matrix)
+            data = self.create_graph_data(feature, label, adj_matrix)
             test_data_list.append(data)
         self.save(train_data_list, os.path.join(self.processed_dir, f'{self.name}_train.pt'))
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
 
 
-def load_csv_data(k, config):
+def load_csv_data(config):
     print("Loading data from:", CSV_PATH)
     csv_data = np.array(pd.read_csv(CSV_PATH))
     has_plasma = csv_data[:, 9].astype(int)
@@ -127,13 +120,11 @@ def load_csv_data(k, config):
 
     train_features, test_features, train_labels, test_labels = train_test_split(
         features, labels, test_size=0.20, random_state=42)
+    
+    if not os.path.exists(ADJACENCY_PATH):
+        calculate_adjacency_matrix(config, plasma_protein)
+    adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
 
-    adj_matrix_path = os.path.join(ADJACENCY_FOLDER, 'allftd_adj_matrix.csv')
-
-    if os.path.exists(adj_matrix_path):
-        adj_matrix = np.array(pd.read_csv(adj_matrix_path)).astype(float)
-    else:
-        adj_matrix = calculate_adjacency_matrix(config)
 
     print("Adjacency matrix:", adj_matrix.shape)
     print("Number of edges:", adj_matrix.sum())
@@ -142,25 +133,17 @@ def load_csv_data(k, config):
 
 
 
-def calculate_adjacency_matrix(config):
+def calculate_adjacency_matrix(config, plasma_protein):
     # WGCNA parameters
     config.wgcna_power = 9
     config.wgcna_minModuleSize = 10
     config.wgcna_mergeCutHeight = 0.25
 
 
-    # Read data
-    geneExp = pd.read_csv(data_file) # col = genes, rows = samples 
-    #Get rid of gene and sample labels
-    print(geneExp.shape)
-    geneExp = geneExp.iloc[:, 2:322].values #can change this to 81:322 to match what they trained on
-    print(geneExp.shape)
-    print(geneExp[1].shape)
-    # Convert elements to float.
-    geneExp = geneExp.astype(float)
+    print(plasma_protein.shape) # rows = samples ; cols = proteins, 
 
     # Calculate adjacency matrix.
-    adjacency = PyWGCNA.WGCNA.adjacency(geneExp, power = config.wgcna_power, adjacencyType="signed hybrid")
+    adjacency = PyWGCNA.WGCNA.adjacency(plasma_protein, power = config.wgcna_power, adjacencyType="signed hybrid")
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
 
@@ -168,7 +151,10 @@ def calculate_adjacency_matrix(config):
     adjacency_df = pd.DataFrame(adjacency)
     print(adjacency_df.shape)
 
-    adjacency_df.to_csv(os.path.join(OUTPUT_FOLDER, "split1_adjacency_matrix.csv"), index=None, header=None)
+    # if ADJACENCY_FOLDER doesn't exist, create it:
+    if not os.path.exists(ADJACENCY_FOLDER):
+        os.makedirs(ADJACENCY_FOLDER)
+    adjacency_df.to_csv(ADJACENCY_PATH, header = None, index = False)
 
     #    similarity_matrix = np.array(
     #     pd.read_csv(),

@@ -7,7 +7,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.utils.data as Data
-import proteo.proteo.mlagnn_datasets as mlagnn_datasets
+import proteo.mlagnn_datasets as mlagnn_datasets
 from models.gat_v4 import define_reg
 from sklearn.model_selection import StratifiedKFold
 
@@ -22,8 +22,9 @@ def compute_metrics(config, model, model_parameters, test_loader):
     loss_test = 0
     for batch in test_loader:
         batch.to(device)
+        batch.y =  batch.y.reshape(config.batch_size, -1)
         censor = batch.y[:, 0]
-        survtime = batch.y[:, 0]
+        survtime = batch.y[:, 1]
  
         # HACK ALERT: Pred is survival only
         _, _, test_pred = model(batch, model_parameters)

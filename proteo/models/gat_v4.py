@@ -5,7 +5,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import LayerNorm, Parameter
 from torch_geometric.nn import GATConv, SAGPooling
 from torch_geometric.utils import to_dense_adj, to_dense_batch
-from proteo.proteo.mlagnn_datasets import *
+from proteo.mlagnn_datasets import *
 
 
 class GATv4(torch.nn.Module):

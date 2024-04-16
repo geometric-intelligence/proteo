@@ -1,7 +1,7 @@
 # Description of parameters: 
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
-
+dataset_name: "allftd"
 adj_thresh: 0.08
 wgcna_power: 9
 wgcna_minModuleSize: 10
