@@ -87,11 +87,6 @@ class Proteo(pl.LightningModule):
             raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
-        print("in training_step")
-        print(f"type of batch: {type(batch)}")
-        print(f"batch.__dict__: {batch.__dict__}")
-        print(f"type of batch.x: {type(batch.x)}")
-        print(f"len of batch.x: {len(batch.x)}")
         if self.config.model == 'gat':
             pred = self.model(batch, dim=self.config.dim)
         elif self.config.model == 'higher-gat':

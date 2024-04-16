@@ -76,27 +76,16 @@ class GATv4(torch.nn.Module):
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
     def forward(self, data, opt):
-        print("in forward")
-        batch = data.batch
-        print(f"shape of batch: {batch.shape}")
+        batch = data.batchs  # [batch_size * nodes]
         ### layer1
         edge_index = torch.tensor(data.edge_index).cuda()
         edge_index = torch.transpose(edge_index, 2, 0)
         edge_index = torch.reshape(edge_index, (2, -1))
         data.x = torch.tensor(data.x).requires_grad_()
-        print(f"data.x.shape = {data.x.shape}")  # [batch_size, nodes]
-        #y0 = torch.mean(data.x, dim=-1)  # [batch_size,]
-        # #print(f"y0.shape = {y0.shape}")
-        # x0 = to_dense_batch(data.x.reshape(-1, 1), batch=batch)[0]  # [batch_size, nodes]
-        # print(f"x0.shape = {x0.shape}")
         x0 = data.x  # [batch_size, nodes]
 
         ### layer2
-        x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)
-        print(f'x.shape = {x.shape}')
-        print(f"len of edge_index: {len(edge_index)}")
-        print(f'edge_index.shape = {edge_index.shape}')
-        print(f"edge_index[:5 = {edge_index[:5]}")
+        x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
 
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
