@@ -11,14 +11,12 @@ import PyWGCNA
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-ADJACENCY_FOLDER = os.path.join(
-    ROOT_DIR, "data", "AllFTD", "processed") #To Do need to find exact path
+ADJACENCY_FOLDER = os.path.join(ROOT_DIR, "data", "ftd", "processed")
 ADJACENCY_PATH = os.path.join(ADJACENCY_FOLDER, "adjacency_matrix.csv")
-
 CSV_PATH = os.path.join(ROOT_DIR, "data", "ALLFTD_dataset_for_nina_louisa.csv")
 
-class AllFTDDataset(InMemoryDataset):
-    """This is dataset used in AllFTD.
+class FTDDataset(InMemoryDataset):
+    """This is dataset used in FTD.
     This is a graph regression task.
 
     **Rows:** 
@@ -57,12 +55,12 @@ class AllFTDDataset(InMemoryDataset):
     """
 
     def __init__(self, root, split, config):
-        self.name = 'AllFTD'
+        self.name = 'FTD'
         self.root = root
         self.split = split
         assert split in ["train", "test"]
         self.config = config
-        super(AllFTDDataset, self).__init__(root)
+        super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
 
@@ -97,6 +95,7 @@ class AllFTDDataset(InMemoryDataset):
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
             data = self.create_graph_data(feature, label, adj_matrix)
+            print(f"type of data.x: {type(data.x)}")
             train_data_list.append(data)
 
         test_data_list = []
@@ -124,7 +123,6 @@ def load_csv_data(config):
     if not os.path.exists(ADJACENCY_PATH):
         calculate_adjacency_matrix(config, plasma_protein)
     adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
-
 
     print("Adjacency matrix:", adj_matrix.shape)
     print("Number of edges:", adj_matrix.sum())

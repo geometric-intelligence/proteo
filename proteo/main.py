@@ -11,11 +11,10 @@ from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-import proteo.evaluate
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
-from proteo.mlagnn_datasets import ROOT_DIR, MLAGNNDataset
-from proteo.allftd_datasets import ROOT_DIR, AllFTDDataset
+from proteo.datasets.mlagnn import ROOT_DIR, MLAGNNDataset
+from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
 
 class AttrDict(dict):
@@ -88,6 +87,11 @@ class Proteo(pl.LightningModule):
             raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
+        print("in training_step")
+        print(f"type of batch: {type(batch)}")
+        print(f"batch.__dict__: {batch.__dict__}")
+        print(f"type of batch.x: {type(batch.x)}")
+        print(f"len of batch.x: {len(batch.x)}")
         if self.config.model == 'gat':
             pred = self.model(batch, dim=self.config.dim)
         elif self.config.model == 'higher-gat':
@@ -187,10 +191,10 @@ def main():
         test_dataset = MLAGNNDataset(root, "test", config)
         train_dataset = MLAGNNDataset(root, "train", config)
 
-    elif config.dataset_name == "allftd":
-        root = os.path.join(ROOT_DIR, "data", "AllFTD")
-        test_dataset = AllFTDDataset(root, "test", config)
-        train_dataset = AllFTDDataset(root, "train", config)
+    elif config.dataset_name == "ftd":
+        root = os.path.join(ROOT_DIR, "data", "ftd")
+        test_dataset = FTDDataset(root, "test", config)
+        train_dataset = FTDDataset(root, "train", config)
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
 
