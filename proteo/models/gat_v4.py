@@ -106,6 +106,7 @@ class GATv4(torch.nn.Module):
         x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
         print("After conv2")
         print(f"x is:{x.shape}")
+        print(f"x1 is:{x1.shape}")
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
