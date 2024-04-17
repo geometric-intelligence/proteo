@@ -33,12 +33,6 @@ class GATv4(torch.nn.Module):
             dropout=self.GAT_dropout,
         )
         print(f"conv2 is:{self.conv2}")
-        self.conv3 = GATConv(
-            self.hidden_channels[1] * self.heads[1],
-            self.hidden_channels[2],
-            heads=self.heads[2],
-            dropout=self.GAT_dropout,
-        )
 
         self.pool1 = torch.nn.Linear(self.hidden_channels[0] * self.heads[0], 1)
         self.pool2 = torch.nn.Linear(self.hidden_channels[1] * self.heads[1], 1)
@@ -85,6 +79,8 @@ class GATv4(torch.nn.Module):
         edge_index = torch.tensor(data.edge_index).cuda()
         edge_index = torch.transpose(edge_index, 2, 0)
         edge_index = torch.reshape(edge_index, (2, -1))
+
+        #layer1
         data.x = data.x.requires_grad_()
         x0 = to_dense_batch(torch.mean(data.x, dim=-1), batch=batch)[0] # [bs, nodes]
 
