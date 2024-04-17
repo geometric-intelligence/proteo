@@ -20,8 +20,7 @@ gat-v4:
   heads: [4, 3, 4]
   hidden_channels: [8, 16, 12]
   fc_dim: [64, 48, 32]
-  lin_input_dim: 720
-  which_layer: 'all'
+  which_layer: ['layer1', 'layer2', 'layer3']
   cnv_dim: 0
   omic_dim: 32
   act_type: 'none'
@@ -34,7 +33,7 @@ gat-v4:
   # Optimizer Configuration
   lr_scheduler: LambdaLR
   lr_scheduler_params: None
-  num_nodes: 40
+  num_nodes: 40 #TO DO: This should not be hardcoded
   layer_norm: true
   
 
@@ -105,7 +104,7 @@ wandb_offline: true
 log_every_n_steps: 5
 
 # GPU Configuration
-device: 0  #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+device: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 trainer_accelerator: "gpu"
 seed: 43
 start_seed: 0

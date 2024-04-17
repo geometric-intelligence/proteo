@@ -20,6 +20,7 @@ class GATv4(torch.nn.Module):
         self.fc_dim = opt.fc_dim #defines the dimensions (or the number of neurons/units) for a series of fully connected (FC) layers
         self.out_channels = out_channels #dimensions of fully connected (FC) layers that are part of the model's encoder
         self.in_channels = in_channels #number of input features
+        self.lin_input_dim = opt.num_nodes*len(opt.which_layer) #number of input features for the first FC layer
 
         self.conv1 = GATConv(
             in_channels, self.hidden_channels[0], heads=self.heads[0], dropout=self.GAT_dropout
@@ -49,7 +50,7 @@ class GATv4(torch.nn.Module):
         self.layer_norm3 = LayerNorm(opt.num_nodes)
 
         fc1 = nn.Sequential(
-            nn.Linear(opt.lin_input_dim, self.fc_dim[0]),
+            nn.Linear(self.lin_input_dim, self.fc_dim[0]),
             nn.ELU(),
             nn.AlphaDropout(p=self.fc_dropout, inplace=True),
         )
@@ -82,49 +83,39 @@ class GATv4(torch.nn.Module):
         batch = data.batch.cuda()  # [batch_size * nodes]
         ### layer1
         edge_index = torch.tensor(data.edge_index).cuda()
-        print(f"edge_index is:{edge_index.shape}")
         edge_index = torch.transpose(edge_index, 2, 0)
-        print(f"edge_index is:{edge_index.shape}")
         edge_index = torch.reshape(edge_index, (2, -1))
-        print(f"edge_index is:{edge_index.shape}")
         data.x = torch.tensor(data.x).requires_grad_()
-        print(f"data.x is:{data.x.shape}") 
         x0 = data.x.cuda()  # [batch_size, nodes]
-        print(f"Dimesnion of y is:{data.y.shape}")
-        print(f"Dimension of batch is:{batch.shape}")
+          # [bs, nodes]
         ### layer2
-        x = F.dropout(x0, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
-        print("Before conv1")
-        print(f"x is:{x.shape}")
+        x = F.dropout(x0, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes] #TO DO: what is this doing?
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
-        print("After conv1")
-        print(f"x is:{x.shape}")
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
         x = F.dropout(x, p=0.2, training=self.training)
         x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
-        print("After conv2")
-        print(f"x is:{x.shape}")
-        print(f"x1 is:{x1.shape}")
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
-        print(f"x2 is:{x2.shape}")
+        
+
+        x0 = to_dense_batch(x0, batch=batch)[0].to(edge_index.device).squeeze(-1)
         #TO DO: Erroring here now 
         if opt.layer_norm:
             x0 = self.layer_norm0(x0)
             x1 = self.layer_norm1(x1)
             x2 = self.layer_norm0(x2)
 
-        if opt.which_layer == 'all':
+        if opt.which_layer == ['layer1', 'layer2', 'layer3']:
             multiscale_features = torch.cat([x0, x1, x2], dim=1)
 
-        elif opt.which_layer == 'layer1':
+        elif opt.which_layer == ['layer1']:
             multiscale_features = x0
-        elif opt.which_layer == 'layer2':
+        elif opt.which_layer == ['layer2']:
             multiscale_features = x1
-        elif opt.which_layer == 'layer3':
+        elif opt.which_layer == ['layer3']:
             multiscale_features = x2
 
         encoded_features = self.encoder(multiscale_features)
