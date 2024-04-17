@@ -72,7 +72,8 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GATv4(opt=self.model_parameters, out_channels=out_channels)
+            model = GATv4(opt=self.model_parameters, out_channels=out_channels)
+            self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
 
