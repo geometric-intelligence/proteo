@@ -95,7 +95,6 @@ class FTDDataset(InMemoryDataset):
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
             data = self.create_graph_data(feature, label, adj_matrix)
-            print(f"type of data.x: {type(data.x)}")
             train_data_list.append(data)
 
         test_data_list = []
@@ -119,6 +118,13 @@ def load_csv_data(config):
 
     train_features, test_features, train_labels, test_labels = train_test_split(
         features, labels, test_size=0.20, random_state=42)
+    train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
+    test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
+    train_labels = torch.LongTensor(train_labels)
+    test_labels = torch.LongTensor(test_labels)
+    print("Training features and labels:", train_features.shape, train_labels.shape)
+    print("Testing features and labels:", test_features.shape, test_labels.shape)
+
     
     if not os.path.exists(ADJACENCY_PATH):
         calculate_adjacency_matrix(config, plasma_protein)

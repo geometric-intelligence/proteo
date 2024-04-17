@@ -9,40 +9,43 @@ from proteo.datasets.mlagnn import *
 
 
 class GATv4(torch.nn.Module):
-    def __init__(self, opt, out_channels):
+    def __init__(self, opt, in_channels, out_channels):
         super(GATv4, self).__init__()
         self.fc_dropout = opt.fc_dropout
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
 
-        self.nhids = [8, 16, 12]
-        self.nheads = [4, 3, 4]
-        self.fc_dim = [64, 48, 32]
-        self.out_channels = out_channels
+        self.hidden_channels = opt.hidden_channels #[8, 16, 12] #number of hidden units for each layer
+        self.heads = opt.heads #number of attention heads for each GAT layer.
+        self.fc_dim = opt.fc_dim #defines the dimensions (or the number of neurons/units) for a series of fully connected (FC) layers
+        self.out_channels = out_channels #dimensions of fully connected (FC) layers that are part of the model's encoder
+        self.in_channels = in_channels #number of input features
 
         self.conv1 = GATConv(
-            opt.input_dim, self.nhids[0], heads=self.nheads[0], dropout=self.GAT_dropout
+            in_channels, self.hidden_channels[0], heads=self.heads[0], dropout=self.GAT_dropout
         )
+        print(f"conv1 is:{self.conv1}")
         self.conv2 = GATConv(
-            self.nhids[0] * self.nheads[0],
-            self.nhids[1],
-            heads=self.nheads[1],
+            self.hidden_channels[0] * self.heads[0],
+            self.hidden_channels[1],
+            heads=self.heads[1],
             dropout=self.GAT_dropout,
         )
+        print(f"conv2 is:{self.conv2}")
         self.conv3 = GATConv(
-            self.nhids[1] * self.nheads[1],
-            self.nhids[2],
-            heads=self.nheads[2],
+            self.hidden_channels[1] * self.heads[1],
+            self.hidden_channels[2],
+            heads=self.heads[2],
             dropout=self.GAT_dropout,
         )
 
-        self.pool1 = torch.nn.Linear(self.nhids[0] * self.nheads[0], 1)
-        self.pool2 = torch.nn.Linear(self.nhids[1] * self.nheads[1], 1)
-        self.pool3 = torch.nn.Linear(self.nhids[2] * self.nheads[2], 1)
+        self.pool1 = torch.nn.Linear(self.hidden_channels[0] * self.heads[0], 1)
+        self.pool2 = torch.nn.Linear(self.hidden_channels[1] * self.heads[1], 1)
+        self.pool3 = torch.nn.Linear(self.hidden_channels[2] * self.heads[2], 1)
 
-        self.layer_norm0 = LayerNorm(opt.num_nodes)
-        self.layer_norm1 = LayerNorm(opt.num_nodes)
-        self.layer_norm2 = LayerNorm(opt.num_nodes)
+        self.layer_norm0 = LayerNorm(opt.num_nodes) #num_nodes = batch_size * nodes_per_graph
+        self.layer_norm1 = LayerNorm(opt.num_nodes) 
+        self.layer_norm2 = LayerNorm(opt.num_nodes) 
         self.layer_norm3 = LayerNorm(opt.num_nodes)
 
         fc1 = nn.Sequential(
@@ -76,29 +79,38 @@ class GATv4(torch.nn.Module):
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
     def forward(self, data, opt):
-        batch = data.batchs  # [batch_size * nodes]
+        batch = data.batch.cuda()  # [batch_size * nodes]
         ### layer1
         edge_index = torch.tensor(data.edge_index).cuda()
+        print(f"edge_index is:{edge_index.shape}")
         edge_index = torch.transpose(edge_index, 2, 0)
+        print(f"edge_index is:{edge_index.shape}")
         edge_index = torch.reshape(edge_index, (2, -1))
+        print(f"edge_index is:{edge_index.shape}")
         data.x = torch.tensor(data.x).requires_grad_()
-        x0 = data.x  # [batch_size, nodes]
-
+        print(f"data.x is:{data.x.shape}") 
+        x0 = data.x.cuda()  # [batch_size, nodes]
+        print(f"Dimesnion of y is:{data.y.shape}")
+        print(f"Dimension of batch is:{batch.shape}")
         ### layer2
-        x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
-        x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
-
+        x = F.dropout(x0, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
+        print("Before conv1")
+        print(f"x is:{x.shape}")
+        x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
+        print("After conv1")
+        print(f"x is:{x.shape}")
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
-
         x = F.dropout(x, p=0.2, training=self.training)
-        x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, nhids[0]*nheads[0]]
-
+        x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
+        print("After conv2")
+        print(f"x is:{x.shape}")
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
-
+        print(f"x2 is:{x2.shape}")
+        #TO DO: Erroring here now 
         if opt.layer_norm:
             x0 = self.layer_norm0(x0)
             x1 = self.layer_norm1(x1)

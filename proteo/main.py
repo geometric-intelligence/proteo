@@ -46,13 +46,12 @@ class Proteo(pl.LightningModule):
         "mse_regression": torch.nn.MSELoss(),
     }
 
-    def __init__(self, config: Config, in_channels, out_channels, test_dataset, test_loader):
+    def __init__(self, config: Config, in_channels, out_channels, test_loader):
         super().__init__()
         self.config = config
         self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
         # These parameters are to get the test() function to run
-        self.test_dataset = test_dataset
         self.test_loader = test_loader
 
         if config.model == 'gat':
@@ -72,7 +71,8 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            self.model = GATv4(opt=self.model_parameters, out_channels=out_channels)
+            model = GATv4(opt=self.model_parameters,in_channels=in_channels, out_channels=out_channels)
+            self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -82,7 +82,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
-            return self.model(x, x.batch, self.model_parameters)
+            return self.model(x, x.batch, self.model_parameters) #TO DO: understand why 3 inputs here but 2 in gatv4
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -265,7 +265,7 @@ def main():
         if env.global_rank() != 0 and env.local_rank() == 0:
             wandb.init(config=config, **wandb_config)
 
-    module = Proteo(config, in_channels, out_channels, test_dataset, test_loader)
+    module = Proteo(config, in_channels, out_channels, test_loader)
     print(module)
     trainer.fit(module, train_loader, test_loader)
 
