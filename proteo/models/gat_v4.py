@@ -9,7 +9,7 @@ from proteo.datasets.mlagnn import *
 
 
 class GATv4(torch.nn.Module):
-    def __init__(self, opt, out_channels):
+    def __init__(self, opt, in_channels, out_channels):
         super(GATv4, self).__init__()
         self.fc_dropout = opt.fc_dropout
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
@@ -19,9 +19,10 @@ class GATv4(torch.nn.Module):
         self.heads = opt.heads #number of attention heads for each GAT layer.
         self.fc_dim = opt.fc_dim #defines the dimensions (or the number of neurons/units) for a series of fully connected (FC) layers
         self.out_channels = out_channels #dimensions of fully connected (FC) layers that are part of the model's encoder
+        self.in_channels = in_channels #number of input features
 
         self.conv1 = GATConv(
-            opt.input_dim, self.hidden_channels[0], heads=self.heads[0], dropout=self.GAT_dropout
+            in_channels, self.hidden_channels[0], heads=self.heads[0], dropout=self.GAT_dropout
         )
         print(f"conv1 is:{self.conv1}")
         self.conv2 = GATConv(
