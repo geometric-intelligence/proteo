@@ -90,7 +90,8 @@ class GATv4(torch.nn.Module):
         data.x = torch.tensor(data.x).requires_grad_()
         print(f"data.x is:{data.x.shape}") 
         x0 = data.x.cuda()  # [batch_size, nodes]
-
+        print(f"Dimesnion of y is:{data.y.shape}")
+        print(f"Dimension of batch is:{batch.shape}")
         ### layer2
         x = F.dropout(x0, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes]
         print("Before conv1")
