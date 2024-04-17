@@ -85,11 +85,11 @@ class GATv4(torch.nn.Module):
         edge_index = torch.tensor(data.edge_index).cuda()
         edge_index = torch.transpose(edge_index, 2, 0)
         edge_index = torch.reshape(edge_index, (2, -1))
-        data.x = torch.tensor(data.x).requires_grad_()
-        x0 = data.x.cuda()  # [batch_size, nodes]
-          # [bs, nodes]
+        data.x = data.x.requires_grad_()
+        x0 = to_dense_batch(torch.mean(data.x, dim=-1), batch=batch)[0] # [bs, nodes]
+
         ### layer2
-        x = F.dropout(x0, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes] #TO DO: what is this doing?
+        x = F.dropout(data.x, p=0.2, training=self.training).to(edge_index.device)    # [batch_size, nodes] #TO DO: what is this doing?
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
@@ -101,7 +101,6 @@ class GATv4(torch.nn.Module):
         )  # [bs, nodes]
         
 
-        x0 = to_dense_batch(x0, batch=batch)[0].to(edge_index.device).squeeze(-1)
         #TO DO: Erroring here now 
         if opt.layer_norm:
             x0 = self.layer_norm0(x0)
