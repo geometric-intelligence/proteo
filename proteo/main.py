@@ -13,8 +13,9 @@ from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
-from proteo.datasets.mlagnn import ROOT_DIR, MLAGNNDataset
+
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
+from proteo.datasets.mlagnn import ROOT_DIR, MLAGNNDataset
 
 
 class AttrDict(dict):
@@ -71,7 +72,9 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
             )
         elif config.model == 'gat-v4':
-            model = GATv4(opt=self.model_parameters,in_channels=in_channels, out_channels=out_channels)
+            model = GATv4(
+                opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
+            )
             self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -82,7 +85,9 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
-            return self.model(x, x.batch, self.model_parameters) #TO DO: understand why 3 inputs here but 2 in gatv4
+            return self.model(
+                x, x.batch, self.model_parameters
+            )  # TO DO: understand why 3 inputs here but 2 in gatv4
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -180,7 +185,7 @@ def main():
     pl.seed_everything(config.seed)
 
     # The first time you call this it creates train.pt and test.pt files, and afterwards it loads them
-    
+
     if config.dataset_name == "mlagnn":
         root = os.path.join(ROOT_DIR, "data", "FAD")
         test_dataset = MLAGNNDataset(root, "test", config)

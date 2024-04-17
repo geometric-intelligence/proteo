@@ -5,13 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from sklearn.metrics import (
-    auc,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_curve,
-)
+from sklearn.metrics import auc, f1_score, precision_score, recall_score, roc_curve
 from sklearn.preprocessing import LabelBinarizer
 from torch_geometric.data import Data, InMemoryDataset
 
@@ -197,8 +191,6 @@ def computest_metrics(test_pred, gt_labels):
     # kappa = cohen_kappa_score(labels_oh, test_pred)
 
     return macro_f1_score, precision, recall
-
-
 
 
 ################

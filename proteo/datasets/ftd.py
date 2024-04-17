@@ -1,13 +1,11 @@
-
 import os
 
 import numpy as np
 import pandas as pd
+import PyWGCNA
 import torch
-
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
-import PyWGCNA
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -15,11 +13,12 @@ ADJACENCY_FOLDER = os.path.join(ROOT_DIR, "data", "ftd", "processed")
 ADJACENCY_PATH = os.path.join(ADJACENCY_FOLDER, "adjacency_matrix.csv")
 CSV_PATH = os.path.join(ROOT_DIR, "data", "ALLFTD_dataset_for_nina_louisa.csv")
 
+
 class FTDDataset(InMemoryDataset):
     """This is dataset used in FTD.
     This is a graph regression task.
 
-    **Rows:** 
+    **Rows:**
     - 0: Column Headers
     - 1 - 531 : Patient ID Number *(int)*
 
@@ -29,25 +28,25 @@ class FTDDataset(InMemoryDataset):
     - 2: AGE_AT_VISIT *(int)*
     - 3: SEX_AT_BIRTH *(string)*: M, F
     - 4: Carrier.Status *(string)*: Carrier, CTL
-    - 5: Gene.Dx *(string)*:  mutation status + clinical status 
+    - 5: Gene.Dx *(string)*:  mutation status + clinical status
     (“PreSx” suffix = presymptomatic and “Sx” suffix = symptomatic)
     - 6: GLOBALCOG.ZCORE *(float)*: global cognition composite score
-    - 7: FTLDCDR_SBL *(int)*: CDR sum of boxes - Clinical Dementia Rating Scale (CDR) 
-    is a global assessment instrument that yields global and Sum of Boxes (SOB) scores, 
-    with the global score regularly used in clinical and research settings 
+    - 7: FTLDCDR_SBL *(int)*: CDR sum of boxes - Clinical Dementia Rating Scale (CDR)
+    is a global assessment instrument that yields global and Sum of Boxes (SOB) scores,
+    with the global score regularly used in clinical and research settings
     to stage dementia severity. Higher is worse.
     - 8: NFL3_MEAN *(float):* plasma NfL concentrations
 
     - 9: HasPlasma? *(int)*: 1, 0 (519 Yes)
     - 10 - 7298: Proteins *(float)*:
-        
-    Protein variables are annotated as 
-      Protein Symbol | UniProt ID^Sequence ID| Matrix (CSF or PLASMA). 
-      The sequence ID is present only if there is more than one target 
-      for a given protein: e.g., 
-      ABL2|P42684^SL010488@seq.3342.76|PLASMA , 
+
+    Protein variables are annotated as
+      Protein Symbol | UniProt ID^Sequence ID| Matrix (CSF or PLASMA).
+      The sequence ID is present only if there is more than one target
+      for a given protein: e.g.,
+      ABL2|P42684^SL010488@seq.3342.76|PLASMA ,
       ABL2|P42684^SL010488@seq.5261.13|PLASMA
-        
+
     - 7299: HasCSF? *(int)*: 1, 0 (254 Yes)
     - 7300 - 14588: Proteins *(float)*:
     - 14589 - 15212: Clinical Data - maybe not necessary for right now.
@@ -67,7 +66,7 @@ class FTDDataset(InMemoryDataset):
         path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
         self.load(path)
 
-    @property #TO DO: Is this needed?
+    @property  # TO DO: Is this needed?
     def raw_file_names(self):
         return ['test.csv']
 
@@ -75,7 +74,6 @@ class FTDDataset(InMemoryDataset):
     def processed_file_names(self):
         name = self.name
         return [f'{name}_train.pt', f'{name}_test.pt']
-
 
     def create_graph_data(self, feature, label, adj_matrix):
         x = feature  # protein concentrations: what is on the nodes
@@ -117,7 +115,8 @@ def load_csv_data(config):
     labels = nfl
 
     train_features, test_features, train_labels, test_labels = train_test_split(
-        features, labels, test_size=0.20, random_state=42)
+        features, labels, test_size=0.20, random_state=42
+    )
     train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
     test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
     train_labels = torch.LongTensor(train_labels)
@@ -125,7 +124,6 @@ def load_csv_data(config):
     print("Training features and labels:", train_features.shape, train_labels.shape)
     print("Testing features and labels:", test_features.shape, test_labels.shape)
 
-    
     if not os.path.exists(ADJACENCY_PATH):
         calculate_adjacency_matrix(config, plasma_protein)
     adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
@@ -136,29 +134,29 @@ def load_csv_data(config):
     return train_features, train_labels, test_features, test_labels, adj_matrix
 
 
-
 def calculate_adjacency_matrix(config, plasma_protein):
     # WGCNA parameters
     config.wgcna_power = 9
     config.wgcna_minModuleSize = 10
     config.wgcna_mergeCutHeight = 0.25
 
-
-    print(plasma_protein.shape) # rows = samples ; cols = proteins, 
+    print(plasma_protein.shape)  # rows = samples ; cols = proteins,
 
     # Calculate adjacency matrix.
-    adjacency = PyWGCNA.WGCNA.adjacency(plasma_protein, power = config.wgcna_power, adjacencyType="signed hybrid")
+    adjacency = PyWGCNA.WGCNA.adjacency(
+        plasma_protein, power=config.wgcna_power, adjacencyType="signed hybrid"
+    )
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
 
-    #Convert to dataframe.
+    # Convert to dataframe.
     adjacency_df = pd.DataFrame(adjacency)
     print(adjacency_df.shape)
 
     # if ADJACENCY_FOLDER doesn't exist, create it:
     if not os.path.exists(ADJACENCY_FOLDER):
         os.makedirs(ADJACENCY_FOLDER)
-    adjacency_df.to_csv(ADJACENCY_PATH, header = None, index = False)
+    adjacency_df.to_csv(ADJACENCY_PATH, header=None, index=False)
 
     #    similarity_matrix = np.array(
     #     pd.read_csv(),
