@@ -60,7 +60,7 @@ class FTDDataset(InMemoryDataset):
         assert split in ["train", "test"]
         self.config = config
         self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 7298)
+        self.plasma_protein_col_range = (10, 7299)
         self.nfl_col_id = 8
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -110,9 +110,9 @@ class FTDDataset(InMemoryDataset):
         print("Loading data from:", CSV_PATH)
         csv_data = np.array(pd.read_csv(CSV_PATH))
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
-        # Note: Only select 50 proteins to debug
+        has_plasma = has_plasma == 1 # Converting from indices to boolean
         plasma_protein = csv_data[has_plasma, self.plasma_protein_col_range[0]:self.plasma_protein_col_range[1]].astype(float)
-        nfl = csv_data[:, self.nfl_col_id].astype(float)
+        nfl = csv_data[has_plasma, self.nfl_col_id].astype(float)
 
         features = plasma_protein
         labels = nfl
@@ -128,8 +128,10 @@ class FTDDataset(InMemoryDataset):
         print("Testing features and labels:", test_features.shape, test_labels.shape)
 
         if not os.path.exists(ADJACENCY_PATH):
+            print(plasma_protein[0:5])
             calculate_adjacency_matrix(config, plasma_protein)
         adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
+        adj_matrix = torch.LongTensor(np.where(adj_matrix > config.adj_thresh, 1, 0)) #thresholding!
 
         print("Adjacency matrix:", adj_matrix.shape)
         print("Number of edges:", adj_matrix.sum())
@@ -139,10 +141,6 @@ class FTDDataset(InMemoryDataset):
 
 def calculate_adjacency_matrix(config, plasma_protein):
     # WGCNA parameters
-    config.wgcna_power = 6
-    config.wgcna_minModuleSize = 10
-    config.wgcna_mergeCutHeight = 0.25
-
     print(plasma_protein.shape)  # rows = samples ; cols = proteins,
 
     # Calculate adjacency matrix.
