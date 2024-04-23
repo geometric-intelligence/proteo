@@ -6,7 +6,7 @@ adj_thresh: 0.08
 wgcna_power: 9
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
-task: 'survival'
+task: 'survival'  # TODO: Could that be causing the loss bug?
 task_type: regression # Placeholder
 minimize: true #Placeholder
 
@@ -24,7 +24,7 @@ gat-v4:
   cnv_dim: 0
   omic_dim: 32
   act_type: 'none'
-  lr: 0.002
+  lr: 0.002  #TODO: start with a higher learning rate, to espace the bad initialization
   final_lr: 0.1
   weight_decay: 0.0005
   fc_dropout: 0.2  # was dropout

@@ -59,6 +59,9 @@ class FTDDataset(InMemoryDataset):
         self.split = split
         assert split in ["train", "test"]
         self.config = config
+        self.has_plasma_col_id = 9
+        self.plasma_protein_col_range = (10, 7298)
+        self.nfl_col_id = 8
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
@@ -86,7 +89,7 @@ class FTDDataset(InMemoryDataset):
 
     def process(self):
         # Read data into huge `Data` list which will be a list of graphs
-        train_features, train_labels, test_features, test_labels, adj_matrix = load_csv_data(
+        train_features, train_labels, test_features, test_labels, adj_matrix = self.load_csv_data(
             self.config
         )
 
@@ -103,40 +106,40 @@ class FTDDataset(InMemoryDataset):
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
 
 
-def load_csv_data(config):
-    print("Loading data from:", CSV_PATH)
-    csv_data = np.array(pd.read_csv(CSV_PATH))
-    has_plasma = csv_data[:, 9].astype(int)
-    # Note: Only select 50 proteins to debug
-    plasma_protein = csv_data[has_plasma, 10:50].astype(float)
-    nfl = csv_data[:, 8].astype(float)
+    def load_csv_data(self, config):
+        print("Loading data from:", CSV_PATH)
+        csv_data = np.array(pd.read_csv(CSV_PATH))
+        has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
+        # Note: Only select 50 proteins to debug
+        plasma_protein = csv_data[has_plasma, self.plasma_protein_col_range[0]:self.plasma_protein_col_range[1]].astype(float)
+        nfl = csv_data[:, self.nfl_col_id].astype(float)
 
-    features = plasma_protein
-    labels = nfl
+        features = plasma_protein
+        labels = nfl
 
-    train_features, test_features, train_labels, test_labels = train_test_split(
-        features, labels, test_size=0.20, random_state=42
-    )
-    train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
-    test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
-    train_labels = torch.LongTensor(train_labels)
-    test_labels = torch.LongTensor(test_labels)
-    print("Training features and labels:", train_features.shape, train_labels.shape)
-    print("Testing features and labels:", test_features.shape, test_labels.shape)
+        train_features, test_features, train_labels, test_labels = train_test_split(
+            features, labels, test_size=0.20, random_state=42
+        )
+        train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
+        test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
+        train_labels = torch.LongTensor(train_labels)
+        test_labels = torch.LongTensor(test_labels)
+        print("Training features and labels:", train_features.shape, train_labels.shape)
+        print("Testing features and labels:", test_features.shape, test_labels.shape)
 
-    if not os.path.exists(ADJACENCY_PATH):
-        calculate_adjacency_matrix(config, plasma_protein)
-    adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
+        if not os.path.exists(ADJACENCY_PATH):
+            calculate_adjacency_matrix(config, plasma_protein)
+        adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
 
-    print("Adjacency matrix:", adj_matrix.shape)
-    print("Number of edges:", adj_matrix.sum())
+        print("Adjacency matrix:", adj_matrix.shape)
+        print("Number of edges:", adj_matrix.sum())
 
-    return train_features, train_labels, test_features, test_labels, adj_matrix
+        return train_features, train_labels, test_features, test_labels, adj_matrix
 
 
 def calculate_adjacency_matrix(config, plasma_protein):
     # WGCNA parameters
-    config.wgcna_power = 9
+    config.wgcna_power = 6
     config.wgcna_minModuleSize = 10
     config.wgcna_mergeCutHeight = 0.25
 
@@ -148,7 +151,6 @@ def calculate_adjacency_matrix(config, plasma_protein):
     )
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
-
     # Convert to dataframe.
     adjacency_df = pd.DataFrame(adjacency)
     print(adjacency_df.shape)

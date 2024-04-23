@@ -74,6 +74,9 @@ class GATv4(torch.nn.Module):
         self.encoder = nn.Sequential(fc1, fc2, fc3, fc4)
         self.last_layer = nn.Sequential(nn.Linear(opt.omic_dim, self.out_channels))
 
+        # TODO: Change the output_range that is hardcoded for the output of the MLGNN model
+        # or better: normalize the distribution of your output, make it standard gaussian,
+        # and do you mess with output range and shift
         self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
