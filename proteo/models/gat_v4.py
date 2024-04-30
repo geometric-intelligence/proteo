@@ -84,25 +84,32 @@ class GATv4(torch.nn.Module):
         data = data.cuda()
         batch = data.batch  # [batch_size * nodes]
         ### Reshape edge_list
-        edge_index = torch.tensor(data.edge_index).cuda()
-        edge_index = torch.transpose(edge_index, 2, 0)
-        edge_index = torch.reshape(edge_index, (2, -1))
+        edge_index = data.edge_index.cuda()
 
         # layer1
         data.x = data.x.requires_grad_()
+        print("data.x is:", data.x[:5])
         x0 = to_dense_batch(torch.mean(data.x, dim=-1), batch=batch)[0]  # [bs, nodes]
+        print("x0 is:", x0[:5])
 
         ### layer2
         x = F.dropout(
             data.x, p=0.2, training=self.training
         )  # [batch_size, nodes] #TO DO: what is this doing?
+        print("x is:", x[:5])
+        print("x.shape = ", x.shape)
+        print("edge_index is:", edge_index)
+        xconv = self.conv1(x, edge_index)  # BAD: is nan
+        print("xconv is:", xconv[:5])  # BAD: is nan
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
         x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
             edge_index.device
         )  # [bs, nodes]
+        # print("x1 is:", x1[:5])
         x = F.dropout(x, p=0.2, training=self.training)
         x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[1]*heads[1]]
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0]  # [bs, nodes]
+        # print("x2 is:", x2[:5])
 
         if opt.layer_norm:
             # Calculate the number of nodes per graph in the batch
@@ -113,6 +120,9 @@ class GATv4(torch.nn.Module):
             x0 = layer_norm(x0)
             x1 = layer_norm(x1)
             x2 = layer_norm(x2)
+            # print("x0 after layer_norm is:", x0[:5])
+            # print("x1 after layer_norm is:", x1[:5])
+            # print("x2 after layer_norm is:", x2[:5])
 
         if opt.which_layer == ['layer1', 'layer2', 'layer3']:
             multiscale_features = torch.cat([x0, x1, x2], dim=1)
@@ -125,10 +135,12 @@ class GATv4(torch.nn.Module):
             multiscale_features = x2
 
         encoded_features = self.encoder(multiscale_features)
+        # print("encoded_features is:", encoded_features[:5])
 
         pred = self.last_layer(encoded_features)
+        print("pred is:", pred[:5])
 
-        if self.act is not None:  # TO DO: what is this?
+        if self.act is not None:
             pred = self.act(pred)
 
             if isinstance(self.act, nn.Sigmoid):

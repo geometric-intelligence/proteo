@@ -15,7 +15,6 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
 
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
-from proteo.datasets.mlagnn import ROOT_DIR, MLAGNNDataset
 
 
 class AttrDict(dict):
@@ -101,7 +100,7 @@ class Proteo(pl.LightningModule):
 
         targets = batch.y.view(pred.shape)
 
-        loss_fn = torch.nn.MSELoss()   #self.LOSS_MAP[self.config.task_type]
+        loss_fn = torch.nn.MSELoss()  # self.LOSS_MAP[self.config.task_type]
         # HACK ALERT: only training on survival even though we predict censor and survival
         print(pred[0:10])
         print(targets[0:10])
@@ -137,6 +136,10 @@ class Proteo(pl.LightningModule):
             sync_dist=True,
             prog_bar=True,
         )
+
+        # Log the current learning rate
+        current_lr = self.optimizers().param_groups[0]['lr']
+        self.log('learning_rate', current_lr, on_step=True, on_epoch=True, prog_bar=True)
 
         return loss
 
@@ -177,6 +180,7 @@ def main():
 
     # this is where we pick the CUDA device(s) to use
     if isinstance(config.device, list):
+        print(f"Using devices {config.device}")
         device_count = len(config.device)
         os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
     else:
@@ -216,6 +220,7 @@ def main():
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
     )
+    print("Loaders created")
 
     # Almost don't touch what's below here
     logger = None
@@ -273,7 +278,7 @@ def main():
             wandb.init(config=config, **wandb_config)
 
     module = Proteo(config, in_channels, out_channels, test_loader)
-    print(module)
+    # print(module)
     trainer.fit(module, train_loader, test_loader)
 
 

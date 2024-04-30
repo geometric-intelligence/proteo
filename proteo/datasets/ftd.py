@@ -60,13 +60,15 @@ class FTDDataset(InMemoryDataset):
         assert split in ["train", "test"]
         self.config = config
         self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 7299)
+        self.plasma_protein_col_range = (10, 30)  # 7299
         self.nfl_col_id = 8
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
-
         path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
+
+        # Note: It seems that this is needed to load the data
+        # However, it is taking forever and is the reason why multi GPUs is failing.
         self.load(path)
 
     @property  # TO DO: Is this needed?
@@ -84,7 +86,8 @@ class FTDDataset(InMemoryDataset):
         # Find the indices where the matrix has non-zero elements
         pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
         # Extract the pairs of connected nodes
-        edge_index = pairs_indices.tolist()
+        edge_index = torch.tensor(pairs_indices.tolist())
+        edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
         return Data(x=x, edge_index=edge_index, y=label)
 
     def process(self):
@@ -105,14 +108,17 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, os.path.join(self.processed_dir, f'{self.name}_train.pt'))
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
 
-
     def load_csv_data(self, config):
         print("Loading data from:", CSV_PATH)
         csv_data = np.array(pd.read_csv(CSV_PATH))
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
-        has_plasma = has_plasma == 1 # Converting from indices to boolean
-        plasma_protein = csv_data[has_plasma, self.plasma_protein_col_range[0]:self.plasma_protein_col_range[1]].astype(float)
+        has_plasma = has_plasma == 1  # Converting from indices to boolean
         nfl = csv_data[has_plasma, self.nfl_col_id].astype(float)
+        nfl_mask = ~np.isnan(nfl)
+        plasma_protein = csv_data[
+            has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
+        ][nfl_mask].astype(float)
+        nfl = nfl[nfl_mask]
 
         features = plasma_protein
         labels = nfl
@@ -122,8 +128,8 @@ class FTDDataset(InMemoryDataset):
         )
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
-        train_labels = torch.LongTensor(train_labels)
-        test_labels = torch.LongTensor(test_labels)
+        train_labels = torch.FloatTensor(train_labels)
+        test_labels = torch.FloatTensor(test_labels)
         print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
 
@@ -131,7 +137,9 @@ class FTDDataset(InMemoryDataset):
             print(plasma_protein[0:5])
             calculate_adjacency_matrix(config, plasma_protein)
         adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
-        adj_matrix = torch.LongTensor(np.where(adj_matrix > config.adj_thresh, 1, 0)) #thresholding!
+        adj_matrix = torch.FloatTensor(
+            np.where(adj_matrix > config.adj_thresh, 1, 0)
+        )  # thresholding!
 
         print("Adjacency matrix:", adj_matrix.shape)
         print("Number of edges:", adj_matrix.sum())
