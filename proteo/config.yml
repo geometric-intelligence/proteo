@@ -6,7 +6,7 @@ adj_thresh: 0.08
 wgcna_power: 6
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
-task: 'survival'  #TODO: Could that be causing the loss bug?
+task: 'survival'  
 task_type: regression # Placeholder
 minimize: true #Placeholder
 #TODO: add root_dir to the config file, folders of data for ftd and mlagnn
@@ -25,7 +25,7 @@ gat-v4:
   cnv_dim: 0
   omic_dim: 32
   act_type: 'none'
-  lr: 0.002  #TODO: start with a higher learning rate, to espace the bad initialization
+  lr: 0.0001  #TODO: start with a higher learning rate, to espace the bad initialization
   final_lr: 0.1
   weight_decay: 0.0005
   fc_dropout: 0.2  # was dropout
@@ -34,7 +34,7 @@ gat-v4:
   # Optimizer Configuration
   lr_scheduler: LambdaLR
   lr_scheduler_params: None
-  num_nodes: 20 #7289 #TO DO: This should not be hardcoded
+  num_nodes: 7289 #TO DO: This should not be hardcoded
   layer_norm: true
   
 
@@ -105,7 +105,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # GPU Configuration
-device: 0 #[0, 1, 2, 3, 4, 5, 6, 7]
+device: [0, 1, 2, 3, 4, 5, 6, 7]
 trainer_accelerator: "gpu"
 seed: 43
 start_seed: 0

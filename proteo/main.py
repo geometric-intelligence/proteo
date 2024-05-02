@@ -101,9 +101,6 @@ class Proteo(pl.LightningModule):
         targets = batch.y.view(pred.shape)
 
         loss_fn = torch.nn.MSELoss()  # self.LOSS_MAP[self.config.task_type]
-        # HACK ALERT: only training on survival even though we predict censor and survival
-        print(pred[0:10])
-        print(targets[0:10])
         loss = loss_fn(pred, targets)
         self.log(
             'train_loss',

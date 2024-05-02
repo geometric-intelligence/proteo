@@ -60,7 +60,7 @@ class FTDDataset(InMemoryDataset):
         assert split in ["train", "test"]
         self.config = config
         self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 30)  # 7299
+        self.plasma_protein_col_range = (10, 7299)  # 7299
         self.nfl_col_id = 8
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
