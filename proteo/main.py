@@ -1,3 +1,4 @@
+import math
 import os
 
 import pytorch_lightning as pl
@@ -46,13 +47,13 @@ class Proteo(pl.LightningModule):
         "mse_regression": torch.nn.MSELoss(),
     }
 
-    def __init__(self, config: Config, in_channels, out_channels, test_loader):
+    def __init__(self, config: Config, in_channels, out_channels, avg_node_degree):
         super().__init__()
         self.config = config
         self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
-        # These parameters are to get the test() function to run
-        self.test_loader = test_loader
+        self.avg_node_degree = avg_node_degree
+        self.save_hyperparameters()
 
         if config.model == 'gat':
             self.model = MyGAT(
@@ -110,6 +111,13 @@ class Proteo(pl.LightningModule):
             sync_dist=True,
             batch_size=self.config.batch_size,
         )
+        self.log(
+            'train_RMSE',
+            math.sqrt(loss)/self.config.batch_size,
+            on_step=True,
+            on_epoch=True,
+            sync_dist=True 
+        )
         return loss
 
     def validation_step(self, batch):
@@ -132,6 +140,13 @@ class Proteo(pl.LightningModule):
             on_epoch=True,
             sync_dist=True,
             prog_bar=True,
+        )
+        self.log(
+            'val_RMSE',
+            math.sqrt(loss)/self.config.batch_size,
+            on_step=True,
+            on_epoch=True,
+            sync_dist=True 
         )
 
         # Log the current learning rate
@@ -202,6 +217,9 @@ def main():
     in_channels = train_dataset.feature_dim  # 1 dim of input
 
     out_channels = train_dataset.label_dim  # 1 dim of result
+    num_nodes = test_dataset.x.shape[0]
+    num_edges = test_dataset.edge_index.shape[1]/2
+    avg_node_degree = num_edges/num_nodes
 
     train_loader = DataLoader(  # makes into one big graph
         train_dataset,
@@ -227,6 +245,8 @@ def main():
         os.environ['WANDB_API_KEY'] = wandb_api_key
         wandb_config = {'project': config.project_name}
         logger = pl_loggers.WandbLogger(config=config, **wandb_config)
+    
+    logger.log_image(key="output_hist", images=["/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/histogram.jpg","/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/adjacency.jpg" ]) 
 
     custom_theme = RichProgressBarTheme(
         **{
@@ -273,8 +293,12 @@ def main():
         env = trainer.strategy.cluster_environment
         if env.global_rank() != 0 and env.local_rank() == 0:
             wandb.init(config=config, **wandb_config)
+            wandb.log({"nfl_hist": wandb.Image("/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/histogram.svg")})
+            #logger.log_image(key="output_hist", images=["datasets/data/ftd/processed/histogram.svg"])
+            #logger.log_image(key="adjacency_matrix", images=["datasets/data/ftd/processed/adjacency.svg"])
 
-    module = Proteo(config, in_channels, out_channels, test_loader)
+
+    module = Proteo(config, in_channels, out_channels, avg_node_degree)
     # print(module)
     trainer.fit(module, train_loader, test_loader)
 

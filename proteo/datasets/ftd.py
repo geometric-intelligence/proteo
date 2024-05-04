@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import PyWGCNA
 import torch
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
 
@@ -119,6 +121,8 @@ class FTDDataset(InMemoryDataset):
             has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
         ][nfl_mask].astype(float)
         nfl = nfl[nfl_mask]
+        nfl = log_transform(nfl)
+        plot_histogram(pd.DataFrame(nfl))
 
         features = plasma_protein
         labels = nfl
@@ -140,6 +144,13 @@ class FTDDataset(InMemoryDataset):
         adj_matrix = torch.FloatTensor(
             np.where(adj_matrix > config.adj_thresh, 1, 0)
         )  # thresholding!
+        cmap = mcolors.LinearSegmentedColormap.from_list("", ["white", "black"])
+        plt.figure()
+        plt.imshow(adj_matrix, cmap=cmap)
+        plt.colorbar(ticks=[0, 1], label='Adjacency Value')
+        plt.title("Visualization of Adjacency Matrix")
+        plt.savefig(os.path.join(ADJACENCY_FOLDER, 'adjacency.jpg'))
+        plt.close() 
 
         print("Adjacency matrix:", adj_matrix.shape)
         print("Number of edges:", adj_matrix.sum())
@@ -171,3 +182,20 @@ def calculate_adjacency_matrix(config, plasma_protein):
     # ).astype(float)
     # adj_matrix = torch.LongTensor(np.where(similarity_matrix > config.adj_thresh, 1, 0))
     # adj_matrix = adj_matrix[80:, 80:]
+
+def plot_histogram(data):
+    plt.hist(data, bins=30, alpha=0.5);
+    plt.xlabel('NFL3_MEAN')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of NFL3_MEAN')
+    histogram_path = os.path.join(ADJACENCY_FOLDER, 'histogram.jpg')
+    plt.savefig(histogram_path, format='jpg')
+
+def log_transform(data):
+    # Log transformation    
+    log_data = np.log(data)
+
+    mean = np.mean(log_data)
+    std = np.std(log_data)
+    standardized_log_data = (log_data - mean) / std
+    return standardized_log_data
