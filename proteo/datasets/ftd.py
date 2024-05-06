@@ -199,3 +199,14 @@ def log_transform(data):
     std = np.std(log_data)
     standardized_log_data = (log_data - mean) / std
     return standardized_log_data
+
+def reverse_log_transform(standardized_log_data):
+    # De-standardize the data
+    mean = np.mean(standardized_log_data)
+    std = np.std(standardized_log_data)
+    log_data = (standardized_log_data * std) + mean
+    
+    # Reverse the log transformation by applying the exponential function
+    original_data = np.exp(log_data)
+    
+    return original_data
