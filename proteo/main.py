@@ -101,7 +101,7 @@ class Proteo(pl.LightningModule):
 
         targets = batch.y.view(pred.shape)
 
-        loss_fn = torch.nn.MSELoss()  # self.LOSS_MAP[self.config.task_type]
+        loss_fn = torch.nn.MSELoss(reduction="mean")  # self.LOSS_MAP[self.config.task_type]
         loss = loss_fn(pred, targets)
         self.log(
             'train_loss',
@@ -113,7 +113,7 @@ class Proteo(pl.LightningModule):
         )
         self.log(
             'train_RMSE',
-            math.sqrt(loss)/self.config.batch_size,
+            math.sqrt(loss),
             on_step=True,
             on_epoch=True,
             sync_dist=True 
@@ -128,7 +128,6 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'gat-v4':
             _, _, pred = self.model(batch, self.model_parameters)
         targets = batch.y.view(pred.shape)
-
         loss_fn = torch.nn.MSELoss()  # self.LOSS_MAP[self.config.task_type]
         # HACK ALERT: only training on survival even though we predict censor and survival
         loss = loss_fn(pred, targets)
@@ -143,7 +142,7 @@ class Proteo(pl.LightningModule):
         )
         self.log(
             'val_RMSE',
-            math.sqrt(loss)/self.config.batch_size,
+            math.sqrt(loss),
             on_step=True,
             on_epoch=True,
             sync_dist=True 
@@ -284,7 +283,7 @@ def main():
         num_nodes=config.nodes_count,
         strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),  # Debug later
         sync_batchnorm=config.sync_batchnorm,
-        log_every_n_steps=config.log_every_n_steps,
+        log_every_n_steps=config.log_every_n_steps, #Controls the frequency of logging within training, by specifying how many training steps should occur between each logging event.
         precision=config.precision,
         num_sanity_val_steps=1,
     )

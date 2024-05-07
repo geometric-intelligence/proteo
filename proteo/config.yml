@@ -102,7 +102,7 @@ eval_metric: mae
 project_name: "proteo"
 wandb_api_key_path: "wandb_api_key.txt"
 wandb_offline: false
-log_every_n_steps: 5
+log_every_n_steps: 1
 
 # GPU Configuration
 device: [0, 1, 2, 3, 4, 5, 6, 7]
