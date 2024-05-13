@@ -14,6 +14,7 @@ from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
+from torch_geometric.explain import CaptumExplainer, Explainer
 
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
@@ -79,7 +80,7 @@ class Proteo(pl.LightningModule):
         else:
             raise NotImplementedError('Model not implemented yet')
 
-    def forward(self, x):
+    def forward(self, x, edge_index = None):
         if self.config.model == 'gat':
             return self.model(x, dim=self.config.dim)
         elif self.config.model == 'higher-gat':
@@ -300,6 +301,31 @@ def main():
     module = Proteo(config, in_channels, out_channels, avg_node_degree)
     # print(module)
     trainer.fit(module, train_loader, test_loader)
+
+    # Explainer
+    explainer = Explainer(
+    model=module,
+    algorithm=CaptumExplainer('IntegratedGradients'),
+    explanation_type='model',
+    model_config=dict(
+        mode='regression',
+        task_level='graph',  # Explain why the model predicts a certain property or label for the entire graph (nodes + edges)
+        return_type='raw',
+    ),
+    node_mask_type='attributes', # Generate masks that indicate the importance of individual node features
+    edge_mask_type='object',
+    threshold_config=dict(
+        threshold_type='topk',
+        value=200,
+    ),
+    )
+
+    explanation = explainer(
+        test_dataset.x,
+        test_dataset.edge_index
+    )
+    print(f'Generated explanations in {explanation.available_explanations}')
+
 
 
 if __name__ == "__main__":
