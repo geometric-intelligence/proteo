@@ -41,6 +41,7 @@ scikit-learn = "^1.3.2"
 gudhi = "^3.9.0"
 opencv-python = "^4.0"
 PyWGCNA = "^2.0"
+captum = "^0.7.0"
 
 [[tool.poetry.source]]
 name = "torch-gpu"

@@ -5,6 +5,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import LayerNorm, Parameter
 from torch_geometric.nn import GATConv
 from torch_geometric.utils import to_dense_batch
+from torch_geometric.data import Batch
 
 from proteo.datasets.mlagnn import *
 
@@ -12,6 +13,7 @@ from proteo.datasets.mlagnn import *
 class GATv4(torch.nn.Module):
     def __init__(self, opt, in_channels, out_channels):
         super(GATv4, self).__init__()
+        self.opt = opt 
         self.fc_dropout = opt.fc_dropout
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
@@ -80,19 +82,22 @@ class GATv4(torch.nn.Module):
         self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
-    def forward(self, data, opt):
+    def forward(self, x, edge_index = None, data=None):
+        if not isinstance(data, Batch):
+            data = Batch().from_data_list([data])
+        opt = self.opt
         data = data.cuda()
+        x = x.cuda()
         batch = data.batch  # [batch_size * nodes]
+
         ### Reshape edge_list
         edge_index = data.edge_index.cuda()
-
         # layer1
-        data.x = data.x.requires_grad_()
-        x0 = to_dense_batch(torch.mean(data.x, dim=-1), batch=batch)[0]  # [bs, nodes]
-
+        x = x.requires_grad_()
+        x0 = to_dense_batch(torch.mean(x, dim=-1), batch=batch)[0]  # [bs, nodes]
         ### layer2
         x = F.dropout(
-            data.x, p=0.2, training=self.training
+            x, p=0.2, training=self.training
         )  # [batch_size, nodes] #TO DO: what is this doing?
         xconv = self.conv1(x, edge_index)  # BAD: is nan
         x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
@@ -102,7 +107,7 @@ class GATv4(torch.nn.Module):
         x = F.dropout(x, p=0.2, training=self.training)
         x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[1]*heads[1]]
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0]  # [bs, nodes]
-
+        
         if opt.layer_norm:
             # Calculate the number of nodes per graph in the batch
             batch_size = batch.unique().shape[0]
@@ -134,7 +139,7 @@ class GATv4(torch.nn.Module):
             if isinstance(self.act, nn.Sigmoid):
                 pred = pred * self.output_range + self.output_shift
 
-        return multiscale_features, encoded_features, pred
+        return pred
 
 
 def define_optimizer(opt, model):

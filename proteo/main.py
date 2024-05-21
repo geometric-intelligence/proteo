@@ -14,7 +14,7 @@ from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT
-from torch_geometric.explain import CaptumExplainer, Explainer
+from datetime import date
 
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
@@ -50,11 +50,11 @@ class Proteo(pl.LightningModule):
 
     def __init__(self, config: Config, in_channels, out_channels, avg_node_degree):
         super().__init__()
+        self.save_hyperparameters()
         self.config = config
         self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
         self.avg_node_degree = avg_node_degree
-        self.save_hyperparameters()
 
         if config.model == 'gat':
             self.model = MyGAT(
@@ -80,14 +80,14 @@ class Proteo(pl.LightningModule):
         else:
             raise NotImplementedError('Model not implemented yet')
 
-    def forward(self, x, edge_index = None):
+    def forward(self, x):
         if self.config.model == 'gat':
             return self.model(x, dim=self.config.dim)
         elif self.config.model == 'higher-gat':
             return self.model(x)
         elif self.config.model == "gat-v4":
             return self.model(
-                x, x.batch, self.model_parameters
+                x, x.batch, None, self.model_parameters
             )  # TO DO: understand why 3 inputs here but 2 in gatv4
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -98,7 +98,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, pred = self.model(batch, self.model_parameters)
+            pred = self.model(batch, self.model_parameters)
 
         targets = batch.y.view(pred.shape)
 
@@ -267,7 +267,7 @@ def main():
         pl_callbacks.ModelCheckpoint(
             monitor='val_loss',
             dirpath=config.checkpoint_dir,
-            filename=config.checkpoint_name_pattern,
+            filename=config.checkpoint_name_pattern + date.today().strftime('%d-%m-%Y') + '{epoch}', #TODO: fix this
             mode='min',
         ),
         pl_callbacks.RichProgressBar(theme=custom_theme),
@@ -301,30 +301,6 @@ def main():
     module = Proteo(config, in_channels, out_channels, avg_node_degree)
     # print(module)
     trainer.fit(module, train_loader, test_loader)
-
-    # Explainer
-    explainer = Explainer(
-    model=module,
-    algorithm=CaptumExplainer('IntegratedGradients'),
-    explanation_type='model',
-    model_config=dict(
-        mode='regression',
-        task_level='graph',  # Explain why the model predicts a certain property or label for the entire graph (nodes + edges)
-        return_type='raw',
-    ),
-    node_mask_type='attributes', # Generate masks that indicate the importance of individual node features
-    edge_mask_type='object',
-    threshold_config=dict(
-        threshold_type='topk',
-        value=200,
-    ),
-    )
-
-    explanation = explainer(
-        test_dataset.x,
-        test_dataset.edge_index
-    )
-    print(f'Generated explanations in {explanation.available_explanations}')
 
 
 
