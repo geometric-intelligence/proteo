@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import LayerNorm, Parameter
+from torch_geometric.data import Batch
 from torch_geometric.nn import GATConv
 from torch_geometric.utils import to_dense_batch
-from torch_geometric.data import Batch
 
 from proteo.datasets.mlagnn import *
 
@@ -13,7 +13,7 @@ from proteo.datasets.mlagnn import *
 class GATv4(torch.nn.Module):
     def __init__(self, opt, in_channels, out_channels):
         super(GATv4, self).__init__()
-        self.opt = opt 
+        self.opt = opt
         self.fc_dropout = opt.fc_dropout
         self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
         self.act = define_act_layer(act_type=opt.act_type)
@@ -82,7 +82,7 @@ class GATv4(torch.nn.Module):
         self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
         self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
 
-    def forward(self, x, edge_index = None, data=None):
+    def forward(self, x, edge_index=None, data=None):
         if not isinstance(data, Batch):
             data = Batch().from_data_list([data])
         opt = self.opt
@@ -107,7 +107,7 @@ class GATv4(torch.nn.Module):
         x = F.dropout(x, p=0.2, training=self.training)
         x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[1]*heads[1]]
         x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0]  # [bs, nodes]
-        
+
         if opt.layer_norm:
             # Calculate the number of nodes per graph in the batch
             batch_size = batch.unique().shape[0]
@@ -117,7 +117,6 @@ class GATv4(torch.nn.Module):
             x0 = layer_norm(x0)
             x1 = layer_norm(x1)
             x2 = layer_norm(x2)
-
 
         if opt.which_layer == ['layer1', 'layer2', 'layer3']:
             multiscale_features = torch.cat([x0, x1, x2], dim=1)

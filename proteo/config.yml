@@ -3,7 +3,7 @@
 
 dataset_name: "ftd"
 adj_thresh: 0.08
-wgcna_power: 6
+wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task: 'survival'  

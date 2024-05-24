@@ -1,11 +1,11 @@
 import os
 
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import PyWGCNA
 import torch
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
 
@@ -150,7 +150,7 @@ class FTDDataset(InMemoryDataset):
         plt.colorbar(ticks=[0, 1], label='Adjacency Value')
         plt.title("Visualization of Adjacency Matrix")
         plt.savefig(os.path.join(ADJACENCY_FOLDER, 'adjacency.jpg'))
-        plt.close() 
+        plt.close()
 
         print("Adjacency matrix:", adj_matrix.shape)
         print("Number of edges:", adj_matrix.sum())
@@ -163,8 +163,10 @@ def calculate_adjacency_matrix(config, plasma_protein):
     print(plasma_protein.shape)  # rows = samples ; cols = proteins,
 
     # Calculate adjacency matrix.
+    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein)
+    print("Soft threshold:", softThreshold)
     adjacency = PyWGCNA.WGCNA.adjacency(
-        plasma_protein, power=config.wgcna_power, adjacencyType="signed hybrid"
+        plasma_protein, power=softThreshold, adjacencyType="signed hybrid"
     )
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
@@ -176,23 +178,24 @@ def calculate_adjacency_matrix(config, plasma_protein):
     if not os.path.exists(ADJACENCY_FOLDER):
         os.makedirs(ADJACENCY_FOLDER)
     adjacency_df.to_csv(ADJACENCY_PATH, header=None, index=False)
-
     #    similarity_matrix = np.array(
     #     pd.read_csv(),
     # ).astype(float)
     # adj_matrix = torch.LongTensor(np.where(similarity_matrix > config.adj_thresh, 1, 0))
     # adj_matrix = adj_matrix[80:, 80:]
 
+
 def plot_histogram(data):
-    plt.hist(data, bins=30, alpha=0.5);
+    plt.hist(data, bins=30, alpha=0.5)
     plt.xlabel('NFL3_MEAN')
     plt.ylabel('Frequency')
     plt.title('Histogram of NFL3_MEAN')
     histogram_path = os.path.join(ADJACENCY_FOLDER, 'histogram.jpg')
     plt.savefig(histogram_path, format='jpg')
 
+
 def log_transform(data):
-    # Log transformation    
+    # Log transformation
     log_data = np.log(data)
 
     mean = np.mean(log_data)
@@ -200,13 +203,14 @@ def log_transform(data):
     standardized_log_data = (log_data - mean) / std
     return standardized_log_data
 
+
 def reverse_log_transform(standardized_log_data):
     # De-standardize the data
     mean = np.mean(standardized_log_data)
     std = np.std(standardized_log_data)
     log_data = (standardized_log_data * std) + mean
-    
+
     # Reverse the log transformation by applying the exponential function
     original_data = np.exp(log_data)
-    
+
     return original_data
