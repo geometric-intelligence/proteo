@@ -87,8 +87,8 @@ class Proteo(pl.LightningModule):
             return self.model(x)
         elif self.config.model == "gat-v4":
             return self.model(
-                x, x.batch, None, self.model_parameters
-            )  # TO DO: understand why 3 inputs here but 2 in gatv4
+                x.x, x.edge_index, x
+            ) 
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -121,7 +121,7 @@ class Proteo(pl.LightningModule):
         elif self.config.model == 'higher-gat':
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
-            _, _, pred = self.model(x=batch.x, edge_index=batch.edge_index, data=batch)
+            pred = self.model(x=batch.x, edge_index=batch.edge_index, data=batch)
         targets = batch.y.view(pred.shape)
         loss_fn = torch.nn.MSELoss()  # self.LOSS_MAP[self.config.task_type]
         # HACK ALERT: only training on survival even though we predict censor and survival

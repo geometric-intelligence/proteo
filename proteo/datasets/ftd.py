@@ -119,8 +119,8 @@ class FTDDataset(InMemoryDataset):
         nfl_mask = ~np.isnan(nfl)
         plasma_protein = csv_data[
             has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
-        ][nfl_mask].astype(float)
-        nfl = nfl[nfl_mask]
+        ][nfl_mask].astype(float) #Extract and convert the plasma_protein values for rows where has_plasma is True and nfl is not NaN.
+        nfl = nfl[nfl_mask] # Remove NaN values from nfl 
         nfl = log_transform(nfl)
         plot_histogram(pd.DataFrame(nfl))
 
@@ -144,6 +144,8 @@ class FTDDataset(InMemoryDataset):
         adj_matrix = torch.FloatTensor(
             np.where(adj_matrix > config.adj_thresh, 1, 0)
         )  # thresholding!
+
+        # Plotting adjacency matrix
         cmap = mcolors.LinearSegmentedColormap.from_list("", ["white", "black"])
         plt.figure()
         plt.imshow(adj_matrix, cmap=cmap)
@@ -163,10 +165,11 @@ def calculate_adjacency_matrix(config, plasma_protein):
     print(plasma_protein.shape)  # rows = samples ; cols = proteins,
 
     # Calculate adjacency matrix.
-    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein)
-    print("Soft threshold:", softThreshold)
+    plasma_protein_df = pd.DataFrame(plasma_protein)
+    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df)
+    print("Soft threshold:", softThreshold[0])
     adjacency = PyWGCNA.WGCNA.adjacency(
-        plasma_protein, power=softThreshold, adjacencyType="signed hybrid"
+        plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid"
     )
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
