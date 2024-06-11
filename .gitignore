@@ -1,4 +1,6 @@
 **/__pycache__/
+checkpoints/
+wandb/
 proteo/checkpoints/
 proteo/data/
 proteo/datasets/data

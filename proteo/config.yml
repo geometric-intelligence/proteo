@@ -12,7 +12,7 @@ minimize: true #Placeholder
 #TODO: add root_dir to the config file, folders of data for ftd and mlagnn
 
 # Model Configuration
-model: gat-v4
+model: gat-v5
 
 gat-v4:
   lambda_cox: 1.0
@@ -36,6 +36,21 @@ gat-v4:
   lr_scheduler_params: None
   num_nodes: 7289 #TO DO: This should not be hardcoded
   layer_norm: true
+
+gat-v5:
+  lambda_cox: 1.0
+  lambda_reg: 0.0003
+  lambda_nll: 1.0
+  act_type: 'none'
+  lr: 0.0001  #TODO: start with a higher learning rate, to espace the bad initialization
+  final_lr: 0.1
+  weight_decay: 0.0005
+  alpha: 0.2
+  patience: 0.005
+  # Optimizer Configuration
+  lr_scheduler: LambdaLR
+  lr_scheduler_params: None
+  num_nodes: 7289 #TO DO: This should not be hardcoded
   
 
 higher-gat:
