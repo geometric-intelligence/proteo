@@ -8,6 +8,7 @@ import torch
 import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
+from models.gat_v5 import GATv5
 from models.gats import MyGAT
 from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
@@ -77,6 +78,11 @@ class Proteo(pl.LightningModule):
                 opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
             )
             self.model = model
+        elif config.model == 'gat-v5':
+            model = GATv5(
+                opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
+            )
+            self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -89,6 +95,10 @@ class Proteo(pl.LightningModule):
             return self.model(
                 x.x, x.edge_index, x
             ) 
+        elif self.config.model == "gat-v5":
+            return self.model(
+                x.x, x.edge_index
+            )
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -99,7 +109,8 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             pred = self.model(x=batch.x, edge_index=batch.edge_index, data=batch)
-
+        elif self.config.model == 'gat-v5':
+            pred = self.model(x=batch.x, edge_index=batch.edge_index)
         targets = batch.y.view(pred.shape)
 
         loss_fn = torch.nn.MSELoss(reduction="mean")  # self.LOSS_MAP[self.config.task_type]
@@ -122,6 +133,8 @@ class Proteo(pl.LightningModule):
             pred = self.model(batch)
         elif self.config.model == 'gat-v4':
             pred = self.model(x=batch.x, edge_index=batch.edge_index, data=batch)
+        elif self.config.model == 'gat-v5':
+            pred = self.model(x=batch.x, edge_index=batch.edge_index)
         targets = batch.y.view(pred.shape)
         loss_fn = torch.nn.MSELoss()  # self.LOSS_MAP[self.config.task_type]
         # HACK ALERT: only training on survival even though we predict censor and survival
@@ -234,11 +247,12 @@ def main():
         wandb_config = {'project': config.project_name}
         logger = pl_loggers.WandbLogger(config=config, **wandb_config)
 
+    dir_path = os.path.dirname(os.path.realpath(__file__))
     logger.log_image(
         key="output_hist",
         images=[
-            "/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/histogram.jpg",
-            "/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/adjacency.jpg",
+            os.path.join(dir_path, "datasets/data/ftd/processed/histogram.jpg"),
+            os.path.join(dir_path, "datasets/data/ftd/processed/adjacency.jpg"),
         ],
     )
 
