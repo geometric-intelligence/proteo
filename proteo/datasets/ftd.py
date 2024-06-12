@@ -119,8 +119,10 @@ class FTDDataset(InMemoryDataset):
         nfl_mask = ~np.isnan(nfl)
         plasma_protein = csv_data[
             has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
-        ][nfl_mask].astype(float) #Extract and convert the plasma_protein values for rows where has_plasma is True and nfl is not NaN.
-        nfl = nfl[nfl_mask] # Remove NaN values from nfl 
+        ][nfl_mask].astype(
+            float
+        )  # Extract and convert the plasma_protein values for rows where has_plasma is True and nfl is not NaN.
+        nfl = nfl[nfl_mask]  # Remove NaN values from nfl
         nfl = log_transform(nfl)
         plot_histogram(pd.DataFrame(nfl))
 

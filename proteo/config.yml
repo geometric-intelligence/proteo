@@ -8,32 +8,38 @@ wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task: 'survival'  
 task_type: regression # Placeholder
+mode: 'min'
 minimize: true #Placeholder
 #TODO: add root_dir to the config file, folders of data for ftd and mlagnn
 
 # Model Configuration
-model: gat-v5
+model: gat
 
 gat-v4:
+  # For testing model priposes
   lambda_cox: 1.0
   lambda_reg: 0.0003
   lambda_nll: 1.0
+  # Model Configuration
   heads: [4, 3, 4]
   hidden_channels: [8, 16, 12]
   fc_dim: [64, 48, 32]
   which_layer: ['layer1', 'layer2', 'layer3']
-  cnv_dim: 0
   omic_dim: 32
   act_type: 'none'
-  lr: 0.0001  #TODO: start with a higher learning rate, to espace the bad initialization
-  final_lr: 0.1
+  lr: 0.1 
+  final_lr: 0.0001
   weight_decay: 0.0005
-  fc_dropout: 0.2  # was dropout
-  alpha: 0.2
-  patience: 0.005
+  fc_dropout: 0.05
+  l1_lambda: 0.0005
   # Optimizer Configuration
+  optimizer: Adam
   lr_scheduler: LambdaLR
-  lr_scheduler_params: None
+  lr_scheduler_params: 
+    mode: min'
+    factor: 0.2
+    threshold: 0.01
+    patience: 5
   num_nodes: 7289 #TO DO: This should not be hardcoded
   layer_norm: true
 
@@ -42,8 +48,8 @@ gat-v5:
   lambda_reg: 0.0003
   lambda_nll: 1.0
   act_type: 'none'
-  lr: 0.0001  #TODO: start with a higher learning rate, to espace the bad initialization
-  final_lr: 0.1
+  lr: 0.1  #TODO: start with a higher learning rate, to espace the bad initialization
+  final_lr: 0.0001
   weight_decay: 0.0005
   alpha: 0.2
   patience: 0.005
@@ -53,36 +59,17 @@ gat-v5:
   num_nodes: 7289 #TO DO: This should not be hardcoded
   
 
-higher-gat:
-  nonlinearity: relu
-  num_layers: 4
-  readout: sum
-  readout_dims: (0, 1, 2)
-  max_ring_size: 18
-  minimize: true
-  hidden_channels: 64
-  heads: 1
-  # Optimizer Configuration
-  lr: 0.001
-  graph_norm: bn
-  lr_scheduler: ReduceLROnPlateau
-  lr_scheduler_params:
-    mode: #TO DO
-    lr_scheduler_patience: 20
-    lr_scheduler_decay_steps: 50
-    lr_scheduler_decay_rate: 0.5
-    lr_scheduler_min: 0.00001
-    verbose: true
-
 gat:
-  hidden_channels: 64
+  hidden_channels: 20
+  num_layers: 4
   heads: 1
-  minimize: true #Placeholder
   # Optimizer Configuration
+  optimizer: Adam
   lr: 0.001
-  lr_scheduler: ReduceLROnPlateau
+  l1_lambda: 0.0005
+  weight_decay: 0.0005
+  lr_scheduler: LambdaLR
   lr_scheduler_params:
-    mode: #TO DO
     lr_scheduler_patience: 20
     lr_scheduler_decay_steps: 50
     lr_scheduler_decay_rate: 0.5

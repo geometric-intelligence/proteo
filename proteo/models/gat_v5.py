@@ -1,21 +1,25 @@
 import torch
 import torch.nn as nn
-from torch.nn import Linear, ReLU, Sequential
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
-from torch.nn import LayerNorm, Parameter
+from torch.nn import LayerNorm, Linear, Parameter, ReLU, Sequential
 from torch_geometric.data import Batch
 from torch_geometric.nn import GATv2Conv
 from torch_geometric.utils import to_dense_batch
 
 from proteo.datasets.mlagnn import *
 
+
 class GATv5(torch.nn.Module):
     def __init__(self, opt, in_channels, out_channels, hidden_channels=4, heads=2, dropout=0.6):
         super(GATv5, self).__init__()
-        self.conv1 = GATv2Conv(in_channels=in_channels, out_channels=hidden_channels, heads=heads, dropout=dropout)
+        self.conv1 = GATv2Conv(
+            in_channels=in_channels, out_channels=hidden_channels, heads=heads, dropout=dropout
+        )
         self.linear1 = Linear(hidden_channels * heads, 1)
-        self.conv2 = GATv2Conv(hidden_channels, out_channels=hidden_channels, heads=heads, dropout=dropout)
+        self.conv2 = GATv2Conv(
+            hidden_channels, out_channels=hidden_channels, heads=heads, dropout=dropout
+        )
         self.linear2 = Linear(hidden_channels * heads, 1)
 
         self.encoder = Sequential(
@@ -26,7 +30,7 @@ class GATv5(torch.nn.Module):
             Linear(32, out_channels),
         )
         self.reset_parameters()
-    
+
     def reset_parameters(self):
         self.conv1.reset_parameters()
         self.conv2.reset_parameters()
@@ -35,7 +39,7 @@ class GATv5(torch.nn.Module):
         for layer in self.encoder:
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
-    
+
     def forward(self, x, edge_index):
         x1 = self.conv1(x, edge_index)
         x1 = F.relu(x1)

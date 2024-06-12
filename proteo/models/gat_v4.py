@@ -1,173 +1,125 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim.lr_scheduler as lr_scheduler
+from torch_geometric.nn import GATConv, global_mean_pool
+from torch_geometric.data import Batch, Data
 from torch.nn import LayerNorm, Parameter
-from torch_geometric.data import Batch
-from torch_geometric.nn import GATConv
 from torch_geometric.utils import to_dense_batch
 
-from proteo.datasets.mlagnn import *
-
-
-class GATv4(torch.nn.Module):
+class GATv4(nn.Module):
     def __init__(self, opt, in_channels, out_channels):
         super(GATv4, self).__init__()
         self.opt = opt
-        self.fc_dropout = opt.fc_dropout
-        self.GAT_dropout = opt.fc_dropout  # opt.GAT_dropout: TODO Check where GAT_dropout is
-        self.act = define_act_layer(act_type=opt.act_type)
+        #self.act = define_act_layer(act_type=opt.act_type)
 
-        self.hidden_channels = (
-            opt.hidden_channels
-        )  # [8, 16, 12] #number of hidden units for each layer
-        self.heads = opt.heads  # number of attention heads for each GAT layer.
-        self.fc_dim = (
-            opt.fc_dim
-        )  # defines the dimensions (or the number of neurons/units) for a series of fully connected (FC) layers
-        self.out_channels = out_channels  # dimensions of fully connected (FC) layers that are part of the model's encoder
-        self.in_channels = in_channels  # number of input features
-        self.lin_input_dim = opt.num_nodes * len(
-            opt.which_layer
-        )  # number of input features for the first FC layer
+        self.hidden_channels = opt.hidden_channels
+        self.heads = opt.heads
+        self.fc_dim = opt.fc_dim
+        self.out_channels = out_channels
+        self.in_channels = in_channels
+        self.lin_input_dim = opt.num_nodes * len(opt.which_layer)
 
-        self.conv1 = GATConv(
-            in_channels, self.hidden_channels[0], heads=self.heads[0], dropout=self.GAT_dropout
-        )
-        print(f"conv1 is:{self.conv1}")
-        self.conv2 = GATConv(
-            self.hidden_channels[0] * self.heads[0],
-            self.hidden_channels[1],
-            heads=self.heads[1],
-            dropout=self.GAT_dropout,
-        )
-        print(f"conv2 is:{self.conv2}")
+        # GAT layers
+        self.convs = nn.ModuleList()
+        self.build_gat_layers()
 
-        self.pool1 = torch.nn.Linear(self.hidden_channels[0] * self.heads[0], 1)
-        self.pool2 = torch.nn.Linear(self.hidden_channels[1] * self.heads[1], 1)
-        self.pool3 = torch.nn.Linear(self.hidden_channels[2] * self.heads[2], 1)
+        # Pooling layers
+        self.pools = nn.ModuleList()
+        self.build_pooling_layers()
 
-        self.layer_norm = lambda num_features: LayerNorm(num_features)
+        # Layer normalization
+        self.layer_norm = LayerNorm(opt.num_nodes)
 
-        fc1 = nn.Sequential(
-            nn.Linear(self.lin_input_dim, self.fc_dim[0]),
+        # Fully connected layers
+        self.encoder = self.build_fc_layers()
+        self.last_layer = nn.Linear(opt.omic_dim, self.out_channels)
+
+        # Output range and shift
+        #self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
+        #self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
+
+    def build_gat_layers(self):
+        input_dim = self.in_channels
+        for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
+            self.convs.append(GATConv(input_dim, hidden_dim, heads=num_heads, dropout=self.opt.fc_dropout))
+            input_dim = hidden_dim * num_heads
+
+    def build_pooling_layers(self):
+        for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
+            self.pools.append(nn.Linear(hidden_dim * num_heads, 1))
+
+    def build_fc_layers(self):
+        layers = []
+        fc_input_dim = self.lin_input_dim
+        for fc_dim in self.fc_dim:
+            layers.append(nn.Sequential(
+                nn.Linear(fc_input_dim, fc_dim),
+                nn.ELU(),
+                nn.AlphaDropout(p=self.opt.fc_dropout, inplace=True),
+            ))
+            fc_input_dim = fc_dim
+        layers.append(nn.Sequential(
+            nn.Linear(fc_input_dim, self.opt.omic_dim),
             nn.ELU(),
-            nn.AlphaDropout(p=self.fc_dropout, inplace=True),
-        )
-
-        fc2 = nn.Sequential(
-            nn.Linear(self.fc_dim[0], self.fc_dim[1]),
-            nn.ELU(),
-            nn.AlphaDropout(p=self.fc_dropout, inplace=False),
-        )
-
-        fc3 = nn.Sequential(
-            nn.Linear(self.fc_dim[1], self.fc_dim[2]),
-            nn.ELU(),
-            nn.AlphaDropout(p=self.fc_dropout, inplace=False),
-        )
-
-        fc4 = nn.Sequential(
-            nn.Linear(self.fc_dim[2], opt.omic_dim),
-            nn.ELU(),
-            nn.AlphaDropout(p=self.fc_dropout, inplace=False),
-        )
-
-        self.encoder = nn.Sequential(fc1, fc2, fc3, fc4)
-        self.last_layer = nn.Sequential(nn.Linear(opt.omic_dim, self.out_channels))
-
-        # TODO: Change the output_range that is hardcoded for the output of the MLGNN model
-        # or better: normalize the distribution of your output, make it standard gaussian,
-        # and do you mess with output range and shift
-        self.output_range = Parameter(torch.FloatTensor([6]), requires_grad=False)
-        self.output_shift = Parameter(torch.FloatTensor([-3]), requires_grad=False)
+            nn.AlphaDropout(p=self.opt.fc_dropout, inplace=True),
+        ))
+        return nn.Sequential(*layers)
 
     def forward(self, x, edge_index=None, data=None):
         if not isinstance(data, Batch):
             data = Batch().from_data_list([data])
-        opt = self.opt
-        data = data.cuda()
-        x = x.cuda()
-        batch = data.batch  # [batch_size * nodes]
 
-        ### Reshape edge_list
-        edge_index = data.edge_index.cuda()
-        # layer1
-        x = x.requires_grad_()
-        x0 = to_dense_batch(torch.mean(x, dim=-1), batch=batch)[0]  # [bs, nodes]
-        ### layer2
-        x = F.dropout(
-            x, p=0.2, training=self.training
-        )  # [batch_size, nodes] #TO DO: what is this doing?
-        xconv = self.conv1(x, edge_index)  # BAD: is nan
-        x = F.elu(self.conv1(x, edge_index))  # [bs*nodes, hidden_channels[0]*heads[0]]
-        x1 = to_dense_batch(self.pool1(x).squeeze(-1), batch=batch)[0].to(
-            edge_index.device
-        )  # [bs, nodes]
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = F.elu(self.conv2(x, edge_index))  # [bs*nodes, hidden_channels[1]*heads[1]]
-        x2 = to_dense_batch(self.pool2(x).squeeze(-1), batch=batch)[0]  # [bs, nodes]
+        batch = data.batch
+        edge_index = data.edge_index
 
-        if opt.layer_norm:
-            # Calculate the number of nodes per graph in the batch
-            batch_size = batch.unique().shape[0]
-            total_nodes = batch.shape[0]
-            num_features = total_nodes // batch_size
-            layer_norm = self.layer_norm(num_features).to(edge_index.device)
-            x0 = layer_norm(x0)
-            x1 = layer_norm(x1)
-            x2 = layer_norm(x2)
+        # Initial operations before GAT layers
+        x = x.requires_grad_()    # [bs*nodes, in_channels]
+        x0 = to_dense_batch(torch.mean(x, dim=-1), batch=batch)[0]  # [bs, nodes], converts it to be broken up by batches
 
-        if opt.which_layer == ['layer1', 'layer2', 'layer3']:
-            multiscale_features = torch.cat([x0, x1, x2], dim=1)
+        # Apply first GAT layer and pooling
+        x = F.dropout(x, p=0.1, training=self.training) #apply dropout if we are training, reduced this to 0.1 from 0.2
+        x = self.convs[0](x, edge_index) # [bs*nodes, hidden_channels[0]*heads[0]], Apply the gatconv layer
+        x = F.elu(x)  # [bs*nodes, hidden_channels[0]*heads[0]], Apply elu activation function
+        x1 = self.pools[0](x) # [bs*nodes, 1]
+        x1 = x1.squeeze(-1)  # [bs*nodes]
+        x1 = to_dense_batch(x1, batch=batch)[0] # [bs, nodes]
 
-        elif opt.which_layer == ['layer1']:
-            multiscale_features = x0
-        elif opt.which_layer == ['layer2']:
-            multiscale_features = x1
-        elif opt.which_layer == ['layer3']:
-            multiscale_features = x2
+        # Apply second GAT layer and pooling
+        x = F.dropout(x, p=0.1, training=self.training)  #apply dropout if we are training
+        x = self.convs[1](x, edge_index)
+        x = F.elu(x)  # [bs*nodes, hidden_channels[1]*heads[1]]
+        x2 = self.pools[1](x) # [bs*nodes, 1]
+        x2 = x2.squeeze(-1) # [bs*nodes]
+        x2 = to_dense_batch(x2, batch=batch)[0] # [bs, nodes]
 
+        # Apply layer normalization if specified
+        if self.opt.layer_norm:
+            x0 = self.layer_norm(x0)
+            x1 = self.layer_norm(x1)
+            x2 = self.layer_norm(x2)
+
+        # Concatenate multiscale features
+        multiscale_features = {'layer1': x0, 'layer2': x1, 'layer3': x2}
+        multiscale_features = torch.cat(
+            [multiscale_features[layer] for layer in self.opt.which_layer], dim=1
+        )
+
+        # Pass through fully connected layers
         encoded_features = self.encoder(multiscale_features)
-
         pred = self.last_layer(encoded_features)
 
-        if self.act is not None:
+        # Apply activation function if specified
+        '''
+        if self.act:
+            "Im in here!"
             pred = self.act(pred)
-
             if isinstance(self.act, nn.Sigmoid):
-                pred = pred * self.output_range + self.output_shift
+                pred = pred * self.output_range + self.output_shift'''
 
         return pred
 
 
-def define_optimizer(opt, model):
-    optimizer = None
-    if opt.optimizer_type == 'adabound':
-        optimizer = adabound.AdaBound(model.parameters(), lr=opt.lr, final_lr=opt.final_lr)
-    elif opt.optimizer_type == 'adam':
-        optimizer = torch.optim.Adam(
-            model.parameters(), lr=opt.lr, betas=(0.9, 0.999), weight_decay=opt.weight_decay
-        )
-    elif opt.optimizer_type == 'adagrad':
-        optimizer = torch.optim.Adagrad(
-            model.parameters(),
-            lr=opt.lr,
-            weight_decay=opt.weight_decay,
-            initial_accumulator_value=0.1,
-        )
-    else:
-        raise NotImplementedError('initialization method [%s] is not implemented' % opt.optimizer)
-    return optimizer
-
-
-def define_reg(model):
-    for W in model.parameters():
-        loss_reg = torch.abs(W).sum()
-
-    return loss_reg
-
-
+# can delete this all 
 def define_scheduler(opt, optimizer):
     if opt.lr_policy == 'linear':
 
