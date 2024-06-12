@@ -8,9 +8,6 @@ import torch
 import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
-from models.gat_v5 import GATv5
-from models.gats import MyGAT
-from models.higher import Higher
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
@@ -73,11 +70,6 @@ class Proteo(pl.LightningModule):
                 opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
             )
             self.model = model
-        elif config.model == 'gat-v5':
-            model = GATv5(
-                opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
-            )
-            self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -92,12 +84,14 @@ class Proteo(pl.LightningModule):
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
         if self.config.model == 'gat':
-            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)  #This returns a pred value for each node in the big graph
-            return global_mean_pool(pred, batch.batch) # Aggregate node features into graph-level features
+            pred = self.model(
+                batch.x, batch.edge_index, batch=batch.batch
+            )  # This returns a pred value for each node in the big graph
+            return global_mean_pool(
+                pred, batch.batch
+            )  # Aggregate node features into graph-level features
         elif self.config.model == "gat-v4":
             return self.model(batch.x, batch.edge_index, batch)
-        elif self.config.model == "gat-v5":
-            return self.model(batch.x, batch.edge_index)
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -121,9 +115,10 @@ class Proteo(pl.LightningModule):
         loss = loss_fn(pred, targets)
 
         # Calculate L1 regularization term to encourage sparsity
-        l1_lambda = self.model_parameters.l1_lambda  # Regularization strength
-        l1_norm = sum(p.abs().sum() for p in self.parameters())
-        loss = loss + l1_lambda * l1_norm
+        if self.model_parameters.l1_lambda > 0:
+            l1_lambda = self.model_parameters.l1_lambda  # Regularization strength
+            l1_norm = sum(p.abs().sum() for p in self.parameters())
+            loss = loss + l1_lambda * l1_norm
 
         # --- LOGGING ---
         self.log(
@@ -181,20 +176,8 @@ class Proteo(pl.LightningModule):
                 betas=(0.9, 0.999),
                 weight_decay=self.model_parameters.weight_decay,
             )
-        elif self.model_parameters.optimizer == 'adagrad':
-            optimizer = torch.optim.Adagrad(
-                self.parameters(),
-                lr=self.model_parameters.lr,
-                weight_decay=self.model_parameters.weight_decay,
-                initial_accumulator_value=0.1,
-            )
-        elif self.model_parameters.optimizer == 'adabound':
-            optimizer = adabound.AdaBound(
-                self.parameters(),
-                lr=self.model_parameters.lr,
-                final_lr=self.model_parameters.final_lr,
-            )
-
+        else:
+            raise NotImplementedError('Optimizer not implemented yet')
         mode = self.config.mode
 
         scheduler_type = self.model_parameters.lr_scheduler
@@ -244,8 +227,9 @@ def main():
     out_channels = train_dataset.label_dim  # 1 dim of result
 
     # Calculate the average node degree for logging purposes
-    num_nodes = test_dataset.x.shape[0]
-    num_edges = test_dataset.edge_index.shape[1] / 2
+    num_nodes, _ = test_dataset.x.shape
+    _, num_edges = test_dataset.edge_index.shape
+    num_edges = num_edges / 2
     avg_node_degree = num_edges / num_nodes
 
     # Make DataLoader objects to handle batching
@@ -302,9 +286,10 @@ def main():
         pl_callbacks.ModelCheckpoint(
             monitor='val_loss',
             dirpath=config.checkpoint_dir,
-            filename=config.checkpoint_name_pattern
-            + date.today().strftime('%d-%m-%Y')
-            + '{epoch}',  # TODO: fix this
+            filename=config.checkpoint_name_pattern 
+            + "-" + config.model
+            + "-" + date.today().strftime('%d-%m-%Y-%h-%M')
+            + '{epoch}',
             mode='min',
         ),
         pl_callbacks.RichProgressBar(theme=custom_theme),
@@ -319,7 +304,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=device_count,
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),  # Debug later
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False), 
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,  # Controls the frequency of logging within training, by specifying how many training steps should occur between each logging event.
         precision=config.precision,

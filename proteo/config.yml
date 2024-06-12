@@ -13,25 +13,19 @@ minimize: true #Placeholder
 #TODO: add root_dir to the config file, folders of data for ftd and mlagnn
 
 # Model Configuration
-model: gat
+model: gat-v4
 
 gat-v4:
-  # For testing model priposes
-  lambda_cox: 1.0
-  lambda_reg: 0.0003
-  lambda_nll: 1.0
   # Model Configuration
   heads: [4, 3, 4]
   hidden_channels: [8, 16, 12]
-  fc_dim: [64, 48, 32]
+  fc_dim: [64, 48, 32, 32]
   which_layer: ['layer1', 'layer2', 'layer3']
-  omic_dim: 32
-  act_type: 'none'
   lr: 0.1 
   final_lr: 0.0001
   weight_decay: 0.0005
   fc_dropout: 0.05
-  l1_lambda: 0.0005
+  l1_lambda: 0.005
   # Optimizer Configuration
   optimizer: Adam
   lr_scheduler: LambdaLR
@@ -43,21 +37,6 @@ gat-v4:
   num_nodes: 7289 #TO DO: This should not be hardcoded
   layer_norm: true
 
-gat-v5:
-  lambda_cox: 1.0
-  lambda_reg: 0.0003
-  lambda_nll: 1.0
-  act_type: 'none'
-  lr: 0.1  #TODO: start with a higher learning rate, to espace the bad initialization
-  final_lr: 0.0001
-  weight_decay: 0.0005
-  alpha: 0.2
-  patience: 0.005
-  # Optimizer Configuration
-  lr_scheduler: LambdaLR
-  lr_scheduler_params: None
-  num_nodes: 7289 #TO DO: This should not be hardcoded
-  
 
 gat:
   hidden_channels: 20
@@ -82,7 +61,7 @@ early_stop: true
 
 
 # Training Configuration
-epochs: 50
+epochs: 150
 batch_size: 12
 in_drop_rate: 0.0
 drop_rate: 0.0
