@@ -7,25 +7,18 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.yml')
 
 
 class Config(pydantic.BaseModel):
-    """Proteo config."""
-
     class Config:
         extra = 'allow'
 
+    def __getitem__(self, item):
+        return getattr(self, item)
 
-def read_config_from_file(path: str) -> 'Config':
-    """Read config from yaml file.
+    def update(self, new_config):
+        for k, v in new_config.items():
+            setattr(self, k, v)
 
-    Parameters
-    ----------
-    path : str
-        Path to the yaml file. Eg config.yml.
 
-    Returns
-    -------
-    Config
-        The config object.
-    """
+def read_config_from_file(path):
     if not os.path.exists(path):
         raise FileNotFoundError(path)
     with open(path, 'r') as _:

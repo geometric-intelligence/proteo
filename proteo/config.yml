@@ -13,7 +13,7 @@ minimize: true #Placeholder
 #TODO: add root_dir to the config file, folders of data for ftd and mlagnn
 
 # Model Configuration
-model: gat-v4
+model: gat
 
 gat-v4:
   # Model Configuration
@@ -81,7 +81,7 @@ eval_metric: mae
 
 # WandB Configuration
 project_name: "proteo"
-wandb_api_key_path: "wandb_api_key.txt"
+wandb_api_key_path: "/home/lcornelis/code/proteo/proteo/wandb_api_key.txt"
 wandb_offline: false
 log_every_n_steps: 1
 

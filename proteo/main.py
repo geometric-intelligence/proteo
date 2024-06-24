@@ -6,16 +6,25 @@ import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
 import wandb
-from config_utils import CONFIG_FILE, Config, read_config_from_file
+from config_utils import CONFIG_FILE, read_config_from_file, Config
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning import strategies as pl_strategies
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, global_mean_pool
+from ray import tune
+from ray.air.integrations.wandb import WandbLoggerCallback, setup_wandb
+from ray.train import RunConfig, ScalingConfig, CheckpointConfig
+from ray.train import lightning as ray_lightning
+from ray.train.torch import TorchTrainer
+from ray.tune.schedulers import ASHAScheduler
+
 
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
+MAX_SEED = 65535
 
 class AttrDict(dict):
     """Convert a dict into an object where attributes are accessed with "."
@@ -199,21 +208,30 @@ class Proteo(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-def main():
-    """Training and evaluation script for experiments."""
-    torch.set_float32_matmul_precision('high')
 
+def main(search_config):
+    """Training and evaluation script for one set of hyperparameters.
+    
+    Parameters
+    ----------
+    search_config : dict
+        Dictionary containing the hyperparameters currently tested.
+        For us: keys are model, hidden_channels, heads, seed.
+    """
+    torch.set_float32_matmul_precision('high')
     config = read_config_from_file(CONFIG_FILE)
 
-    # this is where we pick the CUDA device(s) to use
-    if isinstance(config.device, list):
-        print(f"Using devices {config.device}")
-        device_count = len(config.device)
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
-    else:
-        print(f"Using device {config.device}")
-        device_count = 1
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
+    config.update(search_config)
+
+    # # this is where we pick the CUDA device(s) to use
+    # if isinstance(config.device, list):
+    #     print(f"Using devices {config.device}")
+    #     device_count = len(config.device)
+    #     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
+    # else:
+    #     print(f"Using device {config.device}")
+    #     device_count = 1
+    #     os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
 
     pl.seed_everything(config.seed)
 
@@ -249,7 +267,7 @@ def main():
     )
     print("Loaders created")
 
-    # Configure WandB Logger
+    #Configure WandB Logger
     logger = None
     if config.wandb_api_key_path and config.wandb_offline is False:
         with open(config.wandb_api_key_path, 'r') as f:
@@ -282,8 +300,10 @@ def main():
         }
     )
 
+    # Things that happen regularly during training
     trainer_callbacks = [
-        pl_callbacks.ModelCheckpoint(
+        EarlyStopping(monitor='val_loss', mode = "min", patience=3),
+        pl_callbacks.ModelCheckpoint( #TODO: Where is this going?
             monitor='val_loss',
             dirpath=config.checkpoint_dir,
             filename=config.checkpoint_name_pattern 
@@ -293,6 +313,7 @@ def main():
             mode='min',
         ),
         pl_callbacks.RichProgressBar(theme=custom_theme),
+        ray_lightning.RayTrainReportCallback()
     ]
 
     trainer = pl.Trainer(
@@ -302,15 +323,17 @@ def main():
         callbacks=trainer_callbacks,
         logger=logger,
         accelerator=config.trainer_accelerator,
-        devices=device_count,
-        num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False), 
+        devices='auto',
+        #num_nodes=config.nodes_count,
+        strategy=ray_lightning.RayDDPStrategy(), 
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,  # Controls the frequency of logging within training, by specifying how many training steps should occur between each logging event.
         precision=config.precision,
         num_sanity_val_steps=1,
+        plugins=[ray_lightning.RayLightningEnvironment()]
     )
-
+    
+    '''
     if config.wandb_api_key_path:
         env = trainer.strategy.cluster_environment
         if env.global_rank() != 0 and env.local_rank() == 0:
@@ -321,12 +344,72 @@ def main():
                         "/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/histogram.svg"
                     )
                 }
-            )
+            )'''
 
     module = Proteo(config, in_channels, out_channels, avg_node_degree)
     # print(module)
+    trainer = ray_lightning.prepare_trainer(trainer)
     trainer.fit(module, train_loader, test_loader)
 
 
-if __name__ == "__main__":
-    main()
+def search_hyperparameters():
+    scaling_config = ScalingConfig(
+        num_workers=1, use_gpu=True, resources_per_worker={'CPU': 8, 'GPU': 1}
+    )
+
+    run_config = RunConfig(
+        checkpoint_config=CheckpointConfig(
+            num_to_keep=1,
+            checkpoint_score_attribute='val_loss',
+            checkpoint_score_order='min',
+        ),
+    )
+
+    # Define a TorchTrainer without hyper-parameters for Tuner
+    ray_trainer = TorchTrainer(
+        main,
+        scaling_config=scaling_config,
+        run_config=run_config,
+    )
+
+    def hidden_channels(spec):
+        hidden_channels_map = {'gat': [3, 10, 20, 25] , 'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]]}
+        config = spec['train_loop_config']
+        return hidden_channels_map[config['model']]
+    
+    def heads(spec):
+        heads_map = {'gat': [1, 3, 5] , 'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]]}
+        config = spec['train_loop_config'] 
+        return heads_map[config['model']]
+
+
+    search_space = {
+        'model': tune.grid_search(['gat']),
+        'heads': tune.sample_from([heads]),
+        'seed': tune.randint(0, MAX_SEED),
+        'hidden_channels': tune.sample_from(hidden_channels),
+    }
+
+    def trial_str_creator(trial):
+        config = trial.config['train_loop_config']
+        seed = config['seed']
+        return f"model={config['model']},heads={config['heads']},seed={seed}"
+
+    tuner = tune.Tuner(
+        ray_trainer,
+        param_space={'train_loop_config': search_space},
+        tune_config=tune.TuneConfig(
+            metric='val_loss',
+            mode='min',
+            # TODO: Infer num samples from search space.
+            num_samples=2,
+            trial_name_creator=trial_str_creator,
+        ),
+    )
+    return tuner.fit()
+
+
+
+if __name__ == '__main__':
+    results = search_hyperparameters()
+    results.get_dataframe().to_csv('ray_results_search_hyperparameters.csv')
