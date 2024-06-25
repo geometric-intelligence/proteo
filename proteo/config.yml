@@ -61,7 +61,7 @@ early_stop: true
 
 
 # Training Configuration
-epochs: 150
+epochs: 20
 batch_size: 12
 in_drop_rate: 0.0
 drop_rate: 0.0

@@ -140,7 +140,6 @@ class FTDDataset(InMemoryDataset):
         print("Testing features and labels:", test_features.shape, test_labels.shape)
 
         if not os.path.exists(ADJACENCY_PATH):
-            print(plasma_protein[0:5])
             calculate_adjacency_matrix(config, plasma_protein)
         adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
         adj_matrix = torch.FloatTensor(
