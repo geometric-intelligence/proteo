@@ -216,7 +216,6 @@ def construct_datasets(config):
     return train_dataset, test_dataset
 
 def construct_loaders(config, train_dataset, test_dataset):
-    avg_node_degree = avg_node_degree(test_dataset)
 
     # Make DataLoader objects to handle batching
     train_loader = DataLoader(  # makes into one big graph

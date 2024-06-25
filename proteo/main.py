@@ -37,7 +37,7 @@ def train_func(search_config):
     in_channels = train_dataset.feature_dim  # 1 dim of input
     out_channels = train_dataset.label_dim  # 1 dim of result
 
-    avg_node_degree = avg_node_degree(test_dataset)
+    avg_node_degree = proteo_train.avg_node_degree(test_dataset)
 
     module = proteo_train.Proteo(config, in_channels, out_channels, avg_node_degree)
 
@@ -90,9 +90,9 @@ def search_hyperparameters():
 
     search_space = {
         'model': tune.grid_search(['gat']),
-        'heads': tune.grid_search(tune.sample_from(heads)),
+        'heads': tune.sample_from(heads),
         'seed': tune.randint(0, MAX_SEED),
-        'hidden_channels': tune.grid_search(tune.sample_from(hidden_channels)),
+        'hidden_channels': tune.sample_from(hidden_channels),
     }
 
     def trial_str_creator(trial):
