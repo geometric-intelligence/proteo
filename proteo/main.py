@@ -26,7 +26,15 @@ def train_func(search_config):
         None
     """
     config = read_config_from_file(CONFIG_FILE)
-
+    #TODO: Hacky - is there a better way?
+    model_name = search_config['train_loop_config']['model']
+    search_config['model'] = model_name
+    updated_parameters = {'hidden_channels': search_config['train_loop_config']['hidden_channels'], 
+                         'heads':search_config['train_loop_config']['heads']}
+    config[model_name].update(updated_parameters)
+    search_config.pop('train_loop_config')
+    print("=====================================")
+    print(search_config)
     config.update(search_config)
     setup_wandb(search_config, api_key_file = config.wandb_api_key_path)
     
@@ -47,7 +55,7 @@ def train_func(search_config):
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[ray_lightning.RayTrainReportCallback()],
-        plugins=[ray_lightning.RayLightningEnvironment()],
+        plugins=[ray_lightning.RayLightningEnvironment()], # How ray interacts with pytorch lightning
         enable_progress_bar=False,
         max_epochs=config.epochs,
     )
@@ -58,10 +66,12 @@ def train_func(search_config):
 
 
 def search_hyperparameters():
+    # training should use one worker, one GPU, and 8 CPUs per worker.
     scaling_config = ScalingConfig(
         num_workers=1, use_gpu=True, resources_per_worker={'CPU': 8, 'GPU': 1}
     )
 
+    # keeping only the best checkpoint based on minimum validation loss
     run_config = RunConfig(
         checkpoint_config=CheckpointConfig(
             num_to_keep=1,
@@ -77,28 +87,32 @@ def search_hyperparameters():
         run_config=run_config,
     )
 
-    def hidden_channels(spec):
-        hidden_channels_map = {'gat': [3, 10, 20, 25] , 'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]]}
-        config = spec['train_loop_config']
-        return hidden_channels_map[config['model']]
-    
-    def heads(spec):
-        heads_map = {'gat': [1, 3, 5], 'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]]}
-        config = spec['train_loop_config'] 
-        return heads_map[config['model']]
+    hidden_channels_map = {'gat': [3, 10, 20, 25], 'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]]}
+    heads_map = {'gat': [1, 3, 5], 'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]]}
 
+    def generate_configurations():
+        configurations = []
+        for model in ['gat', 'gat-v4']:
+            for hidden_channels in hidden_channels_map[model]:
+                for heads in heads_map[model]:
+                    configurations.append({
+                        'model': model,
+                        'hidden_channels': hidden_channels,
+                        'heads': heads
+                    })
+        return configurations
 
     search_space = {
-        'model': tune.grid_search(['gat']),
-        'heads': tune.sample_from(heads),
+        'train_loop_config': tune.grid_search(generate_configurations()),
         'seed': tune.randint(0, MAX_SEED),
-        'hidden_channels': tune.sample_from(hidden_channels),
-    }
+        'lr': tune.loguniform(1e-4, 1e-1),
+}
 
     def trial_str_creator(trial):
         config = trial.config['train_loop_config']
         seed = config['seed']
-        return f"model={config['model']},heads={config['heads']},seed={seed}"
+        nested_config = config['train_loop_config']
+        return f"model={nested_config['model']},heads={nested_config['heads']},seed={seed}"
 
     tuner = tune.Tuner(
         ray_trainer,
@@ -107,7 +121,7 @@ def search_hyperparameters():
             metric='val_loss',
             mode='min',
             # TODO: Infer num samples from search space.
-            num_samples=2,
+            num_samples=2, # Repeats grid search options 2 times through with random seed
             trial_name_creator=trial_str_creator,
         ),
     )
