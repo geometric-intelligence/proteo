@@ -7,3 +7,4 @@ proteo/datasets/data
 proteo/lightning_logs/
 proteo/wandb/
 wandb_api_key.txt
+proteo/ray_results_search_hyperparameters.csv
