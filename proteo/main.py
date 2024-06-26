@@ -130,8 +130,7 @@ def search_hyperparameters():
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
-            # TODO: Infer num samples from search space.
-            num_samples=30, # Repeats grid search options 2 times through with random seed
+            num_samples=30, # Repeats grid search options n times through 
             trial_name_creator=trial_str_creator,
             scheduler=scheduler,
         ),
