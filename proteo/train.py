@@ -11,11 +11,10 @@ from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
-from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, global_mean_pool
 
-from proteo.datasets.ftd import ROOT_DIR, FTDDataset
+from proteo.datasets.ftd import FTDDataset
 
 
 class AttrDict(dict):
@@ -212,7 +211,7 @@ def avg_node_degree(dataset):
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
     if config.dataset_name == "ftd":
-        root = os.path.join(ROOT_DIR, "data", "ftd")
+        root = os.path.join(config.root_dir, "data", "ftd")
         test_dataset = FTDDataset(root, "test", config)
         train_dataset = FTDDataset(root, "train", config)
     return train_dataset, test_dataset

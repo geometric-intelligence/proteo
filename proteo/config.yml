@@ -2,7 +2,7 @@
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
 dataset_name: "ftd"
-root_dir: "/home/nmiolane/code/proteo"
+root_dir: "/home/nmiolane/code/proteo/proteo"
 adj_thresh: 0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -11,7 +11,6 @@ task: 'survival'
 task_type: regression # Placeholder
 mode: 'min'
 minimize: true #Placeholder
-#TODO: add root_dir to the config file, folders of data for ftd and mlagnn
 
 # Model Configuration
 model: gat
@@ -55,11 +54,7 @@ gat:
     lr_scheduler_decay_rate: 0.5
     lr_scheduler_min: 0.00001
     verbose: true
-
 early_stop: true
-
-
-
 
 # Training Configuration
 epochs: 100
@@ -82,7 +77,7 @@ eval_metric: mae
 
 # WandB Configuration
 project_name: "proteo"
-wandb_api_key_path: "proteo/wandb_api_key.txt"
+wandb_api_key_path: "wandb_api_key.txt"
 wandb_offline: false
 log_every_n_steps: 1
 
