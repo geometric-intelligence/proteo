@@ -72,12 +72,12 @@ class GATv4(nn.Module):
         x = x.requires_grad_()  # [bs*nodes, in_channels]
         # This does mean on features, per subgraph and per node.
         # [bs, nodes], converts it to be broken up by batches
-        x0, _ = to_dense_batch(torch.mean(x, dim=-1), batch=batch)  
+        x0, _ = to_dense_batch(torch.mean(x, dim=-1), batch=batch)
 
         # Apply first GAT layer and pooling
         x = F.dropout(x, p=0.1, training=self.training)
         # apply dropout if we are training, reduced this to 0.1 from 0.2
-        x = self.convs[0](x, edge_index)  
+        x = self.convs[0](x, edge_index)
         # [bs*nodes, hidden_channels[0]*heads[0]], Apply the gatconv layer
         x = F.elu(x)  # [bs*nodes, hidden_channels[0]*heads[0]], Apply elu activation function
         x1 = self.pools[0](x)  # [bs*nodes, 1]
@@ -92,7 +92,7 @@ class GATv4(nn.Module):
         x2 = x2.squeeze(-1)  # [bs*nodes]
         x2, _ = to_dense_batch(x2, batch=batch)  # [bs, nodes]
 
-        # Apply layer normalization to each individual graph to have mean 0, std 1 
+        # Apply layer normalization to each individual graph to have mean 0, std 1
         if self.opt.layer_norm:
             x0 = self.layer_norm(x0)
             x1 = self.layer_norm(x1)
@@ -108,5 +108,3 @@ class GATv4(nn.Module):
         pred = self.encoder(multiscale_features)
 
         return pred
-
-

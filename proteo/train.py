@@ -4,6 +4,7 @@ from datetime import date
 
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
+import rich_gi
 import torch
 import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
@@ -15,7 +16,6 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, global_mean_pool
 
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
-import rich_gi
 
 
 class AttrDict(dict):
@@ -199,6 +199,7 @@ class Proteo(pl.LightningModule):
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
+
 def avg_node_degree(dataset):
     # Calculate the average node degree for logging purposes
     num_nodes, _ = dataset.x.shape
@@ -206,6 +207,7 @@ def avg_node_degree(dataset):
     num_edges = num_edges / 2
     avg_node_degree = num_edges / num_nodes
     return avg_node_degree
+
 
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
@@ -215,8 +217,8 @@ def construct_datasets(config):
         train_dataset = FTDDataset(root, "train", config)
     return train_dataset, test_dataset
 
-def construct_loaders(config, train_dataset, test_dataset):
 
+def construct_loaders(config, train_dataset, test_dataset):
     # Make DataLoader objects to handle batching
     train_loader = DataLoader(  # makes into one big graph
         train_dataset,
@@ -232,7 +234,8 @@ def construct_loaders(config, train_dataset, test_dataset):
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
     )
-    return train_loader, test_loader   
+    return train_loader, test_loader
+
 
 def main():
     """Training and evaluation script for experiments."""
@@ -280,18 +283,19 @@ def main():
         ],
     )
 
-
     trainer_callbacks = [
         pl_callbacks.ModelCheckpoint(
             monitor='val_loss',
             dirpath=config.checkpoint_dir,
-            filename=config.checkpoint_name_pattern 
-            + "-" + config.model
-            + "-" + date.today().strftime('%d-%m-%Y-%h-%M')
+            filename=config.checkpoint_name_pattern
+            + "-"
+            + config.model
+            + "-"
+            + date.today().strftime('%d-%m-%Y-%h-%M')
             + '{epoch}',
             mode='min',
         ),
-       rich_gi.progress_bar(),
+        rich_gi.progress_bar(),
     ]
 
     trainer = pl.Trainer(
@@ -303,7 +307,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=device_count,
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False), 
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,  # Controls the frequency of logging within training, by specifying how many training steps should occur between each logging event.
         precision=config.precision,

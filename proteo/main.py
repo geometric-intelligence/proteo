@@ -1,17 +1,18 @@
 import os
+
 import numpy as np
 import pytorch_lightning as pl
+import train as proteo_train
+from config_utils import CONFIG_FILE, Config, read_config_from_file
 from ray import tune
 from ray.air.integrations.wandb import WandbLoggerCallback, setup_wandb
-from ray.train import RunConfig, ScalingConfig, CheckpointConfig
+from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
-from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 from torch_geometric.loader import DataLoader
-from config_utils import CONFIG_FILE, Config, read_config_from_file
 
-import train as proteo_train
+from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
 MAX_SEED = 65535
 
@@ -27,18 +28,22 @@ def train_func(search_config):
         None
     """
     config = read_config_from_file(CONFIG_FILE)
-    #TODO: Hacky - is there a better way?
+    # TODO: Hacky - is there a better way?
     # Update model specific parameters
     model_name = search_config['model']
-    updated_parameters = {'hidden_channels': search_config['hidden_channels'], 
-                         'heads':search_config['heads'], 'lr': search_config['lr']}
+    updated_parameters = {
+        'hidden_channels': search_config['hidden_channels'],
+        'heads': search_config['heads'],
+        'lr': search_config['lr'],
+    }
     config[model_name].update(updated_parameters)
     # Remove keys that were already updated in nested configuration
     for key in updated_parameters:
         search_config.pop(key)
     config.update(search_config)
-    setup_wandb(search_config, api_key_file = config.wandb_api_key_path)
-    
+    setup_wandb(
+        search_config, api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path)
+    )
 
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
@@ -55,14 +60,14 @@ def train_func(search_config):
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[ray_lightning.RayTrainReportCallback()],
-        plugins=[ray_lightning.RayLightningEnvironment()], # How ray interacts with pytorch lightning
+        plugins=[
+            ray_lightning.RayLightningEnvironment()
+        ],  # How ray interacts with pytorch lightning
         enable_progress_bar=False,
         max_epochs=config.epochs,
     )
     trainer = ray_lightning.prepare_trainer(trainer)
     trainer.fit(module, train_loader, test_loader)
-
-
 
 
 def search_hyperparameters():
@@ -89,15 +94,18 @@ def search_hyperparameters():
 
     def hidden_channels(spec):
         # Note that hidden channels must be divisible by heads for gat
-        hidden_channels_map = {'gat': [4, 8, 12, 20] , 'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]]}
+        hidden_channels_map = {
+            'gat': [4, 8, 12, 20],
+            'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]],
+        }
         config = spec['train_loop_config']
         model_params = hidden_channels_map[config['model']]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
-    
+
     def heads(spec):
         heads_map = {'gat': [1, 2, 4], 'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]]}
-        config = spec['train_loop_config'] 
+        config = spec['train_loop_config']
         model_params = heads_map[config['model']]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
@@ -109,7 +117,7 @@ def search_hyperparameters():
         'heads': tune.sample_from(heads),
         'lr': tune.loguniform(1e-4, 1e-1),
         'batch_size': tune.choice([6, 12, 32, 64, 80]),
-}
+    }
 
     def trial_str_creator(trial):
         config = trial.config['train_loop_config']
@@ -119,24 +127,23 @@ def search_hyperparameters():
     config = read_config_from_file(CONFIG_FILE)
     scheduler = ASHAScheduler(
         time_attr="training_iteration",
-        max_t= config['epochs'],
+        max_t=config['epochs'],
         grace_period=2,
         reduction_factor=4,
     )
-    
+
     tuner = tune.Tuner(
         ray_trainer,
         param_space={'train_loop_config': search_space},
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
-            num_samples=30, # Repeats grid search options n times through 
+            num_samples=30,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
             scheduler=scheduler,
         ),
     )
     return tuner.fit()
-
 
 
 if __name__ == '__main__':
