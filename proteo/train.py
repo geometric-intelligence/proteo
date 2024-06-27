@@ -267,7 +267,8 @@ def main():
 
     # Configure WandB Logger
     logger = None
-    if config.wandb_api_key_path and config.wandb_offline is False:
+    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+    if wandb_api_key_path and config.wandb_offline is False:
         with open(config.wandb_api_key_path, 'r') as f:
             wandb_api_key = f.read().strip()
         os.environ['WANDB_API_KEY'] = wandb_api_key
