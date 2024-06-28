@@ -40,6 +40,8 @@ def train_func(search_config):
     Returns:
         None
     """
+    # Clear GPU memory
+    torch.cuda.empty_cache()
     # This is used to improve performance
     torch.set_float32_matmul_precision('medium')
     config = read_config_from_file(CONFIG_FILE)
@@ -108,6 +110,7 @@ def search_hyperparameters():
         callbacks=[
             WandbLoggerCallback(
                 project=config.project_name,
+                api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
             )
         ],
         checkpoint_config=CheckpointConfig(

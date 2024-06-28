@@ -1,5 +1,6 @@
 import math
 import os
+import gc
 from datetime import date
 
 import pytorch_lightning as pl
@@ -13,6 +14,7 @@ from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, global_mean_pool
+import matplotlib.pyplot as plt
 
 from proteo.datasets.ftd import FTDDataset
 
@@ -29,7 +31,7 @@ class AttrDict(dict):
 
 
 class Proteo(pl.LightningModule):
-    """Proteo Lightning Module that handles batching the graphs in traning and validation.
+    """Proteo Lightning Module that handles batching the graphs in training and validation.
 
     Parameters
     ----------
@@ -56,6 +58,8 @@ class Proteo(pl.LightningModule):
         self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
         self.avg_node_degree = avg_node_degree
+        self.train_predictions = []
+        self.val_predictions = []
 
         if config.model == 'gat':
             self.model = GAT(
@@ -72,6 +76,7 @@ class Proteo(pl.LightningModule):
             )
         else:
             raise NotImplementedError('Model not implemented yet')
+        
 
     def forward(self, batch):
         """Performs one forward pass of the model on the input batch.
@@ -111,6 +116,7 @@ class Proteo(pl.LightningModule):
             raise ValueError
         targets = batch.y.view(pred.shape)
 
+
         # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
         loss_fn = torch.nn.MSELoss(reduction="mean")
         loss = loss_fn(pred, targets)
@@ -146,6 +152,9 @@ class Proteo(pl.LightningModule):
         pred = self.forward(batch)
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
         targets = batch.y.view(pred.shape)
+        # Store predictions
+        self.val_predictions.append(targets.detach().cpu().numpy())
+
         # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
         loss_fn = torch.nn.MSELoss(reduction="mean")
         loss = loss_fn(pred, targets)
@@ -237,6 +246,8 @@ def construct_loaders(config, train_dataset, test_dataset):
 
 def main():
     """Training and evaluation script for experiments."""
+    torch.cuda.empty_cache()
+    gc.collect()
     torch.set_float32_matmul_precision('high')
 
     config = read_config_from_file(CONFIG_FILE)
@@ -259,7 +270,7 @@ def main():
     in_channels = train_dataset.feature_dim  # 1 dim of input
     out_channels = train_dataset.label_dim  # 1 dim of result
 
-    avg_node_degree = avg_node_degree(test_dataset)
+    avg_node_deg = avg_node_degree(test_dataset)
 
     print("Loaders created")
 
@@ -325,8 +336,14 @@ def main():
                 }
             )
 
-    module = Proteo(config, in_channels, out_channels, avg_node_degree)
+    module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)
+    # Plot the histogram for validation predictions
+    plt.hist(module.val_predictions, bins=30, edgecolor='k')
+    plt.title('Histogram of Validation Predicted Values')
+    plt.xlabel('Predicted Value')
+    plt.ylabel('Frequency')
+    plt.show()
 
 
 if __name__ == "__main__":

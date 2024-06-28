@@ -2,7 +2,7 @@
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
 dataset_name: "ftd"
-root_dir: "/home/nmiolane/code/proteo/proteo"
+root_dir: "/home/lcornelis/code/proteo/proteo"
 adj_thresh: 0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -13,12 +13,12 @@ mode: 'min'
 minimize: true #Placeholder
 
 # Model Configuration
-model: gat
+model: gat-v4
 
 gat-v4:
   # Model Configuration
-  #heads: [4, 3, 4]
-  #hidden_channels: [8, 16, 12]
+  heads: [4, 3, 4]
+  hidden_channels: [8, 16, 12]
   fc_dim: [64, 48, 32, 32]
   which_layer: ['layer1', 'layer2', 'layer3']
   lr: 0.1 
@@ -40,6 +40,10 @@ gat-v4:
 
 gat:
   v2: true
+  # For one off training
+  heads: 1
+  hidden_channels: 20
+  num_layers: 4
   optimizer: Adam
   lr: 0.001
   l1_lambda: 0.0005
@@ -54,7 +58,8 @@ gat:
 early_stop: true
 
 # Training Configuration
-epochs: 50
+batch_size: 12 #for one off training
+epochs: 100
 in_drop_rate: 0.0
 drop_rate: 0.0
 drop_position: lin2
@@ -75,7 +80,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # GPU Configuration
-device: [0, 1, 2, 3, 4, 5, 6, 7]
+device: [4,5,6,7] #[0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 start_seed: 0
