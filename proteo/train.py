@@ -64,12 +64,12 @@ class Proteo(pl.LightningModule):
                 num_layers=self.model_parameters.num_layers,
                 out_channels=out_channels,
                 heads=self.model_parameters.heads,
+                v2=self.model_parameters.v2
             )
         elif config.model == 'gat-v4':
-            model = GATv4(
+            self.model = GATv4(
                 opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
             )
-            self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -84,16 +84,16 @@ class Proteo(pl.LightningModule):
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
         if self.config.model == 'gat':
-            pred = self.model(
-                batch.x, batch.edge_index, batch=batch.batch
-            )  # This returns a pred value for each node in the big graph
-            return global_mean_pool(
-                pred, batch.batch
-            )  # Aggregate node features into graph-level features
-        elif self.config.model == "gat-v4":
+            # This returns a pred value for each node in the big graph
+            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            # Aggregate node features into graph-level features
+            return global_mean_pool(pred, batch.batch)
+        if self.config.model == 'gat-v2':
+            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            return global_mean_pool(pred, batch.batch)
+        if self.config.model == "gat-v4":
             return self.model(batch.x, batch.edge_index, batch)
-        else:
-            raise NotImplementedError('Model not implemented yet')
+        raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
         """Defines a single step in the training loop. It specifies how a batch of data is processed during training, including making predictions, calculating the loss, and logging metrics.
@@ -321,7 +321,7 @@ def main():
             wandb.log(
                 {
                     "nfl_hist": wandb.Image(
-                        "/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/histogram.svg"
+                        os.path.join(config.root_dir, "datasets/data/ftd/processed/histogram.svg")
                     )
                 }
             )

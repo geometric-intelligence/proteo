@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pytorch_lightning as pl
+import torch
 import train as proteo_train
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from ray import tune
@@ -15,6 +16,7 @@ from torch_geometric.loader import DataLoader
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
 MAX_SEED = 65535
+
 
 class CustomCheckpointCallback(pl.Callback):
     def __init__(self, checkpoint_interval):
@@ -38,6 +40,8 @@ def train_func(search_config):
     Returns:
         None
     """
+    # This is used to improve performance
+    torch.set_float32_matmul_precision('medium')
     config = read_config_from_file(CONFIG_FILE)
     # TODO: Hacky - is there a better way?
     # Update model specific parameters
@@ -45,6 +49,7 @@ def train_func(search_config):
     updated_parameters = {
         'hidden_channels': search_config['hidden_channels'],
         'heads': search_config['heads'],
+        'num_layers': search_config['num_layers'],
         'lr': search_config['lr'],
     }
     config[model_name].update(updated_parameters)
@@ -95,7 +100,7 @@ def search_hyperparameters():
     # keeping only the best checkpoint based on minimum validation loss
     run_config = RunConfig(
         checkpoint_config=CheckpointConfig(
-            num_to_keep=1,
+            num_to_keep=5,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',
         ),
@@ -111,7 +116,7 @@ def search_hyperparameters():
     def hidden_channels(spec):
         # Note that hidden channels must be divisible by heads for gat
         hidden_channels_map = {
-            'gat': [4, 8, 12, 20],
+            'gat': [64, 128, 256],
             'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]],
         }
         config = spec['train_loop_config']
@@ -120,32 +125,37 @@ def search_hyperparameters():
         return model_params[random_index]
 
     def heads(spec):
-        heads_map = {'gat': [1, 2, 4], 'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]]}
+        heads_map = {
+            'gat': [1, 2, 4],
+            'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]],
+        }
         config = spec['train_loop_config']
         model_params = heads_map[config['model']]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
 
+    config = read_config_from_file(CONFIG_FILE)
+
     search_space = {
-        'model': tune.grid_search(['gat', 'gat-v4']),
+        'model': tune.grid_search(config.model_grid_search),
         'seed': tune.randint(0, MAX_SEED),
         'hidden_channels': tune.sample_from(hidden_channels),
+        'num_layers': tune.choice(config.num_layers_choice),
         'heads': tune.sample_from(heads),
-        'lr': tune.loguniform(1e-4, 1e-1),
-        'batch_size': tune.choice([6, 8, 12, 16, 20]),
+        'lr': tune.loguniform(config.lr_min, config.lr_max),
+        'batch_size': tune.choice(config.batch_size_choice),
     }
 
     def trial_str_creator(trial):
         config = trial.config['train_loop_config']
         seed = config['seed']
-        return f"model={config['model']},heads={config['heads']},seed={seed}"
+        return f"model={config['model']},num_layers={config['num_layers']},seed={seed}"
 
-    config = read_config_from_file(CONFIG_FILE)
     scheduler = ASHAScheduler(
         time_attr="training_iteration",
         max_t=config['epochs'],
-        grace_period=2,
-        reduction_factor=4,
+        grace_period=config.grace_period,
+        reduction_factor=config.reduction_factor,
     )
 
     tuner = tune.Tuner(
@@ -154,7 +164,7 @@ def search_hyperparameters():
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
-            num_samples=100,  # Repeats grid search options n times through
+            num_samples=config.num_samples,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
             scheduler=scheduler,
         ),
