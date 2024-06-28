@@ -16,6 +16,17 @@ from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
 MAX_SEED = 65535
 
+class CustomCheckpointCallback(pl.Callback):
+    def __init__(self, checkpoint_interval):
+        super().__init__()
+        self.checkpoint_interval = checkpoint_interval
+
+    def on_epoch_end(self, trainer, pl_module):
+        epoch = trainer.current_epoch
+        if epoch % self.checkpoint_interval == 0:
+            # Save checkpoint
+            trainer.save_checkpoint(f"epoch_{epoch}_checkpoint.ckpt")
+
 
 def train_func(search_config):
     """
@@ -55,11 +66,16 @@ def train_func(search_config):
     module = proteo_train.Proteo(config, in_channels, out_channels, avg_node_degree)
 
     pl.seed_everything(config.seed)
+
+    # Set checkpoint interval (e.g., every 10 epochs)
+    checkpoint_interval = 25
+    checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
+
     trainer = pl.Trainer(
         devices='auto',
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
-        callbacks=[ray_lightning.RayTrainReportCallback()],
+        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback],
         plugins=[
             ray_lightning.RayLightningEnvironment()
         ],  # How ray interacts with pytorch lightning
@@ -116,7 +132,7 @@ def search_hyperparameters():
         'hidden_channels': tune.sample_from(hidden_channels),
         'heads': tune.sample_from(heads),
         'lr': tune.loguniform(1e-4, 1e-1),
-        'batch_size': tune.choice([6, 12, 32, 64, 80]),
+        'batch_size': tune.choice([6, 8, 12, 16, 20]),
     }
 
     def trial_str_creator(trial):
@@ -138,7 +154,7 @@ def search_hyperparameters():
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
-            num_samples=30,  # Repeats grid search options n times through
+            num_samples=100,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
             scheduler=scheduler,
         ),

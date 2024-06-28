@@ -2,7 +2,7 @@
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
 dataset_name: "ftd"
-root_dir: "/home/nmiolane/code/proteo/proteo"
+root_dir: "/home/lcornelis/code/proteo/proteo"
 adj_thresh: 0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -58,7 +58,7 @@ early_stop: true
 
 # Training Configuration
 epochs: 100
-batch_size: 12
+#batch_size: 12
 in_drop_rate: 0.0
 drop_rate: 0.0
 drop_position: lin2
