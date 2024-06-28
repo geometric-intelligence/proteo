@@ -2,7 +2,7 @@
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
 dataset_name: "ftd"
-root_dir: "/home/lcornelis/code/proteo/proteo"
+root_dir: "/home/nmiolane/code/proteo/proteo"
 adj_thresh: 0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -39,10 +39,7 @@ gat-v4:
 
 
 gat:
-  #hidden_channels: 20
-  num_layers: 4
-  #heads: 1
-  # Optimizer Configuration
+  v2: true
   optimizer: Adam
   lr: 0.001
   l1_lambda: 0.0005
@@ -57,8 +54,7 @@ gat:
 early_stop: true
 
 # Training Configuration
-epochs: 100
-#batch_size: 12
+epochs: 50
 in_drop_rate: 0.0
 drop_rate: 0.0
 drop_position: lin2
@@ -71,15 +67,12 @@ sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
 
-# Evaluation Configuration
-train_eval_period: 20
-eval_metric: mae
 
 # WandB Configuration
 project_name: "proteo"
 wandb_api_key_path: "wandb_api_key.txt"
 wandb_offline: false
-log_every_n_steps: 1
+log_every_n_steps: 5
 
 # GPU Configuration
 device: [0, 1, 2, 3, 4, 5, 6, 7]
@@ -97,4 +90,20 @@ pin_memory: true
 result_folder: os.path.join(ROOT_DIR, 'exp', 'results')
 untrained: false
 paraid: 0
+
+# Hyperparameter search configuration
+# Number of trials = len(model_grid_search) * num_samples
+cpu_per_worker: 32
+gpu_per_worker: 4
+lr_min: 0.0001
+lr_max: 0.1
+model_grid_search: ['gat']   #['gat', 'gat-v4']
+batch_size_choice: [1, 4]
+num_layers_choice: [2, 3, 4] # only for gat, gat-v4 has a fixed number of layers
+gat_hidden_channels: [64, 128, 256]
+gat_heads: [1, 2, 4]
+num_samples: 30
+grace_period: 2
+reduction_factor: 8
+num_to_keep: 5  # number of checkpoints to keep. higher values means checkpoints are overwritten less often, gaining speed
 

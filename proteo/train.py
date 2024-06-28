@@ -64,12 +64,12 @@ class Proteo(pl.LightningModule):
                 num_layers=self.model_parameters.num_layers,
                 out_channels=out_channels,
                 heads=self.model_parameters.heads,
+                v2=self.model_parameters.v2,
             )
         elif config.model == 'gat-v4':
-            model = GATv4(
+            self.model = GATv4(
                 opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
             )
-            self.model = model
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -84,16 +84,13 @@ class Proteo(pl.LightningModule):
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
         if self.config.model == 'gat':
-            pred = self.model(
-                batch.x, batch.edge_index, batch=batch.batch
-            )  # This returns a pred value for each node in the big graph
-            return global_mean_pool(
-                pred, batch.batch
-            )  # Aggregate node features into graph-level features
-        elif self.config.model == "gat-v4":
+            # This returns a pred value for each node in the big graph
+            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            # Aggregate node features into graph-level features
+            return global_mean_pool(pred, batch.batch)
+        if self.config.model == "gat-v4":
             return self.model(batch.x, batch.edge_index, batch)
-        else:
-            raise NotImplementedError('Model not implemented yet')
+        raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
         """Defines a single step in the training loop. It specifies how a batch of data is processed during training, including making predictions, calculating the loss, and logging metrics.
@@ -107,11 +104,15 @@ class Proteo(pl.LightningModule):
         """
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
         pred = self.forward(batch)
+        if torch.isnan(pred).any():
+            # Check if there is nans in the input data
+            print("train: pred has nan")
+            print(f"?batch.x has nan: {torch.isnan(batch.x).any()}")
+            raise ValueError
         targets = batch.y.view(pred.shape)
 
-        loss_fn = torch.nn.MSELoss(
-            reduction="mean"
-        )  # reduction = "mean" averages over all samples in the batch, providing a single average per batch.
+        # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
+        loss_fn = torch.nn.MSELoss(reduction="mean")
         loss = loss_fn(pred, targets)
 
         # Calculate L1 regularization term to encourage sparsity
@@ -144,11 +145,9 @@ class Proteo(pl.LightningModule):
         """
         pred = self.forward(batch)
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
-
         targets = batch.y.view(pred.shape)
-        loss_fn = torch.nn.MSELoss(
-            reduction="mean"
-        )  # self.LOSS_MAP[self.config.task_type], reduction = "mean" averages over all samples in the batch, providing a single average per batch.
+        # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
+        loss_fn = torch.nn.MSELoss(reduction="mean")
         loss = loss_fn(pred, targets)
         # --- LOGGING ---
         self.log(
@@ -267,7 +266,7 @@ def main():
     # Configure WandB Logger
     logger = None
     wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-    if wandb_api_key_path and config.wandb_offline is False:
+    if wandb_api_key_path and not config.wandb_offline:
         with open(config.wandb_api_key_path, 'r') as f:
             wandb_api_key = f.read().strip()
         os.environ['WANDB_API_KEY'] = wandb_api_key
@@ -321,7 +320,7 @@ def main():
             wandb.log(
                 {
                     "nfl_hist": wandb.Image(
-                        "/home/lcornelis/code/proteo/proteo/datasets/data/ftd/processed/histogram.svg"
+                        os.path.join(config.root_dir, "datasets/data/ftd/processed/histogram.svg")
                     )
                 }
             )

@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pytorch_lightning as pl
+import torch
 import train as proteo_train
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from ray import tune
@@ -15,6 +16,7 @@ from torch_geometric.loader import DataLoader
 from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
 MAX_SEED = 65535
+
 
 class CustomCheckpointCallback(pl.Callback):
     def __init__(self, checkpoint_interval):
@@ -38,6 +40,8 @@ def train_func(search_config):
     Returns:
         None
     """
+    # This is used to improve performance
+    torch.set_float32_matmul_precision('medium')
     config = read_config_from_file(CONFIG_FILE)
     # TODO: Hacky - is there a better way?
     # Update model specific parameters
@@ -45,6 +49,7 @@ def train_func(search_config):
     updated_parameters = {
         'hidden_channels': search_config['hidden_channels'],
         'heads': search_config['heads'],
+        'num_layers': search_config['num_layers'],
         'lr': search_config['lr'],
     }
     config[model_name].update(updated_parameters)
@@ -52,9 +57,12 @@ def train_func(search_config):
     for key in updated_parameters:
         search_config.pop(key)
     config.update(search_config)
-    setup_wandb(
-        search_config, api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path)
-    )
+    if not config.wandb_offline:
+        setup_wandb(
+            search_config,
+            project=config.project_name,
+            api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
+        )
 
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
@@ -87,15 +95,23 @@ def train_func(search_config):
 
 
 def search_hyperparameters():
+    config = read_config_from_file(CONFIG_FILE)
     # training should use one worker, one GPU, and 8 CPUs per worker.
     scaling_config = ScalingConfig(
-        num_workers=1, use_gpu=True, resources_per_worker={'CPU': 8, 'GPU': 1}
+        num_workers=1,
+        use_gpu=True,
+        resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker},
     )
 
     # keeping only the best checkpoint based on minimum validation loss
     run_config = RunConfig(
+        callbacks=[
+            WandbLoggerCallback(
+                project=config.project_name,
+            )
+        ],
         checkpoint_config=CheckpointConfig(
-            num_to_keep=1,
+            num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',
         ),
@@ -111,41 +127,44 @@ def search_hyperparameters():
     def hidden_channels(spec):
         # Note that hidden channels must be divisible by heads for gat
         hidden_channels_map = {
-            'gat': [4, 8, 12, 20],
+            'gat': config.gat_hidden_channels,
             'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]],
         }
-        config = spec['train_loop_config']
-        model_params = hidden_channels_map[config['model']]
+        model = spec['train_loop_config']['model']
+        model_params = hidden_channels_map[model]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
 
     def heads(spec):
-        heads_map = {'gat': [1, 2, 4], 'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]]}
-        config = spec['train_loop_config']
-        model_params = heads_map[config['model']]
+        heads_map = {
+            'gat': config.gat_heads,
+            'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]],
+        }
+        model = spec['train_loop_config']['model']
+        model_params = heads_map[model]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
 
     search_space = {
-        'model': tune.grid_search(['gat', 'gat-v4']),
+        'model': tune.grid_search(config.model_grid_search),
         'seed': tune.randint(0, MAX_SEED),
         'hidden_channels': tune.sample_from(hidden_channels),
+        'num_layers': tune.choice(config.num_layers_choice),
         'heads': tune.sample_from(heads),
-        'lr': tune.loguniform(1e-4, 1e-1),
-        'batch_size': tune.choice([6, 8, 12, 16, 20]),
+        'lr': tune.loguniform(config.lr_min, config.lr_max),
+        'batch_size': tune.choice(config.batch_size_choice),
     }
 
     def trial_str_creator(trial):
         config = trial.config['train_loop_config']
         seed = config['seed']
-        return f"model={config['model']},heads={config['heads']},seed={seed}"
+        return f"model={config['model']},num_layers={config['num_layers']},seed={seed}"
 
-    config = read_config_from_file(CONFIG_FILE)
     scheduler = ASHAScheduler(
         time_attr="training_iteration",
         max_t=config['epochs'],
-        grace_period=2,
-        reduction_factor=4,
+        grace_period=config.grace_period,
+        reduction_factor=config.reduction_factor,
     )
 
     tuner = tune.Tuner(
@@ -154,7 +173,7 @@ def search_hyperparameters():
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
-            num_samples=100,  # Repeats grid search options n times through
+            num_samples=config.num_samples,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
             scheduler=scheduler,
         ),
