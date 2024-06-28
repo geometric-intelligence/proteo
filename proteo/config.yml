@@ -54,7 +54,7 @@ gat:
 early_stop: true
 
 # Training Configuration
-epochs: 100
+epochs: 50
 in_drop_rate: 0.0
 drop_rate: 0.0
 drop_position: lin2
@@ -67,15 +67,12 @@ sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
 
-# Evaluation Configuration
-train_eval_period: 20
-eval_metric: mae
 
 # WandB Configuration
 project_name: "proteo"
 wandb_api_key_path: "wandb_api_key.txt"
 wandb_offline: false
-log_every_n_steps: 1
+log_every_n_steps: 5
 
 # GPU Configuration
 device: [0, 1, 2, 3, 4, 5, 6, 7]
@@ -96,12 +93,17 @@ paraid: 0
 
 # Hyperparameter search configuration
 # Number of trials = len(model_grid_search) * num_samples
+cpu_per_worker: 32
+gpu_per_worker: 4
 lr_min: 0.0001
 lr_max: 0.1
 model_grid_search: ['gat']   #['gat', 'gat-v4']
-batch_size_choice: [1, 4, 8]
-num_layers_choice: [2, 3, 6] # only for gat, gat-v4 has a fixed number of layers
-num_samples: 1
+batch_size_choice: [1, 4]
+num_layers_choice: [2, 3, 4] # only for gat, gat-v4 has a fixed number of layers
+gat_hidden_channels: [64, 128, 256]
+gat_heads: [1, 2, 4]
+num_samples: 30
 grace_period: 2
 reduction_factor: 8
+num_to_keep: 5  # number of checkpoints to keep. higher values means checkpoints are overwritten less often, gaining speed
 

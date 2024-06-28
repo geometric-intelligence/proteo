@@ -57,9 +57,12 @@ def train_func(search_config):
     for key in updated_parameters:
         search_config.pop(key)
     config.update(search_config)
-    setup_wandb(
-        search_config, api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path)
-    )
+    if not config.wandb_offline:
+        setup_wandb(
+            search_config,
+            project=config.project_name,
+            api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
+        )
 
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
@@ -92,15 +95,23 @@ def train_func(search_config):
 
 
 def search_hyperparameters():
+    config = read_config_from_file(CONFIG_FILE)
     # training should use one worker, one GPU, and 8 CPUs per worker.
     scaling_config = ScalingConfig(
-        num_workers=1, use_gpu=True, resources_per_worker={'CPU': 8, 'GPU': 1}
+        num_workers=1,
+        use_gpu=True,
+        resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker},
     )
 
     # keeping only the best checkpoint based on minimum validation loss
     run_config = RunConfig(
+        callbacks=[
+            WandbLoggerCallback(
+                project=config.project_name,
+            )
+        ],
         checkpoint_config=CheckpointConfig(
-            num_to_keep=5,
+            num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',
         ),
@@ -116,25 +127,23 @@ def search_hyperparameters():
     def hidden_channels(spec):
         # Note that hidden channels must be divisible by heads for gat
         hidden_channels_map = {
-            'gat': [64, 128, 256],
+            'gat': config.gat_hidden_channels,
             'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]],
         }
-        config = spec['train_loop_config']
-        model_params = hidden_channels_map[config['model']]
+        model = spec['train_loop_config']['model']
+        model_params = hidden_channels_map[model]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
 
     def heads(spec):
         heads_map = {
-            'gat': [1, 2, 4],
+            'gat': config.gat_heads,
             'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]],
         }
-        config = spec['train_loop_config']
-        model_params = heads_map[config['model']]
+        model = spec['train_loop_config']['model']
+        model_params = heads_map[model]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
-
-    config = read_config_from_file(CONFIG_FILE)
 
     search_space = {
         'model': tune.grid_search(config.model_grid_search),
