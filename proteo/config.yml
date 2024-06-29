@@ -48,10 +48,10 @@ gat-v4:
   lr_scheduler: LambdaLR
 
 gat:
-  heads: 2
-  hidden_channels: 32  # needs to be divisible by heads
+  heads: 4
+  hidden_channels: 256  # needs to be divisible by heads
   num_layers: 2
-  dropout: 0.1
+  dropout: 0.2
   act: tanh
   v2: true
   # Training gat
@@ -97,15 +97,17 @@ cpu_per_worker: 16
 gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat-v4'] #, 'gat-v4']   #['gat', 'gat-v4']
-batch_size_choice: [1, 4] #, 4]
+model_grid_search: ['gat-v4', 'gat', 'gcn'] #, 'gat-v4']   #['gat', 'gat-v4']
+batch_size_choice: [1, 4, 16] #, 4]
+scheduler_choice: ['LambdaLR', 'ReduceLROnPlateau']
+
 # GAT
 gat_num_layers: [2, 3, 4]
-gat_hidden_channels: [12, 20]
+gat_hidden_channels: [8, 32, 128, 256]
 gat_heads: [1, 2, 4]
 # GAT-v4
-gat_v4_hidden_channels: [[8, 16, 12], [8, 8, 12], [10, 7, 12]]
-gat_v4_heads: [[2, 3, 4], [2, 2, 3]]
+gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
+gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
 num_samples: 30
 grace_period: 2
 reduction_factor: 8

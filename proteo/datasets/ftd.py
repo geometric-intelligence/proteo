@@ -58,16 +58,13 @@ class FTDDataset(InMemoryDataset):
         self.has_plasma_col_id = 9
         self.plasma_protein_col_range = (10, 7299)  # 7299
         self.nfl_col_id = 8
-        self.suffix = f'adj_thresh_{config.adj_thresh}'
+        self.adj_str = f'adj_thresh_{config.adj_thresh}'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
 
-        path = os.path.join(self.processed_dir, f'{self.name}_{self.suffix}_{split}.pt')
-
-        # Note: It seems that this is needed to load the data
-        # However, it is taking forever and is the reason why multi GPUs is failing.
+        path = os.path.join(self.processed_dir, f'{self.name}_{self.adj_str}_{split}.pt')
         self.load(path)
 
     @property
@@ -96,9 +93,13 @@ class FTDDataset(InMemoryDataset):
         --------
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
-        return [f"{self.name}_{self.suffix}_train.pt", f"{self.name}_{self.suffix}_test.pt"]
+        return [f"{self.name}_{self.adj_str}_train.pt", f"{self.name}_{self.adj_str}_test.pt"]
 
     def create_graph_data(self, feature, label, adj_matrix):
+        """Create Data object for each graph.
+
+        Compute attributes x, edge_index, and y for each graph.
+        """
         x = feature  # protein concentrations: what is on the nodes
         adj_tensor = torch.tensor(adj_matrix)
         # Find the indices where the matrix has non-zero elements
