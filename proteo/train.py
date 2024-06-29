@@ -191,8 +191,6 @@ class Proteo(pl.LightningModule):
         self.train_preds.clear()  # free memory
         self.train_targets.clear()
 
-        
-
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
             val_preds = torch.vstack(self.val_preds).detach().cpu()
