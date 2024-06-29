@@ -1,20 +1,19 @@
+import gc
 import math
 import os
-import gc
-from datetime import date
+from datetime import datetime
 
+import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import rich_gi
 import torch
-import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, global_mean_pool
-import matplotlib.pyplot as plt
 
 from proteo.datasets.ftd import FTDDataset
 
@@ -76,7 +75,6 @@ class Proteo(pl.LightningModule):
             )
         else:
             raise NotImplementedError('Model not implemented yet')
-        
 
     def forward(self, batch):
         """Performs one forward pass of the model on the input batch.
@@ -129,12 +127,13 @@ class Proteo(pl.LightningModule):
         self.log(
             'train_loss',
             loss,
-            on_step=True,
+            on_step=False,
             on_epoch=True,
             sync_dist=True,
+            prog_bar=True,
             batch_size=self.config.batch_size,
         )
-        self.log('train_RMSE', math.sqrt(loss), on_step=True, on_epoch=True, sync_dist=True)
+        self.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch):
@@ -160,17 +159,13 @@ class Proteo(pl.LightningModule):
         self.log(
             'val_loss',
             loss,
-            batch_size=self.config.batch_size,
             on_step=False,
             on_epoch=True,
             sync_dist=True,
             prog_bar=True,
+            batch_size=self.config.batch_size,
         )
-        self.log('val_RMSE', math.sqrt(loss), on_step=True, on_epoch=True, sync_dist=True)
-
-        # Log the current learning rate
-        current_lr = self.optimizers().param_groups[0]['lr']
-        self.log('learning_rate', current_lr, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def configure_optimizers(self):
@@ -186,22 +181,16 @@ class Proteo(pl.LightningModule):
             raise NotImplementedError('Optimizer not implemented yet')
         mode = self.config.mode
 
-        scheduler_type = self.model_parameters.lr_scheduler
-        scheduler_params = self.model_parameters.lr_scheduler_params
-
-        if scheduler_type == 'LambdaLR':
+        lr_scheduler = self.model_parameters.lr_scheduler
+        if lr_scheduler == 'LambdaLR':
 
             def lambda_rule(epoch):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
 
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-
-        elif scheduler_type == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode=mode, **scheduler_params
-            )
-
+        elif lr_scheduler == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=mode)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
@@ -217,7 +206,7 @@ def avg_node_degree(dataset):
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
     if config.dataset_name == "ftd":
-        root = os.path.join(config.root_dir, "data", "ftd")
+        root = os.path.join(config.root_dir, "proteo", "data", "ftd")
         test_dataset = FTDDataset(root, "test", config)
         train_dataset = FTDDataset(root, "train", config)
     return train_dataset, test_dataset
@@ -248,6 +237,11 @@ def main():
     gc.collect()
     torch.set_float32_matmul_precision('high')
     config = read_config_from_file(CONFIG_FILE)
+    pl.seed_everything(config.seed)
+
+    save_dir = os.path.join(config.root_dir, "outputs")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
     # this is where we pick the CUDA device(s) to use
     print(f"Using device(s) {config.device}")
@@ -257,48 +251,41 @@ def main():
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
 
-    pl.seed_everything(config.seed)
-
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
-    print("Loaders created")
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
     out_channels = train_dataset.label_dim  # 1 dim of result
-
     avg_node_deg = avg_node_degree(test_dataset)
 
-    logger = None
-    if not config.wandb_offline:
-        wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-        with open(wandb_api_key_path, 'r') as f:
-            wandb_api_key = f.read().strip()
-        wandb.login(key=wandb_api_key)
-        logger = pl_loggers.WandbLogger(config=config, project=config.project, log_model=False)
+    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+    with open(wandb_api_key_path, 'r') as f:
+        wandb_api_key = f.read().strip()
+    os.environ['WANDB_API_KEY'] = wandb_api_key
+    logger = pl_loggers.WandbLogger(
+        config=config,
+        project=config.project,
+        log_model="all",
+        save_dir=save_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+        offline=config.wandb_offline,
+    )
 
     logger.log_image(
         key="output_hist",
         images=[
-            os.path.join(config.root_dir, "data/ftd/processed/histogram.jpg"),
-            os.path.join(config.root_dir, "data/ftd/processed/histogram.svg"),
-            os.path.join(config.root_dir, "data/ftd/processed/adjacency.jpg"),
+            os.path.join(config.root_dir, "proteo/data/ftd/processed/histogram.jpg"),
+            os.path.join(config.root_dir, "proteo/data/ftd/processed/adjacency.jpg"),
         ],
     )
 
-    trainer_callbacks = [
-        pl_callbacks.ModelCheckpoint(
-            monitor='val_loss',
-            dirpath=config.checkpoint_dir,
-            filename=config.checkpoint_name_pattern
-            + "-"
-            + config.model
-            + "-"
-            + date.today().strftime('%d-%m-%Y-%h-%M')
-            + '{epoch}',
-            mode='min',
-        ),
-        rich_gi.progress_bar(),
-    ]
+    checkpoint_callback = pl_callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        dirpath=os.path.join(save_dir, 'checkpoints'),
+        filename=config.model + '-{epoch}' + '-{val_loss:.2f}',
+        mode='min',
+    )
+    learning_rate_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
+    trainer_callbacks = [learning_rate_callback, checkpoint_callback, rich_gi.progress_bar()]
 
     trainer = pl.Trainer(
         enable_progress_bar=config.use_progress_bar,
@@ -311,19 +298,29 @@ def main():
         num_nodes=config.nodes_count,
         strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
-        log_every_n_steps=config.log_every_n_steps,  # Controls the frequency of logging within training, by specifying how many training steps should occur between each logging event.
+        log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,
         num_sanity_val_steps=1,
     )
 
+    # Put wandb's run id into checkpoints' filenames
+    if trainer.strategy.cluster_environment.global_rank() == 0:
+        checkpoint_callback.filename = (
+            "run-"
+            + datetime.now().strftime('%Y%m%d_%H%Mxx')
+            + "-"
+            + str(logger.experiment.id)
+            + "-"
+            + checkpoint_callback.filename
+        )
+        print(f"Outputs saved into:\n logger.save_dir={logger.save_dir}")
+        print(
+            "Checkpoints saved into:\n "
+            f"{checkpoint_callback.dirpath}/{checkpoint_callback.filename}"
+        )
+
     module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)
-    # Plot the histogram for validation predictions
-    plt.hist(module.val_predictions, bins=30, edgecolor='k')
-    plt.title('Histogram of Validation Predicted Values')
-    plt.xlabel('Predicted Value')
-    plt.ylabel('Frequency')
-    plt.show()
 
 
 if __name__ == "__main__":
