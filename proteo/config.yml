@@ -5,6 +5,13 @@ ray_tmp_dir: "/home/nmiolane/code/proteo/outputs/ray"  # "/tmp"
 wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
 output_dir: "outputs"
+
+# Data: path are relative to data_dir
+csv_path: "ALLFTD_dataset_for_nina_louisa.csv"
+processed_dir: "ftd/processed"
+#adj_path: "ftd/processed/adjacency_matrix.csv"
+
+# Output: path are relative to output_dir
 checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
 
@@ -18,14 +25,14 @@ log_every_n_steps: 5
 
 # Dataset
 dataset_name: "ftd"
-adj_thresh: 0.08
+adj_thresh: 0.2  #0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task_type: mse_regression
 
 # Model
-model: gat-v4
+model: gat
 
 gat-v4:
   heads: [4, 3, 4]
@@ -89,12 +96,12 @@ pin_memory: true
 
 # Hyperparameter search
 # Number of trials = len(model_grid_search) * num_samples
-cpu_per_worker: 32
-gpu_per_worker: 4
+cpu_per_worker: 16
+gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
 lr_min: 0.0001
 lr_max: 0.1
 model_grid_search: ['gat-v4'] #, 'gat-v4']   #['gat', 'gat-v4']
-batch_size_choice: [4] #, 4]
+batch_size_choice: [1, 4] #, 4]
 # GAT
 gat_num_layers: [2, 3, 4]
 gat_hidden_channels: [12, 20]
@@ -102,7 +109,7 @@ gat_heads: [1, 2, 4]
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16, 12], [8, 8, 12], [10, 7, 12]]
 gat_v4_heads: [[2, 3, 4], [2, 2, 3]]
-num_samples: 1
+num_samples: 30
 grace_period: 2
 reduction_factor: 8
 num_to_keep: 5  # number of checkpoints to keep. 

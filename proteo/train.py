@@ -13,7 +13,7 @@ Notes
 When we do hyperparameter search in main.py,
 Ray[Tune] takes over the training process, 
 and thus we use instead:
-- Ray's WandbLoggerCallback,
+- wandb.log, in our CustomWandbLoggerCallback,
 - Ray's CheckpointConfig.
 
 Here, pl_module.logger is Ray's dedicated logger.
@@ -26,7 +26,6 @@ from datetime import datetime
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
-import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
@@ -118,12 +117,12 @@ class Proteo(pl.LightningModule):
             return self.model(batch.x, batch.edge_index, batch)
         if self.config.model == 'gat':
             # This returns a pred value for each node in the big graph
-            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
             # Aggregate node features into graph-level features
-            return global_mean_pool(pred, batch.batch)
+            return global_mean_pool(pred_nodes, batch.batch)
         if self.config.model == 'gcn':
-            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
-            return global_mean_pool(pred, batch.batch)
+            pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            return global_mean_pool(pred_nodes, batch.batch)
         raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):

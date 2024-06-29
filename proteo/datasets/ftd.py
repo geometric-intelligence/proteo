@@ -9,12 +9,6 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
 
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-ADJACENCY_FOLDER = os.path.join(ROOT_DIR, "data", "ftd", "processed")
-ADJACENCY_PATH = os.path.join(ADJACENCY_FOLDER, "adjacency_matrix.csv")
-CSV_PATH = os.path.join(ROOT_DIR, "data", "ALLFTD_dataset_for_nina_louisa.csv")
-
 
 class FTDDataset(InMemoryDataset):
     """This is dataset used in FTD.
@@ -111,8 +105,8 @@ class FTDDataset(InMemoryDataset):
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
 
     def load_csv_data(self, config):
-        print("Loading data from:", CSV_PATH)
-        csv_data = np.array(pd.read_csv(CSV_PATH))
+        print("Loading data from:", config.csv_path)
+        csv_data = np.array(pd.read_csv(config.csv_path))
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
         has_plasma = has_plasma == 1  # Converting from indices to boolean
         nfl = csv_data[has_plasma, self.nfl_col_id].astype(float)
@@ -124,7 +118,8 @@ class FTDDataset(InMemoryDataset):
         )  # Extract and convert the plasma_protein values for rows where has_plasma is True and nfl is not NaN.
         nfl = nfl[nfl_mask]  # Remove NaN values from nfl
         nfl = log_transform(nfl)
-        plot_histogram(pd.DataFrame(nfl))
+        hist_path = os.path.join(config.processed_dir, 'histogram.jpg')
+        plot_histogram(pd.DataFrame(nfl), hist_path)
 
         features = plasma_protein
         labels = nfl
@@ -139,9 +134,10 @@ class FTDDataset(InMemoryDataset):
         print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
 
-        if not os.path.exists(ADJACENCY_PATH):
-            calculate_adjacency_matrix(config, plasma_protein)
-        adj_matrix = np.array(pd.read_csv(ADJACENCY_PATH, header=None)).astype(float)
+        adj_path = os.path.join(config.processed_dir, f'adjacency_{config.adj_thresh}.csv')
+        if not os.path.exists(adj_path):
+            calculate_adjacency_matrix(config, plasma_protein, adj_path)
+        adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
         adj_matrix = torch.FloatTensor(
             np.where(adj_matrix > config.adj_thresh, 1, 0)
         )  # thresholding!
@@ -152,7 +148,7 @@ class FTDDataset(InMemoryDataset):
         plt.imshow(adj_matrix, cmap=cmap)
         plt.colorbar(ticks=[0, 1], label='Adjacency Value')
         plt.title("Visualization of Adjacency Matrix")
-        plt.savefig(os.path.join(ADJACENCY_FOLDER, 'adjacency.jpg'))
+        plt.savefig(os.path.join(config.processed_dir, f'adjacency_{config.adj_thresh}.jpg'))
         plt.close()
 
         print("Adjacency matrix:", adj_matrix.shape)
@@ -161,7 +157,7 @@ class FTDDataset(InMemoryDataset):
         return train_features, train_labels, test_features, test_labels, adj_matrix
 
 
-def calculate_adjacency_matrix(config, plasma_protein):
+def calculate_adjacency_matrix(config, plasma_protein, adj_path):
     # WGCNA parameters
     print(plasma_protein.shape)  # rows = samples ; cols = proteins,
 
@@ -178,10 +174,10 @@ def calculate_adjacency_matrix(config, plasma_protein):
     adjacency_df = pd.DataFrame(adjacency)
     print(adjacency_df.shape)
 
-    # if ADJACENCY_FOLDER doesn't exist, create it:
-    if not os.path.exists(ADJACENCY_FOLDER):
-        os.makedirs(ADJACENCY_FOLDER)
-    adjacency_df.to_csv(ADJACENCY_PATH, header=None, index=False)
+    # if config.processed_dir doesn't exist, create it:
+    if not os.path.exists(config.processed_dir):
+        os.makedirs(config.processed_dir)
+    adjacency_df.to_csv(adj_path, header=None, index=False)
     #    similarity_matrix = np.array(
     #     pd.read_csv(),
     # ).astype(float)
@@ -189,12 +185,12 @@ def calculate_adjacency_matrix(config, plasma_protein):
     # adj_matrix = adj_matrix[80:, 80:]
 
 
-def plot_histogram(data):
+def plot_histogram(data, hist_path):
     plt.hist(data, bins=30, alpha=0.5)
     plt.xlabel('NFL3_MEAN')
     plt.ylabel('Frequency')
     plt.title('Histogram of NFL3_MEAN')
-    histogram_path = os.path.join(ADJACENCY_FOLDER, 'histogram.jpg')
+    histogram_path = os.path.join(hist_path)
     plt.savefig(histogram_path, format='jpg')
 
 
