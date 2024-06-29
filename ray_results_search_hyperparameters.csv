@@ -1,1 +1,2 @@
-""
+,val_loss,val_RMSE,train_loss,train_RMSE,epoch,step,timestamp,checkpoint_dir_name,should_checkpoint,done,training_iteration,trial_id,date,time_this_iter_s,time_total_s,pid,hostname,node_ip,time_since_restore,iterations_since_restore,config/train_loop_config/model,config/train_loop_config/seed,config/train_loop_config/hidden_channels,config/train_loop_config/num_layers,config/train_loop_config/heads,config/train_loop_config/lr,config/train_loop_config/batch_size,logdir
+0,0.8255643248558044,0.707389771938324,1.0772967338562012,0.8196719288825989,5,2112,1719682224,checkpoint_000005,True,True,6,0ab6c_00000,2024-06-29_10-30-24,12.665291786193848,91.15221834182739,2929855,frank,128.111.185.22,91.15221834182739,6,gat,41535,12,2,2,0.01908356685100211,1,0ab6c_00000

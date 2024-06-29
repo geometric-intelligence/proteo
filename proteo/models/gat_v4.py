@@ -8,7 +8,6 @@ from torch_geometric.utils import to_dense_batch
 
 
 class GATv4(nn.Module):
-
     FC_ACT_MAP = {
         "relu": nn.ReLU,
         "tanh": nn.Tanh,
@@ -16,6 +15,7 @@ class GATv4(nn.Module):
         "leaky_relu": nn.LeakyReLU,
         "elu": nn.ELU,
     }
+
     def __init__(
         self,
         in_channels,

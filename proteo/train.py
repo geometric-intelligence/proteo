@@ -59,7 +59,7 @@ class Proteo(pl.LightningModule):
                 use_layer_norm=self.model_parameters.use_layer_norm,
                 fc_dim=self.model_parameters.fc_dim,
                 fc_dropout=self.model_parameters.fc_dropout,
-                fc_act=self.model_parameters.fc_act
+                fc_act=self.model_parameters.fc_act,
             )
         elif config.model == 'gat':
             self.model = GAT(
@@ -128,8 +128,8 @@ class Proteo(pl.LightningModule):
             raise ValueError
         target = batch.y.view(pred.shape)
         # Store predictions
-        self.train_preds.append(pred)
-        self.train_targets.append(target)
+        # self.train_preds.append(pred)
+        # self.train_targets.append(target)
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -156,7 +156,7 @@ class Proteo(pl.LightningModule):
 
     def validation_step(self, batch):
         """Run single step in the validation loop. It specifies how a batch of data is processed during validation, including making predictions, calculating the loss, and logging metrics.
-        
+
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -169,8 +169,8 @@ class Proteo(pl.LightningModule):
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
         target = batch.y.view(pred.shape)
         # Store predictions
-        self.val_preds.append(pred)
-        self.val_targets.append(target)
+        # self.val_preds.append(pred)
+        # self.val_targets.append(target)
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -189,32 +189,34 @@ class Proteo(pl.LightningModule):
         self.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
-    def on_train_epoch_end(self):
-        train_preds = torch.vstack(self.train_preds).detach().cpu()
-        train_targets = torch.vstack(self.train_targets).detach().cpu()
-        params = torch.concat([p.flatten() for p in self.parameters()]).detach().cpu()
-        self.logger.experiment.log(
-            {
-                "train_preds": wandb.Histogram(train_preds),
-                "train_targets": wandb.Histogram(train_targets),
-                "parameters": wandb.Histogram(params),
-            }
-        )
-        self.train_preds.clear()  # free memory
-        self.train_targets.clear()
+    # def on_train_epoch_end(self):
+    #     train_preds = torch.vstack(self.train_preds).detach().cpu()
+    #     train_targets = torch.vstack(self.train_targets).detach().cpu()
+    #     params = torch.concat([p.flatten() for p in self.parameters()]).detach().cpu()
+    #     print(f"self.logger.experiment.__dict__: {self.logger.experiment.__dict__}")
+    #     self.logger.experiment.log(
+    #         {
+    #             "train_preds": wandb.Histogram(train_preds),
+    #             "train_targets": wandb.Histogram(train_targets),
+    #             "parameters": wandb.Histogram(params),
+    #         }
+    #     )
+    #     self.train_preds.clear()  # free memory
+    #     self.train_targets.clear()
 
-    def on_validation_epoch_end(self):
-        if not self.trainer.sanity_checking:
-            val_preds = torch.vstack(self.val_preds).detach().cpu()
-            val_targets = torch.vstack(self.val_targets).detach().cpu()
-            self.logger.experiment.log(
-                {
-                    "val_preds": wandb.Histogram(val_preds),
-                    "val_targets": wandb.Histogram(val_targets),
-                }
-            )
-            self.val_preds.clear()  # free memory
-            self.val_targets.clear()
+    # def on_validation_epoch_end(self):
+    #     if not self.trainer.sanity_checking:
+    #         val_preds = torch.vstack(self.val_preds).detach().cpu()
+    #         val_targets = torch.vstack(self.val_targets).detach().cpu()
+    #         print(f"self.logger.experiment.__dict__: {self.logger.experiment.__dict__}")
+    #         self.logger.experiment.log(
+    #             {
+    #                 "val_preds": wandb.Histogram(val_preds),
+    #                 "val_targets": wandb.Histogram(val_targets),
+    #             }
+    #         )
+    #         self.val_preds.clear()  # free memory
+    #         self.val_targets.clear()
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'

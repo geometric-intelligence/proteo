@@ -1,19 +1,30 @@
+"""Main script to run hyper-parameter search.
+
+Ray[Tune] takes over the training process, 
+and thus we use:
+- Ray's WandbLoggerCallback,
+- Ray's CheckpointConfig.
+
+This differs from training one single neural network, 
+which only requires Lightning,
+and thus we use:
+- Lightning's WandbLogger logger,
+- Lightning's ModelCheckpoint callback
+"""
+
 import os
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import train as proteo_train
-from config_utils import CONFIG_FILE, Config, read_config_from_file
+from config_utils import CONFIG_FILE, read_config_from_file
 from ray import tune
-from ray.air.integrations.wandb import WandbLoggerCallback, setup_wandb
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
-from torch_geometric.loader import DataLoader
-
-from proteo.datasets.ftd import ROOT_DIR, FTDDataset
 
 MAX_SEED = 65535
 
@@ -59,12 +70,6 @@ def train_func(search_config):
     for key in updated_parameters:
         search_config.pop(key)
     config.update(search_config)
-    if not config.wandb_offline:
-        setup_wandb(
-            search_config,
-            project=config.project_name,
-            api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-        )
 
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
@@ -98,6 +103,10 @@ def train_func(search_config):
 
 def search_hyperparameters():
     config = read_config_from_file(CONFIG_FILE)
+    output_dir = os.path.join(config.root_dir, config.output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     # training should use one worker, one GPU, and 8 CPUs per worker.
     scaling_config = ScalingConfig(
         num_workers=1,
@@ -106,11 +115,15 @@ def search_hyperparameters():
     )
 
     # keeping only the best checkpoint based on minimum validation loss
+    offline = "offline" if config.wandb_offline else "online"
     run_config = RunConfig(
+        storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         callbacks=[
             WandbLoggerCallback(
-                project=config.project_name,
+                project=config.project,
                 api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
+                dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+                mode="offline" if config.wandb_offline else "online",
             )
         ],
         checkpoint_config=CheckpointConfig(
@@ -131,7 +144,7 @@ def search_hyperparameters():
         # Note that hidden channels must be divisible by heads for gat
         hidden_channels_map = {
             'gat': config.gat_hidden_channels,
-            'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]],
+            'gat-v4': config.gat_v4_hidden_channels,
         }
         model = spec['train_loop_config']['model']
         model_params = hidden_channels_map[model]
@@ -141,7 +154,7 @@ def search_hyperparameters():
     def heads(spec):
         heads_map = {
             'gat': config.gat_heads,
-            'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]],
+            'gat-v4': config.gat_v4_heads,
         }
         model = spec['train_loop_config']['model']
         model_params = heads_map[model]
@@ -152,7 +165,7 @@ def search_hyperparameters():
         'model': tune.grid_search(config.model_grid_search),
         'seed': tune.randint(0, MAX_SEED),
         'hidden_channels': tune.sample_from(hidden_channels),
-        'num_layers': tune.choice(config.num_layers_choice),
+        'num_layers': tune.choice(config.gat_num_layers),
         'heads': tune.sample_from(heads),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choice),

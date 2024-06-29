@@ -5,6 +5,7 @@ wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
 output_dir: "outputs"
 checkpoint_dir: "outputs/checkpoints"
+ray_results_dir: "outputs/ray_results"
 
 # WandB
 project: "proteo"
@@ -90,12 +91,16 @@ cpu_per_worker: 32
 gpu_per_worker: 4
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat']   #['gat', 'gat-v4']
-batch_size_choice: [1, 4]
-num_layers_choice: [2, 3, 4] # only for gat, gat-v4 has a fixed number of layers
-gat_hidden_channels: [64, 128, 256]
+model_grid_search: ['gat'] #, 'gat-v4']   #['gat', 'gat-v4']
+batch_size_choice: [1] #, 4]
+# GAT
+gat_num_layers: [2, 3, 4]
+gat_hidden_channels: [12, 20]
 gat_heads: [1, 2, 4]
-num_samples: 30
+# GAT-v4
+gat_v4_hidden_channels: [[8, 16, 12], [8, 8, 12], [10, 7, 12]]
+gat_v4_heads: [[2, 3, 4], [2, 2, 3]]
+num_samples: 1
 grace_period: 2
 reduction_factor: 8
 num_to_keep: 5  # number of checkpoints to keep. 
