@@ -21,6 +21,10 @@ lint:
 clean:
 	@find . -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete
 
+.PHONY: rmtmp
+rmtmp:
+	sudo rm -r /tmp && sudo mkdir /tmp && sudo chmod -R 777 /tmp
+
 .PHONY: conda-osx-64.lock
 conda-osx-64.lock:
 	CONDA_SUBDIR=osx-64 conda-lock -f conda.yaml -p osx-64

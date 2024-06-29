@@ -1,11 +1,13 @@
 # Files
 root_dir: "/home/nmiolane/code/proteo"
-# Filenames below are relative to root_dir
+ray_tmp_dir: "/home/nmiolane/code/proteo/outputs/ray"  # "/tmp"
+# Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
 output_dir: "outputs"
 checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
+
 
 # WandB
 project: "proteo"
@@ -92,7 +94,7 @@ gpu_per_worker: 4
 lr_min: 0.0001
 lr_max: 0.1
 model_grid_search: ['gat'] #, 'gat-v4']   #['gat', 'gat-v4']
-batch_size_choice: [1] #, 4]
+batch_size_choice: [4] #, 4]
 # GAT
 gat_num_layers: [2, 3, 4]
 gat_hidden_channels: [12, 20]

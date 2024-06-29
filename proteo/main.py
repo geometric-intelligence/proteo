@@ -5,13 +5,21 @@ and thus we use:
 - Ray's WandbLoggerCallback,
 - Ray's CheckpointConfig.
 
+Here, pl_module.logger is Ray's logger.
+
 Notes
 -----
 This differs from training one single neural network in train.py, 
 which only requires Lightning,
 and thus we use:
 - Lightning's WandbLogger logger,
-- Lightning's ModelCheckpoint callback
+- Lightning's ModelCheckpoint callback.
+
+Here, pl_module.logger is Wandb's logger.
+
+Remark on the Missing logger folder warning:
+https://github.com/Lightning-AI/pytorch-lightning/discussions/12276
+Seems OK to disregard.
 """
 
 import os
@@ -21,12 +29,15 @@ import pytorch_lightning as pl
 import torch
 import train as proteo_train
 from config_utils import CONFIG_FILE, read_config_from_file
+import ray
 from ray import tune
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
+
+import proteo.callbacks as proteo_callbacks
 
 MAX_SEED = 65535
 
@@ -87,12 +98,13 @@ def train_func(search_config):
     # Set checkpoint interval (e.g., every 10 epochs)
     checkpoint_interval = 25
     checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
+    ray_hist_callback = proteo_callbacks.RayHistogramCallback()
 
     trainer = pl.Trainer(
         devices='auto',
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
-        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback],
+        callbacks=[ray_lightning.RayTrainReportCallback(), ray_hist_callback, checkpoint_callback],
         plugins=[
             ray_lightning.RayLightningEnvironment()
         ],  # How ray interacts with pytorch lightning
@@ -135,6 +147,9 @@ def search_hyperparameters():
     )
 
     # Define a TorchTrainer without hyper-parameters for Tuner
+    if not os.path.exists(config.ray_tmp_dir):
+        os.makedirs(config.ray_tmp_dir)
+    ray.init(_temp_dir=config.ray_tmp_dir) 
     ray_trainer = TorchTrainer(
         train_func,
         scaling_config=scaling_config,

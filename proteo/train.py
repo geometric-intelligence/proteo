@@ -3,7 +3,10 @@
 Lightning manages the training,
 and thus we use:
 - Lightning's WandbLogger logger,
-- Lightning's ModelCheckpoint callback
+- Lightning's ModelCheckpoint callback.
+
+Here, pl_module.logger is WandbLogger's logger.
+
 
 Notes
 -----
@@ -12,6 +15,8 @@ Ray[Tune] takes over the training process,
 and thus we use instead:
 - Ray's WandbLoggerCallback,
 - Ray's CheckpointConfig.
+
+Here, pl_module.logger is Ray's dedicated logger.
 """
 
 import gc
@@ -187,6 +192,8 @@ class Proteo(pl.LightningModule):
         # Store predictions
         self.val_preds.append(pred)
         self.val_targets.append(target)
+        print(f"sanity check: len(self.val_preds)={len(self.val_preds)}")
+
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
