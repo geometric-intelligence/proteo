@@ -187,11 +187,7 @@ class Proteo(pl.LightningModule):
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
         loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
-        loss = loss_fn(pred, target)
-
-        # self.log("val_loss", loss, on_step=False, on_epoch=True)
-
-        return loss
+        return loss_fn(pred, target)
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'
@@ -214,6 +210,8 @@ class Proteo(pl.LightningModule):
         else:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
 
+        # HACKALERT: Validation loss is logged twice, as val/loss and val_loss
+        # So that Proteo's module can be used in train.py and main.py
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
@@ -330,7 +328,7 @@ def main():
     logger.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
-        monitor='val_loss',
+        monitor='val/loss',
         dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
         filename=config.model + '-{epoch}' + '-{val_loss:.2f}',
         mode='min',

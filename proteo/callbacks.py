@@ -17,7 +17,7 @@ class RayCustomWandbLoggerCallback(Callback):
         if not trainer.sanity_checking:
             loss = outputs
             wandb.log({'val/loss': loss, "epoch": pl_module.current_epoch})
-            # Log to lightning so that hyperparameter search has access to val_loss
+            # Log to lightning so that the hyperparameter search can access val_loss
             pl_module.log(
                 'val_loss',
                 loss,
@@ -69,8 +69,8 @@ class RayCustomWandbLoggerCallback(Callback):
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             wandb.log(
                 {
-                    "val/preds": wandb.Histogram(val_preds),
-                    "val/targets": wandb.Histogram(val_targets),
+                    "val_preds": wandb.Histogram(val_preds),
+                    "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }
             )
@@ -82,7 +82,7 @@ class CustomWandbLoggerCallback(Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
         pl_module.log(
-            'train_loss',
+            'train/loss',
             loss,
             on_step=False,
             on_epoch=True,
@@ -91,13 +91,13 @@ class CustomWandbLoggerCallback(Callback):
             batch_size=pl_module.config.batch_size,
         )
         # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-        pl_module.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+        pl_module.log('train/RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
             loss = outputs
             pl_module.log(
-                'val_loss',
+                'val/loss',
                 loss,
                 on_step=False,
                 on_epoch=True,
@@ -105,8 +105,18 @@ class CustomWandbLoggerCallback(Callback):
                 prog_bar=True,
                 batch_size=pl_module.config.batch_size,
             )
+            # HACKALETER: Relogging as val_loss to accommodate the monitoring of the loss
+            # by the hyperparameter search algorithm.
+            pl_module.log(
+                'val_loss',
+                loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                batch_size=pl_module.config.batch_size,
+            )
             # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-            pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+            pl_module.log('val/RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -123,9 +133,10 @@ class CustomWandbLoggerCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         pl_module.logger.experiment.log(
             {
-                "train_preds": wandb.Histogram(train_preds),
-                "train_targets": wandb.Histogram(train_targets),
+                "train/preds": wandb.Histogram(train_preds),
+                "train/targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
+                "epoch": pl_module.current_epoch,
             }
         )
         pl_module.train_preds.clear()  # free memory
@@ -146,8 +157,9 @@ class CustomWandbLoggerCallback(Callback):
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             pl_module.logger.experiment.log(
                 {
-                    "val_preds": wandb.Histogram(val_preds),
-                    "val_targets": wandb.Histogram(val_targets),
+                    "val/preds": wandb.Histogram(val_preds),
+                    "val/targets": wandb.Histogram(val_targets),
+                    "epoch": pl_module.current_epoch,
                 }
             )
             pl_module.val_preds.clear()  # free memory
