@@ -247,17 +247,19 @@ def main():
     torch.cuda.empty_cache()
     gc.collect()
     torch.set_float32_matmul_precision('high')
-
     config = read_config_from_file(CONFIG_FILE)
 
+    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+    with open(wandb_api_key_path, 'r') as f:
+        wandb_api_key = f.read().strip()
+    wandb.login(key=wandb_api_key)
+
     # this is where we pick the CUDA device(s) to use
+    print(f"Using device(s) {config.device}")
+    device_count = len(config.device)
     if isinstance(config.device, list):
-        print(f"Using devices {config.device}")
-        device_count = len(config.device)
         os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
     else:
-        print(f"Using device {config.device}")
-        device_count = 1
         os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
 
     pl.seed_everything(config.seed)
