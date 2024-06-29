@@ -280,6 +280,7 @@ def main():
         key="output_hist",
         images=[
             os.path.join(config.root_dir, "data/ftd/processed/histogram.jpg"),
+            os.path.join(config.root_dir, "data/ftd/processed/histogram.svg"),
             os.path.join(config.root_dir, "data/ftd/processed/adjacency.jpg"),
         ],
     )
@@ -314,18 +315,6 @@ def main():
         precision=config.precision,
         num_sanity_val_steps=1,
     )
-
-    if config.wandb_api_key_path:
-        env = trainer.strategy.cluster_environment
-        if env.global_rank() != 0 and env.local_rank() == 0:
-            wandb.init(config=config, project=config.project)
-            wandb.log(
-                {
-                    "nfl_hist": wandb.Image(
-                        os.path.join(config.root_dir, "datasets/data/ftd/processed/histogram.svg")
-                    )
-                }
-            )
 
     module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)
