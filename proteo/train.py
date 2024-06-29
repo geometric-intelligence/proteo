@@ -249,11 +249,6 @@ def main():
     torch.set_float32_matmul_precision('high')
     config = read_config_from_file(CONFIG_FILE)
 
-    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-    with open(wandb_api_key_path, 'r') as f:
-        wandb_api_key = f.read().strip()
-    wandb.login(key=wandb_api_key)
-
     # this is where we pick the CUDA device(s) to use
     print(f"Using device(s) {config.device}")
     device_count = len(config.device)
@@ -266,14 +261,20 @@ def main():
 
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
+    print("Loaders created")
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
     out_channels = train_dataset.label_dim  # 1 dim of result
 
     avg_node_deg = avg_node_degree(test_dataset)
 
-    print("Loaders created")
-    logger = pl_loggers.WandbLogger(config=config, project=config.project, log_model=False)
+    logger = None
+    if not config.wandb_offline:
+        wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+        with open(wandb_api_key_path, 'r') as f:
+            wandb_api_key = f.read().strip()
+        wandb.login(key=wandb_api_key)
+        logger = pl_loggers.WandbLogger(config=config, project=config.project, log_model=False)
 
     logger.log_image(
         key="output_hist",
