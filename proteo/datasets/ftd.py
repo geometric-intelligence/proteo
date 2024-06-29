@@ -58,23 +58,45 @@ class FTDDataset(InMemoryDataset):
         self.has_plasma_col_id = 9
         self.plasma_protein_col_range = (10, 7299)  # 7299
         self.nfl_col_id = 8
+        self.suffix = f'adj_thresh_{config.adj_thresh}'
+
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
-        path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
+
+        path = os.path.join(self.processed_dir, f'{self.name}_{self.suffix}_{split}.pt')
 
         # Note: It seems that this is needed to load the data
         # However, it is taking forever and is the reason why multi GPUs is failing.
         self.load(path)
 
-    @property  # TO DO: Is this needed?
+    @property
     def raw_file_names(self):
-        return ['test.csv']
+        """Files that must be present in order to skip downloading them from somewhere.
+
+        Then, the grandparent Dataset class automatically defines raw_paths as:
+        raw_path = self.raw_dir + raw_filename
+        where: self.processed_dir = self.root + "raw"
+
+        See Also
+        --------
+        https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
+        """
+        return [self.config.raw_file_name]
 
     @property
     def processed_file_names(self):
-        name = self.name
-        return [f'{name}_train.pt', f'{name}_test.pt']
+        """Files that must be present in order to skip processing.
+
+        The, the grandparent Dataset class automatically defines processed_paths as:
+        processed_path = self.processed_dir + processed_filename
+        where: self.processed_dir = self.root + "processed"
+
+        See Also
+        --------
+        https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
+        """
+        return [f"{self.name}_{self.suffix}_train.pt", f"{self.name}_{self.suffix}_test.pt"]
 
     def create_graph_data(self, feature, label, adj_matrix):
         x = feature  # protein concentrations: what is on the nodes
@@ -101,11 +123,11 @@ class FTDDataset(InMemoryDataset):
         for feature, label in zip(test_features, test_labels):
             data = self.create_graph_data(feature, label, adj_matrix)
             test_data_list.append(data)
-        self.save(train_data_list, os.path.join(self.processed_dir, f'{self.name}_train.pt'))
-        self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
+        self.save(train_data_list, self.processed_paths[0])
+        self.save(test_data_list, self.processed_paths[1])
 
     def load_csv_data(self, config):
-        csv_path = os.path.join(config.data_dir, config.csv_path)
+        csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         csv_data = np.array(pd.read_csv(csv_path))
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
@@ -141,6 +163,7 @@ class FTDDataset(InMemoryDataset):
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
             calculate_adjacency_matrix(plasma_protein, save_to=adj_path)
+        print(f"Loading adjacency matrix from: {adj_path}...")
         adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
         # Threshold adjacency matrix
         adj_matrix = torch.FloatTensor(np.where(adj_matrix > config.adj_thresh, 1, 0))
@@ -160,7 +183,7 @@ class FTDDataset(InMemoryDataset):
 
 
 def calculate_adjacency_matrix(plasma_protein, save_to):
-    # Calculate adjacency matrix.
+    """Calculate and save adjacency matrix."""
     plasma_protein_df = pd.DataFrame(plasma_protein)
     softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df)
     print("Soft threshold:", softThreshold[0])
@@ -170,7 +193,7 @@ def calculate_adjacency_matrix(plasma_protein, save_to):
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
     adjacency_df = pd.DataFrame(adjacency)
-    print(adjacency_df.shape)
+    print(f"Saving adjacency matrix to: {save_to}...")
     adjacency_df.to_csv(save_to, header=None, index=False)
 
 

@@ -6,15 +6,13 @@ wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
 output_dir: "outputs"
 
-# Dataset
-dataset_name: "ftd"
-
-# Data: paths are relative to data_dir (root for FTDDataset)
-csv_path: "ALLFTD_dataset_for_nina_louisa.csv"
-
 # Output: paths are relative to output_dir
 checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
+
+# Dataset
+dataset_name: "ftd"
+raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 
 # WandB
 project: "proteo"
