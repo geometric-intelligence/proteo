@@ -116,7 +116,6 @@ class Proteo(pl.LightningModule):
             raise ValueError
         targets = batch.y.view(pred.shape)
 
-
         # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
         loss_fn = torch.nn.MSELoss(reduction="mean")
         loss = loss_fn(pred, targets)
@@ -127,7 +126,6 @@ class Proteo(pl.LightningModule):
             l1_norm = sum(p.abs().sum() for p in self.parameters())
             loss = loss + l1_lambda * l1_norm
 
-        # --- LOGGING ---
         self.log(
             'train_loss',
             loss,
@@ -158,7 +156,7 @@ class Proteo(pl.LightningModule):
         # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
         loss_fn = torch.nn.MSELoss(reduction="mean")
         loss = loss_fn(pred, targets)
-        # --- LOGGING ---
+
         self.log(
             'val_loss',
             loss,
@@ -275,21 +273,20 @@ def main():
     print("Loaders created")
 
     # Configure WandB Logger
-    logger = None
-    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-    if wandb_api_key_path and not config.wandb_offline:
-        with open(config.wandb_api_key_path, 'r') as f:
-            wandb_api_key = f.read().strip()
-        os.environ['WANDB_API_KEY'] = wandb_api_key
-        wandb_config = {'project': config.project_name}
-        logger = pl_loggers.WandbLogger(config=config, **wandb_config)
+    # logger = None
+    # wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+    # if wandb_api_key_path and not config.wandb_offline:
+    #     with open(config.wandb_api_key_path, 'r') as f:
+    #         wandb_api_key = f.read().strip()
+    #     os.environ['WANDB_API_KEY'] = wandb_api_key
+    #wandb_config = {'project': config.project_name}
+    logger = pl_loggers.WandbLogger(config=config, project=config.project)
 
-    dir_path = os.path.dirname(os.path.realpath(__file__))
     logger.log_image(
         key="output_hist",
         images=[
-            os.path.join(dir_path, "datasets/data/ftd/processed/histogram.jpg"),
-            os.path.join(dir_path, "datasets/data/ftd/processed/adjacency.jpg"),
+            os.path.join(config.root_dir, "data/ftd/processed/histogram.jpg"),
+            os.path.join(config.root_dir, "data/ftd/processed/adjacency.jpg"),
         ],
     )
 
@@ -327,7 +324,7 @@ def main():
     if config.wandb_api_key_path:
         env = trainer.strategy.cluster_environment
         if env.global_rank() != 0 and env.local_rank() == 0:
-            wandb.init(config=config, **wandb_config)
+            wandb.init(config=config, project=config.project)
             wandb.log(
                 {
                     "nfl_hist": wandb.Image(

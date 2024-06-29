@@ -2,7 +2,7 @@
 # https://github.com/twitter-research/cwn/blob/main/exp/parser.py
 
 dataset_name: "ftd"
-root_dir: "/home/lcornelis/code/proteo/proteo"
+root_dir: "/home/nmiolane/code/proteo/proteo"
 adj_thresh: 0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -74,7 +74,7 @@ accumulate_grad_batches: 1
 
 
 # WandB Configuration
-project_name: "proteo"
+project: "proteo"
 wandb_api_key_path: "wandb_api_key.txt"
 wandb_offline: false
 log_every_n_steps: 5
