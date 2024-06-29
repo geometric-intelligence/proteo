@@ -12,36 +12,39 @@ task_type: regression # Placeholder
 model: gat-v4
 
 gat-v4:
-  heads: [4, 3, 4]
-  hidden_channels: [8, 16, 12]
-  fc_dim: [64, 48, 32, 32]
+  heads: 2
+  hidden_channels: 8
+  num_layers: 3
+  use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
-  lr: 0.1 
-  final_lr: 0.0001
-  weight_decay: 0.0005
   fc_dropout: 0.05
+  fc_dim: 64
+  num_fc_layers: 4
+  num_nodes: 7289 #TO DO: This should not be hardcoded
+  # Training gat-v4
+  lr: 0.1 
+  weight_decay: 0.0005
   l1_lambda: 0.005
   optimizer: Adam
   lr_scheduler: LambdaLR
-  num_nodes: 7289 #TO DO: This should not be hardcoded
-  layer_norm: true
 
 gat:
-  v2: true
-  # For one off training
   heads: 2
   hidden_channels: 32  # needs to be divisible by heads
   num_layers: 2
-  optimizer: Adam
-  lr: 0.001
-  l1_lambda: 0. #0005
-  weight_decay: 0.0005
-  lr_scheduler: LambdaLR
   dropout: 0.1
   act: tanh
+  v2: true
+  # Training gat
+  lr: 0.001
+  weight_decay: 0.0005
+  l1_lambda: 0.0005
+  optimizer: Adam
+  lr_scheduler: LambdaLR
+
 
 # Training Configuration
-batch_size: 12 #for one off training
+batch_size: 16 #for one off training
 epochs: 20
 num_workers: 16
 sync_batchnorm: false

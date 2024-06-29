@@ -1,24 +1,43 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import LayerNorm, Parameter
-from torch_geometric.data import Batch, Data
-from torch_geometric.nn import GATConv, global_mean_pool
+from torch.nn import LayerNorm
+from torch_geometric.data import Batch
+from torch_geometric.nn import GATConv
 from torch_geometric.utils import to_dense_batch
 
 
 class GATv4(nn.Module):
-    def __init__(self, opt, in_channels, out_channels):
+    def __init__(
+        self,
+        in_channels,
+        hidden_channels,
+        out_channels,
+        heads,
+        num_layers,
+        fc_dim,
+        num_fc_layers,
+        which_layer,
+        num_nodes,
+        use_layer_norm,
+        fc_dropout,
+    ):
         super(GATv4, self).__init__()
-        self.opt = opt
-        # self.act = define_act_layer(act_type=opt.act_type)
-
-        self.hidden_channels = opt.hidden_channels
-        self.heads = opt.heads
-        self.fc_dim = opt.fc_dim
+        self.hidden_channels = [
+            hidden_channels,
+        ] * num_layers
+        self.heads = [
+            heads,
+        ] * num_layers
+        self.fc_dim = [
+            fc_dim,
+        ] * num_fc_layers
         self.out_channels = out_channels
         self.in_channels = in_channels
-        self.lin_input_dim = opt.num_nodes * len(opt.which_layer)
+        self.fc_dropout = fc_dropout
+        self.which_layer = which_layer
+        self.use_layer_norm = use_layer_norm
+        self.lin_input_dim = num_nodes * len(which_layer)
 
         # GAT layers
         self.convs = nn.ModuleList()
@@ -29,7 +48,7 @@ class GATv4(nn.Module):
         self.build_pooling_layers()
 
         # Layer normalization
-        self.layer_norm = LayerNorm(opt.num_nodes)
+        self.layer_norm = LayerNorm(num_nodes)
 
         # Fully connected layers
         self.encoder = self.build_fc_layers()
@@ -38,7 +57,7 @@ class GATv4(nn.Module):
         input_dim = self.in_channels
         for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
             self.convs.append(
-                GATConv(input_dim, hidden_dim, heads=num_heads, dropout=self.opt.fc_dropout)
+                GATConv(input_dim, hidden_dim, heads=num_heads, dropout=self.fc_dropout)
             )
             input_dim = hidden_dim * num_heads
 
@@ -53,8 +72,9 @@ class GATv4(nn.Module):
             layers.append(
                 nn.Sequential(
                     nn.Linear(fc_input_dim, fc_dim),
-                    nn.ELU(),
-                    nn.AlphaDropout(p=self.opt.fc_dropout, inplace=True),
+                    # nn.ELU(),
+                    nn.Tanh(),
+                    nn.AlphaDropout(p=self.fc_dropout, inplace=True),
                 )
             )
             fc_input_dim = fc_dim
@@ -93,7 +113,7 @@ class GATv4(nn.Module):
         x2, _ = to_dense_batch(x2, batch=batch)  # [bs, nodes]
 
         # Apply layer normalization to each individual graph to have mean 0, std 1
-        if self.opt.layer_norm:
+        if self.use_layer_norm:
             x0 = self.layer_norm(x0)
             x1 = self.layer_norm(x1)
             x2 = self.layer_norm(x2)
@@ -101,7 +121,7 @@ class GATv4(nn.Module):
         # Concatenate multiscale features
         multiscale_features = {'layer1': x0, 'layer2': x1, 'layer3': x2}
         multiscale_features = torch.cat(
-            [multiscale_features[layer] for layer in self.opt.which_layer], dim=1
+            [multiscale_features[layer] for layer in self.which_layer], dim=1
         )
 
         # Pass through fully connected layers

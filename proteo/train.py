@@ -67,8 +67,8 @@ class Proteo(pl.LightningModule):
             self.model = GAT(
                 in_channels=in_channels,
                 hidden_channels=self.model_parameters.hidden_channels,
-                num_layers=self.model_parameters.num_layers,
                 out_channels=out_channels,
+                num_layers=self.model_parameters.num_layers,
                 heads=self.model_parameters.heads,
                 v2=self.model_parameters.v2,
                 dropout=self.model_parameters.dropout,
@@ -76,7 +76,17 @@ class Proteo(pl.LightningModule):
             )
         elif config.model == 'gat-v4':
             self.model = GATv4(
-                opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
+                in_channels=in_channels,
+                hidden_channels=self.model_parameters.hidden_channels,
+                out_channels=out_channels,
+                num_layers=self.model_parameters.num_layers,
+                heads=self.model_parameters.heads,
+                num_nodes=self.model_parameters.num_nodes,
+                fc_dim=self.model_parameters.fc_dim,
+                num_fc_layers=self.model_parameters.num_fc_layers,
+                which_layer=self.model_parameters.which_layer,
+                use_layer_norm=self.model_parameters.use_layer_norm,
+                fc_dropout=self.model_parameters.fc_dropout,
             )
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -330,7 +340,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=device_count,
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,
