@@ -3,7 +3,6 @@ import math
 import os
 from datetime import datetime
 
-import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
@@ -13,21 +12,10 @@ from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GAT, global_mean_pool
+from torch_geometric.nn import GAT, GCN, global_mean_pool
 
 import proteo.rich_gi as rich_gi
 from proteo.datasets.ftd import FTDDataset
-
-
-class AttrDict(dict):
-    """Convert a dict into an object where attributes are accessed with "."
-
-    This is needed for the utils.load() function.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
 
 
 class Proteo(pl.LightningModule):
@@ -43,10 +31,8 @@ class Proteo(pl.LightningModule):
     """
 
     LOSS_MAP = {
-        "classification": torch.nn.CrossEntropyLoss(),
-        "bin_classification": torch.nn.BCEWithLogitsLoss(),
-        "regression": torch.nn.L1Loss(),
-        "mse_regression": torch.nn.MSELoss(),
+        "l1_regression": torch.nn.L1Loss,
+        "mse_regression": torch.nn.MSELoss,
     }
 
     def __init__(self, config: Config, in_channels, out_channels, avg_node_degree):
@@ -54,16 +40,28 @@ class Proteo(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.config = config
-        # Save the model specific parameters in a separate object
-        self.model_parameters = getattr(config, config.model)
-        self.model_parameters = AttrDict(self.model_parameters)
+        # Save model parameters in a separate config object
+        self.model_parameters = Config.parse_obj(getattr(config, config.model))
         self.avg_node_degree = avg_node_degree
         self.train_preds = []
         self.val_preds = []
         self.train_targets = []
         self.val_targets = []
 
-        if config.model == 'gat':
+        if config.model == 'gat-v4':
+            self.model = GATv4(
+                in_channels=in_channels,
+                hidden_channels=self.model_parameters.hidden_channels,
+                out_channels=out_channels,
+                heads=self.model_parameters.heads,
+                num_nodes=self.model_parameters.num_nodes,
+                which_layer=self.model_parameters.which_layer,
+                use_layer_norm=self.model_parameters.use_layer_norm,
+                fc_dim=self.model_parameters.fc_dim,
+                fc_dropout=self.model_parameters.fc_dropout,
+                fc_act=self.model_parameters.fc_act
+            )
+        elif config.model == 'gat':
             self.model = GAT(
                 in_channels=in_channels,
                 hidden_channels=self.model_parameters.hidden_channels,
@@ -74,25 +72,20 @@ class Proteo(pl.LightningModule):
                 dropout=self.model_parameters.dropout,
                 act=self.model_parameters.act,
             )
-        elif config.model == 'gat-v4':
-            self.model = GATv4(
+        elif config.model == 'gcn':
+            self.model = GCN(
                 in_channels=in_channels,
                 hidden_channels=self.model_parameters.hidden_channels,
                 out_channels=out_channels,
                 num_layers=self.model_parameters.num_layers,
-                heads=self.model_parameters.heads,
-                num_nodes=self.model_parameters.num_nodes,
-                fc_dim=self.model_parameters.fc_dim,
-                num_fc_layers=self.model_parameters.num_fc_layers,
-                which_layer=self.model_parameters.which_layer,
-                use_layer_norm=self.model_parameters.use_layer_norm,
-                fc_dropout=self.model_parameters.fc_dropout,
+                dropout=self.model_parameters.dropout,
             )
         else:
             raise NotImplementedError('Model not implemented yet')
 
     def forward(self, batch):
-        """Performs one forward pass of the model on the input batch.
+        """Forward pass of the model on the input batch.
+
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -101,17 +94,23 @@ class Proteo(pl.LightningModule):
         batch.y: torch.Tensor of shape [batch_size]
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
+        if self.config.model == "gat-v4":
+            return self.model(batch.x, batch.edge_index, batch)
         if self.config.model == 'gat':
             # This returns a pred value for each node in the big graph
             pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
             # Aggregate node features into graph-level features
             return global_mean_pool(pred, batch.batch)
-        if self.config.model == "gat-v4":
-            return self.model(batch.x, batch.edge_index, batch)
+        if self.config.model == 'gcn':
+            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            return global_mean_pool(pred, batch.batch)
         raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
-        """Defines a single step in the training loop. It specifies how a batch of data is processed during training, including making predictions, calculating the loss, and logging metrics.
+        """Run single step in the training loop.
+
+        It specifies how a batch of data is processed during training, including making predictions, calculating the loss, and logging metrics.
+
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -132,8 +131,9 @@ class Proteo(pl.LightningModule):
         self.train_preds.append(pred)
         self.train_targets.append(target)
 
-        # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
-        loss_fn = torch.nn.MSELoss(reduction="mean")
+        # Reduction = "mean" averages over all samples in the batch,
+        # providing a single average per batch.
+        loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
         loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
@@ -155,7 +155,8 @@ class Proteo(pl.LightningModule):
         return loss
 
     def validation_step(self, batch):
-        """Defines a single step in the validation loop. It specifies how a batch of data is processed during validation, including making predictions, calculating the loss, and logging metrics.
+        """Run single step in the validation loop. It specifies how a batch of data is processed during validation, including making predictions, calculating the loss, and logging metrics.
+        
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -171,8 +172,9 @@ class Proteo(pl.LightningModule):
         self.val_preds.append(pred)
         self.val_targets.append(target)
 
-        # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
-        loss_fn = torch.nn.MSELoss(reduction="mean")
+        # Reduction = "mean" averages over all samples in the batch,
+        # providing a single average per batch.
+        loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
         loss = loss_fn(pred, target)
 
         self.log(
@@ -250,10 +252,25 @@ def avg_node_degree(dataset):
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
     if config.dataset_name == "ftd":
-        root = os.path.join(config.root_dir, "proteo", "data", "ftd")
-        test_dataset = FTDDataset(root, "test", config)
+        root = os.path.join(config.root_dir, config.data_dir, "ftd")
         train_dataset = FTDDataset(root, "train", config)
+        test_dataset = FTDDataset(root, "test", config)
     return train_dataset, test_dataset
+
+
+def print_datasets(train_dataset, test_dataset):
+    print(f"Train: {len(train_dataset)} samples")
+    print(f"- train_dataset.x.shape: {train_dataset.x.shape}")
+    print(f"- train_dataset.y.shape: {train_dataset.y.shape}")
+    print(f"- train_dataset.edge_index.shape: {train_dataset.edge_index.shape}")
+    print(f"---- train_dataset[0].x.shape: {train_dataset[0].x.shape}")
+    print(f"---- train_dataset[0].edge_index.shape: {train_dataset[0].edge_index.shape}")
+    print(f"Test: {len(test_dataset)} samples")
+    print(f"- test_dataset.x.shape: {test_dataset.x.shape}")
+    print(f"- test_dataset.y.shape: {test_dataset.y.shape}")
+    print(f"- test_dataset.edge_index.shape: {test_dataset.edge_index.shape}")
+    print(f"---- test_dataset[0].x.shape: {test_dataset[0].x.shape}")
+    print(f"---- test_dataset[0].edge_index.shape: {test_dataset[0].edge_index.shape}")
 
 
 def construct_loaders(config, train_dataset, test_dataset):
@@ -275,6 +292,21 @@ def construct_loaders(config, train_dataset, test_dataset):
     return train_loader, test_loader
 
 
+def print_loaders(train_loader, test_loader):
+    first_train_batch = next(iter(train_loader))
+    first_test_batch = next(iter(test_loader))
+    print(f"First train batch: {len(first_train_batch)} samples")
+    print(f"- first_train_batch.x.shape: {first_train_batch.x.shape}")
+    print(f"- first_train_batch.y.shape: {first_train_batch.y.shape}")
+    print(f"- first_train_batch.edge_index.shape: {first_train_batch.edge_index.shape}")
+    print(f"- first_train_batch.batch.shape: {first_train_batch.batch.shape}")
+    print(f"First test batch: {len(first_test_batch)} samples")
+    print(f"- first_test_batch.x.shape: {first_test_batch.x.shape}")
+    print(f"- first_test_batch.y.shape: {first_test_batch.y.shape}")
+    print(f"- first_test_batch.edge_index.shape: {first_test_batch.edge_index.shape}")
+    print(f"- first_test_batch.batch.shape: {first_test_batch.batch.shape}")
+
+
 def main():
     """Training and evaluation script for experiments."""
     torch.cuda.empty_cache()
@@ -283,13 +315,11 @@ def main():
     config = read_config_from_file(CONFIG_FILE)
     pl.seed_everything(config.seed)
 
-    save_dir = os.path.join(config.root_dir, "outputs")
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    output_dir = os.path.join(config.root_dir, config.output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # this is where we pick the CUDA device(s) to use
-    print(f"Using device(s) {config.device}")
-    device_count = len(config.device)
     if isinstance(config.device, list):
         os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
     else:
@@ -309,22 +339,22 @@ def main():
     logger = pl_loggers.WandbLogger(
         config=config,
         project=config.project,
-        log_model="all",
-        save_dir=save_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+        save_dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
         offline=config.wandb_offline,
     )
 
     logger.log_image(
         key="dataset_statistics",
         images=[
-            os.path.join(config.root_dir, "proteo/data/ftd/processed/histogram.jpg"),
-            os.path.join(config.root_dir, "proteo/data/ftd/processed/adjacency.jpg"),
+            os.path.join(config.root_dir, config.data_dir, "ftd/processed/histogram.jpg"),
+            os.path.join(config.root_dir, config.data_dir, "ftd/processed/adjacency.jpg"),
         ],
     )
+    logger.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',
-        dirpath=os.path.join(save_dir, 'checkpoints'),
+        dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
         filename=config.model + '-{epoch}' + '-{val_loss:.2f}',
         mode='min',
     )
@@ -338,7 +368,7 @@ def main():
         callbacks=trainer_callbacks,
         logger=logger,
         accelerator=config.trainer_accelerator,
-        devices=device_count,
+        devices=len(config.device),
         num_nodes=config.nodes_count,
         strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
@@ -347,8 +377,12 @@ def main():
         num_sanity_val_steps=1,
     )
 
-    # Put wandb's run id into checkpoints' filenames
+    # Code that only runs on the rank 0 GPU, in multi-GPUs setup
     if trainer.strategy.cluster_environment.global_rank() == 0:
+        print(f"Using device(s) {config.device}")
+        print_datasets(train_dataset, test_dataset)
+        print_loaders(train_loader, test_loader)
+        # Put wandb's experiment id into checkpoints' filenames
         ckpt_callback.filename = (
             "run-"
             + datetime.now().strftime('%Y%m%d_%H%Mxx')
@@ -358,7 +392,7 @@ def main():
             + ckpt_callback.filename
         )
         print(f"Outputs saved into:\n {logger.save_dir}")
-        print("Checkpoints saved into:\n " f"{ckpt_callback.dirpath}/{ckpt_callback.filename}")
+        print(f"Checkpoints saved into:\n {ckpt_callback.dirpath}/{ckpt_callback.filename}")
 
     module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)

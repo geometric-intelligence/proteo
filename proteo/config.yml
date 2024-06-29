@@ -1,26 +1,38 @@
-dataset_name: "ftd"
+# Files
 root_dir: "/home/nmiolane/code/proteo"
+# Filenames below are relative to root_dir
+wandb_api_key_path: "wandb_api_key.txt"
+data_dir: "data"
+output_dir: "outputs"
+checkpoint_dir: "outputs/checkpoints"
 
+# WandB
+project: "proteo"
+wandb_offline: false
+# Controls the frequency of logging within training, 
+# by specifying how many training steps should occur between each logging event.
+log_every_n_steps: 5
+
+# Dataset
+dataset_name: "ftd"
 adj_thresh: 0.08
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
-task: 'survival'  
-task_type: regression # Placeholder
+task_type: mse_regression
 
-# Model Configuration
+# Model
 model: gat-v4
 
 gat-v4:
-  heads: 2
-  hidden_channels: 8
-  num_layers: 3
+  heads: [4, 3, 4]
+  hidden_channels: [8, 16, 12]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
+  fc_dim: [64, 48, 32, 32]
   fc_dropout: 0.05
-  fc_dim: 64
-  num_fc_layers: 4
-  num_nodes: 7289 #TO DO: This should not be hardcoded
+  fc_act: elu
+  num_nodes: 7289 # TODO: This should not be hardcoded
   # Training gat-v4
   lr: 0.1 
   weight_decay: 0.0005
@@ -42,34 +54,37 @@ gat:
   optimizer: Adam
   lr_scheduler: LambdaLR
 
+gcn:
+  hidden_channels: 32
+  num_layers: 3
+  dropout: 0.2
+  act: relu
+  # Training gcn
+  lr: 0.001
+  weight_decay: 0.0005
+  l1_lambda: 0.0005
+  optimizer: Adam
+  lr_scheduler: LambdaLR
 
-# Training Configuration
+# Training
 batch_size: 16 #for one off training
-epochs: 20
+epochs: 6
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
 
-# WandB Configuration
-project: "proteo"
-wandb_api_key_path: "proteo/wandb_api_key.txt" # relative to root_dir
-wandb_offline: false
-# Controls the frequency of logging within training, 
-# by specifying how many training steps should occur between each logging event.
-log_every_n_steps: 5
-
-# GPU Configuration
+# GPUs
 device: [0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
-# Miscellaneous Configuration
+# Miscellaneous
 use_progress_bar: true
 nodes_count: 1
 pin_memory: true
 
-# Hyperparameter search configuration
+# Hyperparameter search
 # Number of trials = len(model_grid_search) * num_samples
 cpu_per_worker: 32
 gpu_per_worker: 4
