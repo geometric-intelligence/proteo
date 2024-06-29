@@ -1,11 +1,13 @@
-"""Main script to run hyper-parameter search.
+"""Run several trainings with hyper-parameter search.
 
-Ray[Tune] takes over the training process, 
+Ray[Tune] manages the training trials, 
 and thus we use:
 - Ray's WandbLoggerCallback,
 - Ray's CheckpointConfig.
 
-This differs from training one single neural network, 
+Notes
+-----
+This differs from training one single neural network in train.py, 
 which only requires Lightning,
 and thus we use:
 - Lightning's WandbLogger logger,
@@ -115,7 +117,6 @@ def search_hyperparameters():
     )
 
     # keeping only the best checkpoint based on minimum validation loss
-    offline = "offline" if config.wandb_offline else "online"
     run_config = RunConfig(
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         callbacks=[

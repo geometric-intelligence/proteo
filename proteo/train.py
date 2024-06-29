@@ -1,3 +1,19 @@
+"""Train one single neural network.
+
+Lightning manages the training,
+and thus we use:
+- Lightning's WandbLogger logger,
+- Lightning's ModelCheckpoint callback
+
+Notes
+-----
+When we do hyperparameter search in main.py,
+Ray[Tune] takes over the training process, 
+and thus we use instead:
+- Ray's WandbLoggerCallback,
+- Ray's CheckpointConfig.
+"""
+
 import gc
 import math
 import os
@@ -14,7 +30,7 @@ from pytorch_lightning import strategies as pl_strategies
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
-import proteo.rich_gi as rich_gi
+import proteo.callbacks as proteo_callbacks
 from proteo.datasets.ftd import FTDDataset
 
 
@@ -128,8 +144,8 @@ class Proteo(pl.LightningModule):
             raise ValueError
         target = batch.y.view(pred.shape)
         # Store predictions
-        # self.train_preds.append(pred)
-        # self.train_targets.append(target)
+        self.train_preds.append(pred)
+        self.train_targets.append(target)
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -169,8 +185,8 @@ class Proteo(pl.LightningModule):
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
         target = batch.y.view(pred.shape)
         # Store predictions
-        # self.val_preds.append(pred)
-        # self.val_targets.append(target)
+        self.val_preds.append(pred)
+        self.val_targets.append(target)
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -188,35 +204,6 @@ class Proteo(pl.LightningModule):
         )
         self.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
         return loss
-
-    # def on_train_epoch_end(self):
-    #     train_preds = torch.vstack(self.train_preds).detach().cpu()
-    #     train_targets = torch.vstack(self.train_targets).detach().cpu()
-    #     params = torch.concat([p.flatten() for p in self.parameters()]).detach().cpu()
-    #     print(f"self.logger.experiment.__dict__: {self.logger.experiment.__dict__}")
-    #     self.logger.experiment.log(
-    #         {
-    #             "train_preds": wandb.Histogram(train_preds),
-    #             "train_targets": wandb.Histogram(train_targets),
-    #             "parameters": wandb.Histogram(params),
-    #         }
-    #     )
-    #     self.train_preds.clear()  # free memory
-    #     self.train_targets.clear()
-
-    # def on_validation_epoch_end(self):
-    #     if not self.trainer.sanity_checking:
-    #         val_preds = torch.vstack(self.val_preds).detach().cpu()
-    #         val_targets = torch.vstack(self.val_targets).detach().cpu()
-    #         print(f"self.logger.experiment.__dict__: {self.logger.experiment.__dict__}")
-    #         self.logger.experiment.log(
-    #             {
-    #                 "val_preds": wandb.Histogram(val_preds),
-    #                 "val_targets": wandb.Histogram(val_targets),
-    #             }
-    #         )
-    #         self.val_preds.clear()  # free memory
-    #         self.val_targets.clear()
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'
@@ -361,7 +348,12 @@ def main():
         mode='min',
     )
     lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
-    trainer_callbacks = [ckpt_callback, lr_callback, rich_gi.progress_bar()]
+    trainer_callbacks = [
+        ckpt_callback,
+        lr_callback,
+        proteo_callbacks.HistogramCallback(),
+        proteo_callbacks.progress_bar(),
+    ]
 
     trainer = pl.Trainer(
         enable_progress_bar=config.use_progress_bar,
@@ -393,8 +385,8 @@ def main():
             + "-"
             + ckpt_callback.filename
         )
-        print(f"Outputs saved into:\n {logger.save_dir}")
-        print(f"Checkpoints saved into:\n {ckpt_callback.dirpath}/{ckpt_callback.filename}")
+        print(f"Outputs will be saved into:\n {logger.save_dir}")
+        print(f"Checkpoints will be saved into:\n {ckpt_callback.dirpath}/{ckpt_callback.filename}")
 
     module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)
