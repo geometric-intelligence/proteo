@@ -71,6 +71,8 @@ class Proteo(pl.LightningModule):
                 out_channels=out_channels,
                 heads=self.model_parameters.heads,
                 v2=self.model_parameters.v2,
+                dropout=self.model_parameters.dropout,
+                act=self.model_parameters.act,
             )
         elif config.model == 'gat-v4':
             self.model = GATv4(
@@ -178,14 +180,18 @@ class Proteo(pl.LightningModule):
     def on_train_epoch_end(self):
         train_preds = torch.vstack(self.train_preds).detach().cpu()
         train_targets = torch.vstack(self.train_targets).detach().cpu()
+        params = torch.concat([p.flatten() for p in self.parameters()]).detach().cpu()
         self.logger.experiment.log(
             {
                 "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
+                "parameters": wandb.Histogram(params),
             }
         )
         self.train_preds.clear()  # free memory
         self.train_targets.clear()
+
+        
 
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
@@ -326,7 +332,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=device_count,
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,

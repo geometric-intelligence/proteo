@@ -9,7 +9,7 @@ task: 'survival'
 task_type: regression # Placeholder
 
 # Model Configuration
-model: gat
+model: gat-v4
 
 gat-v4:
   heads: [4, 3, 4]
@@ -24,22 +24,25 @@ gat-v4:
   optimizer: Adam
   lr_scheduler: LambdaLR
   num_nodes: 7289 #TO DO: This should not be hardcoded
+  layer_norm: true
 
 gat:
   v2: true
   # For one off training
-  heads: 1
-  hidden_channels: 20
-  num_layers: 4
+  heads: 2
+  hidden_channels: 32  # needs to be divisible by heads
+  num_layers: 2
   optimizer: Adam
   lr: 0.001
-  l1_lambda: 0.0005
+  l1_lambda: 0. #0005
   weight_decay: 0.0005
   lr_scheduler: LambdaLR
+  dropout: 0.1
+  act: tanh
 
 # Training Configuration
 batch_size: 12 #for one off training
-epochs: 7
+epochs: 20
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -54,7 +57,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # GPU Configuration
-device: [5, 6, 7] #[0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
