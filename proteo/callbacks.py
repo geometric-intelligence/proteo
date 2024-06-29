@@ -1,3 +1,4 @@
+import math
 import torch
 import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
@@ -56,6 +57,25 @@ class RayHistogramCallback(Callback):
 
 
 class HistogramCallback(Callback):
+
+    #def on_train_batch_end(self, trainer, pl_module):
+    def on_train_batch_end(self, trainer, pl_module, outputs):
+        #pl_module.train_loss_metric(outputs['loss'])
+        train_loss = outputs["loss"]
+        print(f'outputs = {outputs}')
+        # print(f"pl_module.__dict__ = {pl_module.__dict__}")
+        # print(f"trainer.__dict__ = {trainer.__dict__}")
+        pl_module.log(
+            'train_loss',
+            train_loss,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            prog_bar=True,
+            batch_size=pl_module.config.batch_size,
+        )
+        pl_module.log('train_RMSE', math.sqrt(self.train_loss_metric), on_step=False, on_epoch=True, sync_dist=True)
+
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
 

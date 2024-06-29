@@ -31,7 +31,7 @@ import train as proteo_train
 from config_utils import CONFIG_FILE, read_config_from_file
 import ray
 from ray import tune
-from ray.air.integrations.wandb import WandbLoggerCallback
+from ray.air.integrations.wandb import setup_wandb  #WandbLoggerCallback
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
@@ -84,6 +84,15 @@ def train_func(search_config):
         search_config.pop(key)
     config.update(search_config)
 
+    setup_wandb(
+        search_config,
+        project=config.project,
+        api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
+        dir=os.path.join(config.root_dir, config.output_dir),  # dir needs to exist, otherwise wandb saves in /tmp
+        mode="offline" if config.wandb_offline else "online",
+    )
+    # This requires using wandb.log, not self.log
+
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
@@ -98,13 +107,13 @@ def train_func(search_config):
     # Set checkpoint interval (e.g., every 10 epochs)
     checkpoint_interval = 25
     checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
-    ray_hist_callback = proteo_callbacks.RayHistogramCallback()
+    #ray_hist_callback = proteo_callbacks.RayHistogramCallback()
 
     trainer = pl.Trainer(
         devices='auto',
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
-        callbacks=[ray_lightning.RayTrainReportCallback(), ray_hist_callback, checkpoint_callback],
+        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback],
         plugins=[
             ray_lightning.RayLightningEnvironment()
         ],  # How ray interacts with pytorch lightning
@@ -120,7 +129,6 @@ def search_hyperparameters():
     output_dir = os.path.join(config.root_dir, config.output_dir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
     # training should use one worker, one GPU, and 8 CPUs per worker.
     scaling_config = ScalingConfig(
         num_workers=1,
@@ -132,12 +140,12 @@ def search_hyperparameters():
     run_config = RunConfig(
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         callbacks=[
-            WandbLoggerCallback(
-                project=config.project,
-                api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-                dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
-                mode="offline" if config.wandb_offline else "online",
-            )
+            # WandbLoggerCallback(
+            #     project=config.project,
+            #     api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
+            #     dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+            #     mode="offline" if config.wandb_offline else "online",
+            # )
         ],
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,

@@ -162,17 +162,7 @@ class Proteo(pl.LightningModule):
             l1_lambda = self.model_parameters.l1_lambda  # Regularization strength
             l1_norm = sum(p.abs().sum() for p in self.parameters())
             loss = loss + l1_lambda * l1_norm
-
-        self.log(
-            'train_loss',
-            loss,
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-            prog_bar=True,
-            batch_size=self.config.batch_size,
-        )
-        self.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+        
         return loss
 
     def validation_step(self, batch):
