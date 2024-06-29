@@ -6,8 +6,8 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
-import rich_gi
 import torch
+import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
@@ -15,6 +15,7 @@ from pytorch_lightning import strategies as pl_strategies
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, global_mean_pool
 
+import proteo.rich_gi as rich_gi
 from proteo.datasets.ftd import FTDDataset
 
 
@@ -57,8 +58,10 @@ class Proteo(pl.LightningModule):
         self.model_parameters = getattr(config, config.model)
         self.model_parameters = AttrDict(self.model_parameters)
         self.avg_node_degree = avg_node_degree
-        self.train_predictions = []
-        self.val_predictions = []
+        self.train_preds = []
+        self.val_preds = []
+        self.train_targets = []
+        self.val_targets = []
 
         if config.model == 'gat':
             self.model = GAT(
@@ -112,11 +115,14 @@ class Proteo(pl.LightningModule):
             print("train: pred has nan")
             print(f"?batch.x has nan: {torch.isnan(batch.x).any()}")
             raise ValueError
-        targets = batch.y.view(pred.shape)
+        target = batch.y.view(pred.shape)
+        # Store predictions
+        self.train_preds.append(pred)
+        self.train_targets.append(target)
 
         # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
         loss_fn = torch.nn.MSELoss(reduction="mean")
-        loss = loss_fn(pred, targets)
+        loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
         if self.model_parameters.l1_lambda > 0:
@@ -148,13 +154,14 @@ class Proteo(pl.LightningModule):
         """
         pred = self.forward(batch)
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
-        targets = batch.y.view(pred.shape)
+        target = batch.y.view(pred.shape)
         # Store predictions
-        self.val_predictions.append(targets.detach().cpu().numpy())
+        self.val_preds.append(pred)
+        self.val_targets.append(target)
 
         # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
         loss_fn = torch.nn.MSELoss(reduction="mean")
-        loss = loss_fn(pred, targets)
+        loss = loss_fn(pred, target)
 
         self.log(
             'val_loss',
@@ -168,29 +175,52 @@ class Proteo(pl.LightningModule):
         self.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
-    def configure_optimizers(self):
-        optimizer = None
-        if self.model_parameters.optimizer == 'Adam':
-            optimizer = torch.optim.Adam(
-                self.parameters(),
-                lr=self.model_parameters.lr,
-                betas=(0.9, 0.999),
-                weight_decay=self.model_parameters.weight_decay,
-            )
-        else:
-            raise NotImplementedError('Optimizer not implemented yet')
-        mode = self.config.mode
+    def on_train_epoch_end(self):
+        train_preds = torch.vstack(self.train_preds).detach().cpu()
+        train_targets = torch.vstack(self.train_targets).detach().cpu()
+        self.logger.experiment.log(
+            {
+                "train_preds": wandb.Histogram(train_preds),
+                "train_targets": wandb.Histogram(train_targets),
+            }
+        )
+        self.train_preds.clear()  # free memory
+        self.train_targets.clear()
 
-        lr_scheduler = self.model_parameters.lr_scheduler
-        if lr_scheduler == 'LambdaLR':
+    def on_validation_epoch_end(self):
+        if not self.trainer.sanity_checking:
+            val_preds = torch.vstack(self.val_preds).detach().cpu()
+            val_targets = torch.vstack(self.val_targets).detach().cpu()
+            self.logger.experiment.log(
+                {
+                    "val_preds": wandb.Histogram(val_preds),
+                    "val_targets": wandb.Histogram(val_targets),
+                }
+            )
+            self.val_preds.clear()  # free memory
+            self.val_targets.clear()
+
+    def configure_optimizers(self):
+        assert self.model_parameters.optimizer == 'Adam'
+        assert self.model_parameters.lr_scheduler in ['LambdaLR', 'ReduceLROnPlateau']
+
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=self.model_parameters.lr,
+            betas=(0.9, 0.999),
+            weight_decay=self.model_parameters.weight_decay,
+        )
+
+        if self.model_parameters.lr_scheduler == 'LambdaLR':
 
             def lambda_rule(epoch):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
 
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-        elif lr_scheduler == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=mode)
+        else:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
+
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
@@ -271,21 +301,21 @@ def main():
     )
 
     logger.log_image(
-        key="output_hist",
+        key="dataset_statistics",
         images=[
             os.path.join(config.root_dir, "proteo/data/ftd/processed/histogram.jpg"),
             os.path.join(config.root_dir, "proteo/data/ftd/processed/adjacency.jpg"),
         ],
     )
 
-    checkpoint_callback = pl_callbacks.ModelCheckpoint(
+    ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',
         dirpath=os.path.join(save_dir, 'checkpoints'),
         filename=config.model + '-{epoch}' + '-{val_loss:.2f}',
         mode='min',
     )
-    learning_rate_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
-    trainer_callbacks = [learning_rate_callback, checkpoint_callback, rich_gi.progress_bar()]
+    lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
+    trainer_callbacks = [ckpt_callback, lr_callback, rich_gi.progress_bar()]
 
     trainer = pl.Trainer(
         enable_progress_bar=config.use_progress_bar,
@@ -305,19 +335,16 @@ def main():
 
     # Put wandb's run id into checkpoints' filenames
     if trainer.strategy.cluster_environment.global_rank() == 0:
-        checkpoint_callback.filename = (
+        ckpt_callback.filename = (
             "run-"
             + datetime.now().strftime('%Y%m%d_%H%Mxx')
             + "-"
             + str(logger.experiment.id)
             + "-"
-            + checkpoint_callback.filename
+            + ckpt_callback.filename
         )
-        print(f"Outputs saved into:\n logger.save_dir={logger.save_dir}")
-        print(
-            "Checkpoints saved into:\n "
-            f"{checkpoint_callback.dirpath}/{checkpoint_callback.filename}"
-        )
+        print(f"Outputs saved into:\n {logger.save_dir}")
+        print("Checkpoints saved into:\n " f"{ckpt_callback.dirpath}/{ckpt_callback.filename}")
 
     module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)

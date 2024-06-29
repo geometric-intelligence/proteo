@@ -7,7 +7,6 @@ wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task: 'survival'  
 task_type: regression # Placeholder
-mode: 'min'
 
 # Model Configuration
 model: gat
