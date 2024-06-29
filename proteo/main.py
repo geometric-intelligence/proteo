@@ -142,14 +142,6 @@ def search_hyperparameters():
     # keeping only the best checkpoint based on minimum validation loss
     run_config = RunConfig(
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
-        callbacks=[
-            # WandbLoggerCallback(
-            #     project=config.project,
-            #     api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-            #     dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
-            #     mode="offline" if config.wandb_offline else "online",
-            # )
-        ],
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
