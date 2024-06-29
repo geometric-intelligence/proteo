@@ -6,15 +6,15 @@ wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
 output_dir: "outputs"
 
-# Data: path are relative to data_dir
-csv_path: "ALLFTD_dataset_for_nina_louisa.csv"
-processed_dir: "ftd/processed"
-#adj_path: "ftd/processed/adjacency_matrix.csv"
+# Dataset
+dataset_name: "ftd"
 
-# Output: path are relative to output_dir
+# Data: paths are relative to data_dir (root for FTDDataset)
+csv_path: "ALLFTD_dataset_for_nina_louisa.csv"
+
+# Output: paths are relative to output_dir
 checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
-
 
 # WandB
 project: "proteo"
@@ -24,8 +24,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-dataset_name: "ftd"
-adj_thresh: 0.2  #0.08
+adj_thresh: 0.8  #0.08 # Note: n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25

@@ -225,10 +225,9 @@ def avg_node_degree(dataset):
 
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
-    if config.dataset_name == "ftd":
-        root = os.path.join(config.root_dir, config.data_dir, "ftd")
-        train_dataset = FTDDataset(root, "train", config)
-        test_dataset = FTDDataset(root, "test", config)
+    root = os.path.join(config.root_dir, config.data_dir)
+    train_dataset = FTDDataset(root, "train", config)
+    test_dataset = FTDDataset(root, "test", config)
     return train_dataset, test_dataset
 
 
@@ -320,8 +319,8 @@ def main():
     logger.log_image(
         key="dataset_statistics",
         images=[
-            os.path.join(config.root_dir, config.data_dir, "ftd/processed/histogram.jpg"),
-            os.path.join(config.root_dir, config.data_dir, "ftd/processed/adjacency.jpg"),
+            os.path.join(train_dataset.processed_dir, "histogram.jpg"),
+            os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg"),
         ],
     )
     logger.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])

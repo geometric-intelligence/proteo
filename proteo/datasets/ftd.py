@@ -87,7 +87,7 @@ class FTDDataset(InMemoryDataset):
         return Data(x=x, edge_index=edge_index, y=label)
 
     def process(self):
-        # Read data into huge `Data` list which will be a list of graphs
+        """Read data into huge `Data` list, i.e., a list of graphs"""
         train_features, train_labels, test_features, test_labels, adj_matrix = self.load_csv_data(
             self.config
         )
@@ -105,21 +105,23 @@ class FTDDataset(InMemoryDataset):
         self.save(test_data_list, os.path.join(self.processed_dir, f'{self.name}_test.pt'))
 
     def load_csv_data(self, config):
-        print("Loading data from:", config.csv_path)
-        csv_data = np.array(pd.read_csv(config.csv_path))
+        csv_path = os.path.join(config.data_dir, config.csv_path)
+        print("Loading data from:", csv_path)
+        csv_data = np.array(pd.read_csv(csv_path))
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
         has_plasma = has_plasma == 1  # Converting from indices to boolean
         nfl = csv_data[has_plasma, self.nfl_col_id].astype(float)
         nfl_mask = ~np.isnan(nfl)
+        # Extract and convert the plasma_protein values for rows
+        # where has_plasma is True and nfl is not NaN.
         plasma_protein = csv_data[
             has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
-        ][nfl_mask].astype(
-            float
-        )  # Extract and convert the plasma_protein values for rows where has_plasma is True and nfl is not NaN.
-        nfl = nfl[nfl_mask]  # Remove NaN values from nfl
+        ][nfl_mask].astype(float)
+        # Remove NaN values from nfl
+        nfl = nfl[nfl_mask]
         nfl = log_transform(nfl)
-        hist_path = os.path.join(config.processed_dir, 'histogram.jpg')
-        plot_histogram(pd.DataFrame(nfl), hist_path)
+        hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
+        plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
 
         features = plasma_protein
         labels = nfl
@@ -133,34 +135,31 @@ class FTDDataset(InMemoryDataset):
         test_labels = torch.FloatTensor(test_labels)
         print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
+        print("--> Total features and labels:", features.shape, labels.shape)
 
-        adj_path = os.path.join(config.processed_dir, f'adjacency_{config.adj_thresh}.csv')
+        adj_path = os.path.join(self.processed_dir, f'adjacency_{config.adj_thresh}.csv')
+        # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
-            calculate_adjacency_matrix(config, plasma_protein, adj_path)
+            calculate_adjacency_matrix(plasma_protein, save_to=adj_path)
         adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
-        adj_matrix = torch.FloatTensor(
-            np.where(adj_matrix > config.adj_thresh, 1, 0)
-        )  # thresholding!
+        # Threshold adjacency matrix
+        adj_matrix = torch.FloatTensor(np.where(adj_matrix > config.adj_thresh, 1, 0))
+        print("Adjacency matrix:", adj_matrix.shape)
+        print("Number of edges:", adj_matrix.sum())
 
-        # Plotting adjacency matrix
+        # Plot and save adjacency matrix as jpg
         cmap = mcolors.LinearSegmentedColormap.from_list("", ["white", "black"])
         plt.figure()
         plt.imshow(adj_matrix, cmap=cmap)
         plt.colorbar(ticks=[0, 1], label='Adjacency Value')
         plt.title("Visualization of Adjacency Matrix")
-        plt.savefig(os.path.join(config.processed_dir, f'adjacency_{config.adj_thresh}.jpg'))
+        plt.savefig(os.path.join(self.processed_dir, f'adjacency_{config.adj_thresh}.jpg'))
         plt.close()
-
-        print("Adjacency matrix:", adj_matrix.shape)
-        print("Number of edges:", adj_matrix.sum())
 
         return train_features, train_labels, test_features, test_labels, adj_matrix
 
 
-def calculate_adjacency_matrix(config, plasma_protein, adj_path):
-    # WGCNA parameters
-    print(plasma_protein.shape)  # rows = samples ; cols = proteins,
-
+def calculate_adjacency_matrix(plasma_protein, save_to):
     # Calculate adjacency matrix.
     plasma_protein_df = pd.DataFrame(plasma_protein)
     softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df)
@@ -170,28 +169,17 @@ def calculate_adjacency_matrix(config, plasma_protein, adj_path):
     )
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
-    # Convert to dataframe.
     adjacency_df = pd.DataFrame(adjacency)
     print(adjacency_df.shape)
-
-    # if config.processed_dir doesn't exist, create it:
-    if not os.path.exists(config.processed_dir):
-        os.makedirs(config.processed_dir)
-    adjacency_df.to_csv(adj_path, header=None, index=False)
-    #    similarity_matrix = np.array(
-    #     pd.read_csv(),
-    # ).astype(float)
-    # adj_matrix = torch.LongTensor(np.where(similarity_matrix > config.adj_thresh, 1, 0))
-    # adj_matrix = adj_matrix[80:, 80:]
+    adjacency_df.to_csv(save_to, header=None, index=False)
 
 
-def plot_histogram(data, hist_path):
+def plot_histogram(data, save_to):
     plt.hist(data, bins=30, alpha=0.5)
     plt.xlabel('NFL3_MEAN')
     plt.ylabel('Frequency')
     plt.title('Histogram of NFL3_MEAN')
-    histogram_path = os.path.join(hist_path)
-    plt.savefig(histogram_path, format='jpg')
+    plt.savefig(save_to, format='jpg')
 
 
 def log_transform(data):
