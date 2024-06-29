@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 class HistogramCallback(Callback):
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
-        
+
         Parameters
         ----------
         trainer : pytorch_lightning.Trainer
@@ -30,7 +30,7 @@ class HistogramCallback(Callback):
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """Save val predictions and targets as histograms.
-        
+
         Parameters
         ----------
         trainer : pytorch_lightning.Trainer
