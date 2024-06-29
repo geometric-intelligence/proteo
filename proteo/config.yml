@@ -13,7 +13,7 @@ mode: 'min'
 minimize: true #Placeholder
 
 # Model Configuration
-model: gat-v4
+model: gat
 
 gat-v4:
   # Model Configuration

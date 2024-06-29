@@ -271,16 +271,7 @@ def main():
     avg_node_deg = avg_node_degree(test_dataset)
 
     print("Loaders created")
-
-    # Configure WandB Logger
-    # logger = None
-    # wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-    # if wandb_api_key_path and not config.wandb_offline:
-    #     with open(config.wandb_api_key_path, 'r') as f:
-    #         wandb_api_key = f.read().strip()
-    #     os.environ['WANDB_API_KEY'] = wandb_api_key
-    #wandb_config = {'project': config.project_name}
-    logger = pl_loggers.WandbLogger(config=config, project=config.project)
+    logger = pl_loggers.WandbLogger(config=config, project=config.project, log_model=False)
 
     logger.log_image(
         key="output_hist",
