@@ -93,7 +93,7 @@ cpu_per_worker: 32
 gpu_per_worker: 4
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat'] #, 'gat-v4']   #['gat', 'gat-v4']
+model_grid_search: ['gat-v4'] #, 'gat-v4']   #['gat', 'gat-v4']
 batch_size_choice: [4] #, 4]
 # GAT
 gat_num_layers: [2, 3, 4]

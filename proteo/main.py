@@ -109,13 +109,13 @@ def train_func(search_config):
     # Set checkpoint interval (e.g., every 10 epochs)
     checkpoint_interval = 25
     checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
-    # ray_hist_callback = proteo_callbacks.RayCustomWandbLoggerCallback()
+    ray_hist_callback = proteo_callbacks.RayCustomWandbLoggerCallback()
 
     trainer = pl.Trainer(
         devices='auto',
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
-        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback],
+        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback, ray_hist_callback],
         plugins=[
             ray_lightning.RayLightningEnvironment()
         ],  # How ray interacts with pytorch lightning
@@ -123,6 +123,7 @@ def train_func(search_config):
         max_epochs=config.epochs,
     )
     trainer = ray_lightning.prepare_trainer(trainer)
+    # FIXME: When a trial errors, Wandb still shows it as "running".
     trainer.fit(module, train_loader, test_loader)
 
 
@@ -160,6 +161,7 @@ def search_hyperparameters():
     if not os.path.exists(config.ray_tmp_dir):
         os.makedirs(config.ray_tmp_dir)
     ray.init(_temp_dir=config.ray_tmp_dir)
+
     ray_trainer = TorchTrainer(
         train_func,
         scaling_config=scaling_config,

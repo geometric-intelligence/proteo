@@ -7,6 +7,29 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 
 
 class RayCustomWandbLoggerCallback(Callback):
+    def on_train_batch_end(self, trainer, pl_module, outputs, *args):
+        loss = outputs["loss"]
+        wandb.log({'train/loss': loss, "epoch": pl_module.current_epoch})
+        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
+        wandb.log({'train/RMSE': math.sqrt(loss), "epoch": pl_module.current_epoch})
+
+    def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+        if not trainer.sanity_checking:
+            loss = outputs
+            wandb.log({'val/loss': loss, "epoch": pl_module.current_epoch})
+            # Log to lightning so that hyperparameter search has access to val_loss
+            pl_module.log(
+                'val_loss',
+                loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                batch_size=pl_module.config.batch_size,
+            )
+
+            # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
+            wandb.log({"val/RMSE": math.sqrt(loss), "epoch": pl_module.current_epoch})
+
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
 
@@ -20,11 +43,12 @@ class RayCustomWandbLoggerCallback(Callback):
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
-        pl_module.logger.experiment.log(
+        wandb.log(
             {
-                "train_preds": wandb.Histogram(train_preds),
-                "train_targets": wandb.Histogram(train_targets),
+                "train/preds": wandb.Histogram(train_preds),
+                "train/targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
+                "epoch": pl_module.current_epoch,
             }
         )
         pl_module.train_preds.clear()  # free memory
@@ -43,14 +67,11 @@ class RayCustomWandbLoggerCallback(Callback):
         if not trainer.sanity_checking:
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
-            # print(f"\n\npl_module.__dict__ = {pl_module.__dict__}")
-            print(f"\n\ntrainer.connectors.logger.__dict__ = {trainer.connectors.logger.__dict__}")
-
-            # print(f"\n\npl_module.logger.__dict__ = {pl_module.logger.__dict__}")
-            pl_module.logger.experiment.log(
+            wandb.log(
                 {
-                    "val_preds": wandb.Histogram(val_preds),
-                    "val_targets": wandb.Histogram(val_targets),
+                    "val/preds": wandb.Histogram(val_preds),
+                    "val/targets": wandb.Histogram(val_targets),
+                    "epoch": pl_module.current_epoch,
                 }
             )
         pl_module.val_preds.clear()  # free memory

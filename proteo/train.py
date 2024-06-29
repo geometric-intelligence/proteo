@@ -20,7 +20,6 @@ Here, pl_module.logger is Ray's dedicated logger.
 """
 
 import gc
-import math
 import os
 from datetime import datetime
 
@@ -188,7 +187,11 @@ class Proteo(pl.LightningModule):
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
         loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
-        return loss_fn(pred, target)
+        loss = loss_fn(pred, target)
+
+        # self.log("val_loss", loss, on_step=False, on_epoch=True)
+
+        return loss
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'
