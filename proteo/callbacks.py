@@ -1,11 +1,12 @@
 import math
+
 import torch
 import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
 
-class RayHistogramCallback(Callback):
+class RayCustomWandbLoggerCallback(Callback):
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
 
@@ -42,10 +43,10 @@ class RayHistogramCallback(Callback):
         if not trainer.sanity_checking:
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
-            #print(f"\n\npl_module.__dict__ = {pl_module.__dict__}")
+            # print(f"\n\npl_module.__dict__ = {pl_module.__dict__}")
             print(f"\n\ntrainer.connectors.logger.__dict__ = {trainer.connectors.logger.__dict__}")
-            
-            #print(f"\n\npl_module.logger.__dict__ = {pl_module.logger.__dict__}")
+
+            # print(f"\n\npl_module.logger.__dict__ = {pl_module.logger.__dict__}")
             pl_module.logger.experiment.log(
                 {
                     "val_preds": wandb.Histogram(val_preds),
@@ -56,25 +57,35 @@ class RayHistogramCallback(Callback):
         pl_module.val_targets.clear()
 
 
-class HistogramCallback(Callback):
-
-    #def on_train_batch_end(self, trainer, pl_module):
-    def on_train_batch_end(self, trainer, pl_module, outputs):
-        #pl_module.train_loss_metric(outputs['loss'])
-        train_loss = outputs["loss"]
-        print(f'outputs = {outputs}')
-        # print(f"pl_module.__dict__ = {pl_module.__dict__}")
-        # print(f"trainer.__dict__ = {trainer.__dict__}")
+class CustomWandbLoggerCallback(Callback):
+    def on_train_batch_end(self, trainer, pl_module, outputs, *args):
+        loss = outputs["loss"]
         pl_module.log(
             'train_loss',
-            train_loss,
+            loss,
             on_step=False,
             on_epoch=True,
             sync_dist=True,
             prog_bar=True,
             batch_size=pl_module.config.batch_size,
         )
-        pl_module.log('train_RMSE', math.sqrt(self.train_loss_metric), on_step=False, on_epoch=True, sync_dist=True)
+        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
+        pl_module.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+
+    def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+        if not trainer.sanity_checking:
+            loss = outputs
+            pl_module.log(
+                'val_loss',
+                loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                prog_bar=True,
+                batch_size=pl_module.config.batch_size,
+            )
+            # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
+            pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.

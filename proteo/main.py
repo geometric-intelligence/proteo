@@ -26,12 +26,12 @@ import os
 
 import numpy as np
 import pytorch_lightning as pl
+import ray
 import torch
 import train as proteo_train
 from config_utils import CONFIG_FILE, read_config_from_file
-import ray
 from ray import tune
-from ray.air.integrations.wandb import setup_wandb  #WandbLoggerCallback
+from ray.air.integrations.wandb import setup_wandb  # WandbLoggerCallback
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
@@ -88,7 +88,9 @@ def train_func(search_config):
         search_config,
         project=config.project,
         api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-        dir=os.path.join(config.root_dir, config.output_dir),  # dir needs to exist, otherwise wandb saves in /tmp
+        dir=os.path.join(
+            config.root_dir, config.output_dir
+        ),  # dir needs to exist, otherwise wandb saves in /tmp
         mode="offline" if config.wandb_offline else "online",
     )
     # This requires using wandb.log, not self.log
@@ -107,7 +109,7 @@ def train_func(search_config):
     # Set checkpoint interval (e.g., every 10 epochs)
     checkpoint_interval = 25
     checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
-    #ray_hist_callback = proteo_callbacks.RayHistogramCallback()
+    # ray_hist_callback = proteo_callbacks.RayCustomWandbLoggerCallback()
 
     trainer = pl.Trainer(
         devices='auto',
@@ -157,7 +159,7 @@ def search_hyperparameters():
     # Define a TorchTrainer without hyper-parameters for Tuner
     if not os.path.exists(config.ray_tmp_dir):
         os.makedirs(config.ray_tmp_dir)
-    ray.init(_temp_dir=config.ray_tmp_dir) 
+    ray.init(_temp_dir=config.ray_tmp_dir)
     ray_trainer = TorchTrainer(
         train_func,
         scaling_config=scaling_config,

@@ -2,7 +2,7 @@
 
 Lightning manages the training,
 and thus we use:
-- Lightning's WandbLogger logger,
+- Lightning's WandbLogger logger, in our CustomWandbLoggerCallback,
 - Lightning's ModelCheckpoint callback.
 
 Here, pl_module.logger is WandbLogger's logger.
@@ -158,11 +158,13 @@ class Proteo(pl.LightningModule):
         loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
+        # FIXME: With L1 regularization, the train_RMSE is not the RMSE
+        # FIXME: L2 regularization not applied to val_loss, -> train and val losses cannot be compared
         if self.model_parameters.l1_lambda > 0:
             l1_lambda = self.model_parameters.l1_lambda  # Regularization strength
             l1_norm = sum(p.abs().sum() for p in self.parameters())
             loss = loss + l1_lambda * l1_norm
-        
+
         return loss
 
     def validation_step(self, batch):
@@ -182,25 +184,11 @@ class Proteo(pl.LightningModule):
         # Store predictions
         self.val_preds.append(pred)
         self.val_targets.append(target)
-        print(f"sanity check: len(self.val_preds)={len(self.val_preds)}")
-
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
         loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
-        loss = loss_fn(pred, target)
-
-        self.log(
-            'val_loss',
-            loss,
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-            prog_bar=True,
-            batch_size=self.config.batch_size,
-        )
-        self.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
-        return loss
+        return loss_fn(pred, target)
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'
@@ -348,7 +336,7 @@ def main():
     trainer_callbacks = [
         ckpt_callback,
         lr_callback,
-        proteo_callbacks.HistogramCallback(),
+        proteo_callbacks.CustomWandbLoggerCallback(),
         proteo_callbacks.progress_bar(),
     ]
 
