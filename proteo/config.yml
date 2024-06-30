@@ -37,7 +37,7 @@ gat-v4:
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
   fc_dim: [64, 48, 32, 32]
-  fc_dropout: 0.05
+  dropout: 0.05
   fc_act: elu
   num_nodes: 7289 # TODO: This should not be hardcoded
   # Training gat-v4
@@ -75,7 +75,7 @@ gcn:
 
 # Training
 batch_size: 16 #for one off training
-epochs: 50
+epochs: 100
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -93,8 +93,8 @@ pin_memory: true
 
 # Hyperparameter search
 # Number of trials = len(model_grid_search) * num_samples
-num_samples: 30
-grace_period: 2
+num_samples: 60
+grace_period: 4
 reduction_factor: 8
 num_to_keep: 5  # number of checkpoints to keep. 
 # higher values means checkpoints are overwritten less often, gaining speed
@@ -103,9 +103,11 @@ gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
 lr_min: 0.0001
 lr_max: 0.1
 model_grid_search: ['gat-v4', 'gat', 'gcn'] #, 'gat-v4']   #['gat', 'gat-v4']
+# Choices
 batch_size_choice: [1, 4, 16, 32]
-scheduler_choice: ['LambdaLR', 'ReduceLROnPlateau']
+scheduler_choice: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
 num_layers_choice: [2, 3, 4]  # only for GAT and GCN
+dropout_choice: [0.1, 0.3, 0.8]
 # GAT
 gat_hidden_channels: [8, 32, 128, 256]
 gat_heads: [1, 2, 4]

@@ -25,7 +25,7 @@ class GATv4(nn.Module):
         which_layer,
         use_layer_norm,
         fc_dim,
-        fc_dropout,
+        dropout,
         fc_act,
         num_nodes,
     ):
@@ -35,7 +35,7 @@ class GATv4(nn.Module):
         self.out_channels = out_channels
         self.in_channels = in_channels
         self.fc_dim = fc_dim
-        self.fc_dropout = fc_dropout
+        self.dropout = dropout
         self.fc_act = fc_act
         self.which_layer = which_layer
         self.use_layer_norm = use_layer_norm
@@ -58,9 +58,7 @@ class GATv4(nn.Module):
     def build_gat_layers(self):
         input_dim = self.in_channels
         for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
-            self.convs.append(
-                GATConv(input_dim, hidden_dim, heads=num_heads, dropout=self.fc_dropout)
-            )
+            self.convs.append(GATConv(input_dim, hidden_dim, heads=num_heads, dropout=self.dropout))
             input_dim = hidden_dim * num_heads
 
     def build_pooling_layers(self):
@@ -75,7 +73,7 @@ class GATv4(nn.Module):
                 nn.Sequential(
                     nn.Linear(fc_layer_input_dim, fc_dim),
                     self.FC_ACT_MAP[self.fc_act](),
-                    nn.AlphaDropout(p=self.fc_dropout, inplace=True),
+                    nn.AlphaDropout(p=self.dropout, inplace=True),
                 )
             )
             fc_layer_input_dim = fc_dim

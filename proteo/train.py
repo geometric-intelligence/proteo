@@ -77,7 +77,7 @@ class Proteo(pl.LightningModule):
                 which_layer=self.model_parameters.which_layer,
                 use_layer_norm=self.model_parameters.use_layer_norm,
                 fc_dim=self.model_parameters.fc_dim,
-                fc_dropout=self.model_parameters.fc_dropout,
+                dropout=self.model_parameters.dropout,
                 fc_act=self.model_parameters.fc_act,
             )
         elif config.model == 'gat':
@@ -212,9 +212,11 @@ class Proteo(pl.LightningModule):
         elif self.model_parameters.lr_scheduler == 'ExponentialLR':
             scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.1, last_epoch=-1)
         elif self.model_parameters.lr_scheduler == 'StepLR':
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=0.1)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
         elif self.model_parameters.lr_scheduler == 'CosineAnnealingLR':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=self.config.epochs, eta_min=0
+            )
         else:
             return NotImplementedError(
                 'scheduler not implemented:', self.model_parameters.lr_scheduler

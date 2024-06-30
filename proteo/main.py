@@ -191,6 +191,7 @@ def search_hyperparameters():
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choice),
         'scheduler': tune.choice(config.scheduler_choice),
+        'dropout': tune.choice(config.dropout_choice),
     }
 
     def trial_str_creator(trial):
