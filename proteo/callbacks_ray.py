@@ -65,7 +65,7 @@ class CustomRayTrainReportCallback(Callback):
         metrics["step"] = trainer.global_step
 
         # Save checkpoint to local
-        checkpoint_name = f"checkpoint_epoch_{epoch}.ckpt"
+        checkpoint_name = f"checkpoint_epoch={epoch}-val_loss={metrics["val_loss"]:.2f}.ckpt"
         ckpt_path = Path(tmpdir, checkpoint_name).as_posix()
         trainer.save_checkpoint(ckpt_path, weights_only=False)
 
@@ -84,27 +84,27 @@ class CustomRayLogsCallback(Callback):
     """Callback that logs to Wandb, and reports losses to Ray."""
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
-        wandb.log({'train/loss': loss, "epoch": pl_module.current_epoch})
+        wandb.log({'train_loss': loss, "epoch": pl_module.current_epoch})
         # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-        wandb.log({'train/RMSE': math.sqrt(loss), "epoch": pl_module.current_epoch})
+        wandb.log({'train_RMSE': math.sqrt(loss), "epoch": pl_module.current_epoch})
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
             loss = outputs
-            wandb.log({'val/loss': loss, "epoch": pl_module.current_epoch})
+            wandb.log({'val_loss': loss, "epoch": pl_module.current_epoch})
             # Log to lightning so that the hyperparameter search can access val_loss
-            # FIXME: val/loss (on wandb) and val_loss (printed in the console) are not the same
-            pl_module.log(
-                'val_loss',
-                loss,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-                batch_size=pl_module.config.batch_size,
-            )
+            # FIXME: val_loss (on wandb) and val_loss (printed in the console) are not the same
+            # pl_module.log(
+            #     'val_loss',
+            #     loss,
+            #     on_step=False,
+            #     on_epoch=True,
+            #     sync_dist=True,
+            #     batch_size=pl_module.config.batch_size,
+            # )
 
             # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-            wandb.log({"val/RMSE": math.sqrt(loss), "epoch": pl_module.current_epoch})
+            wandb.log({"val_RMSE": math.sqrt(loss), "epoch": pl_module.current_epoch})
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -121,7 +121,7 @@ class CustomRayLogsCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         wandb.log(
             {
-                "train/preds": wandb.Histogram(train_preds),
+                "train_preds": wandb.Histogram(train_preds),
                 "train/targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
                 "epoch": pl_module.current_epoch,
@@ -145,8 +145,8 @@ class CustomRayLogsCallback(Callback):
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             wandb.log(
                 {
-                    "val/preds": wandb.Histogram(val_preds),
-                    "val/targets": wandb.Histogram(val_targets),
+                    "val_preds": wandb.Histogram(val_preds),
+                    "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }
             )

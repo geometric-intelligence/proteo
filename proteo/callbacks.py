@@ -10,7 +10,7 @@ class CustomLogsCallback(Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
         pl_module.log(
-            'train/loss',
+            'train_loss',
             loss,
             on_step=False,
             on_epoch=True,
@@ -19,13 +19,13 @@ class CustomLogsCallback(Callback):
             batch_size=pl_module.config.batch_size,
         )
         # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-        pl_module.log('train/RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+        pl_module.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
             loss = outputs
             pl_module.log(
-                'val/loss',
+                'val_loss',
                 loss,
                 on_step=False,
                 on_epoch=True,
@@ -35,16 +35,16 @@ class CustomLogsCallback(Callback):
             )
             # HACKALERT: Relogging as val_loss to accommodate the monitoring of the loss
             # by the hyperparameter search algorithm.
-            pl_module.log(
-                'val_loss',
-                loss,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-                batch_size=pl_module.config.batch_size,
-            )
+            # pl_module.log(
+            #     'val_loss',
+            #     loss,
+            #     on_step=False,
+            #     on_epoch=True,
+            #     sync_dist=True,
+            #     batch_size=pl_module.config.batch_size,
+            # )
             # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-            pl_module.log('val/RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+            pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -61,8 +61,8 @@ class CustomLogsCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         pl_module.logger.experiment.log(
             {
-                "train/preds": wandb.Histogram(train_preds),
-                "train/targets": wandb.Histogram(train_targets),
+                "train_preds": wandb.Histogram(train_preds),
+                "train_targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
                 "epoch": pl_module.current_epoch,
             }
@@ -85,8 +85,8 @@ class CustomLogsCallback(Callback):
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             pl_module.logger.experiment.log(
                 {
-                    "val/preds": wandb.Histogram(val_preds),
-                    "val/targets": wandb.Histogram(val_targets),
+                    "val_preds": wandb.Histogram(val_preds),
+                    "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }
             )

@@ -222,7 +222,7 @@ class Proteo(pl.LightningModule):
                 'scheduler not implemented:', self.model_parameters.lr_scheduler
             )
 
-        # HACKALERT: Validation loss is logged twice, as val/loss and val_loss
+        # HACKALERT: Validation loss is logged twice, as val_loss and val_loss
         # So that Proteo's module can be used in train.py and main.py
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
@@ -336,7 +336,7 @@ def main():
     logger.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
-        monitor='val/loss',
+        monitor='val_loss',
         dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
         filename=config.model + '-{epoch}' + '-{val_loss:.2f}',
         mode='min',
