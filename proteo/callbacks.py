@@ -6,8 +6,14 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
 
-class CustomLogsCallback(Callback):
+class CustomWandbCallback(Callback):
+    """Custom callback for logging to Wandb.
+    
+    The histograms are logged to wandb, but do not appear on the workspace view.
+    They only appear on each run's view.
+    """
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
+        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
         loss = outputs["loss"]
         pl_module.log(
             'train_loss',
@@ -18,10 +24,10 @@ class CustomLogsCallback(Callback):
             prog_bar=True,
             batch_size=pl_module.config.batch_size,
         )
-        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
         pl_module.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
         if not trainer.sanity_checking:
             loss = outputs
             pl_module.log(
@@ -33,17 +39,6 @@ class CustomLogsCallback(Callback):
                 prog_bar=True,
                 batch_size=pl_module.config.batch_size,
             )
-            # HACKALERT: Relogging as val_loss to accommodate the monitoring of the loss
-            # by the hyperparameter search algorithm.
-            # pl_module.log(
-            #     'val_loss',
-            #     loss,
-            #     on_step=False,
-            #     on_epoch=True,
-            #     sync_dist=True,
-            #     batch_size=pl_module.config.batch_size,
-            # )
-            # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
             pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_train_epoch_end(self, trainer, pl_module):

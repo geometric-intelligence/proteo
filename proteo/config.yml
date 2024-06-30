@@ -9,7 +9,7 @@ checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
 
 # Dataset
-dataset_name: "ftd"
+dataset_name: "ftd"  # 352 in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 
 # WandB
@@ -80,7 +80,7 @@ precision: "32-true"
 accumulate_grad_batches: 1
 
 # GPUs
-device: [0, 1] #, 2, 3, 4, 5, 6, 7] 
+device: [0] #, 1] #, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
@@ -91,24 +91,24 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 3
+num_samples: 1
 grace_period: 4  # Each training is run at least 4 epochs, until epoch #3.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_interval: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
-cpu_per_worker: 16
+cpu_per_worker: 64
 gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat-v4']  #, 'gat', 'gcn']
+model_grid_search: ['gat']  #, 'gat', 'gcn']
 # Choices
-batch_size_choice: [1] #, 4, 16, 32]
+batch_size_choice: [32] #, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
 scheduler_choice: ['LambdaLR'] #, 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
 num_layers_choice: [2] #, 3, 4]  # only for GAT and GCN
-dropout_choice: [0.1] #, 0.3, 0.8]
+dropout_choice: [0.2] #, 0.3, 0.8]
 # GAT
-gat_hidden_channels: [8, 32, 128, 256]
-gat_heads: [1, 2, 4]
+gat_hidden_channels: [256] #8, 32, 128, 256]
+gat_heads: [4]  #1, 2, 4]
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
 gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]

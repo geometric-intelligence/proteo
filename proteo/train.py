@@ -2,7 +2,7 @@
 
 Lightning manages the training,
 and thus we use:
-- Lightning's WandbLogger logger, in our CustomLogsCallback,
+- Lightning's WandbLogger logger, in our CustomWandbCallback,
 - Lightning's ModelCheckpoint callback.
 
 Here, pl_module.logger is WandbLogger's logger.
@@ -13,7 +13,7 @@ Notes
 When we do hyperparameter search in main.py,
 Ray[Tune] takes over the training process, 
 and thus we use instead:
-- wandb.log, in our CustomLogsCallback,
+- wandb.log, in our CustomWandbCallback,
 - Ray's CheckpointConfig.
 
 Here, pl_module.logger is Ray's dedicated logger.
@@ -186,7 +186,8 @@ class Proteo(pl.LightningModule):
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
         loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
-        return loss_fn(pred, target)
+        loss = loss_fn(pred, target)
+        return loss
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'
@@ -338,14 +339,14 @@ def main():
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',
         dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
-        filename=config.model + '-{epoch}' + '-{val_loss:.2f}',
+        filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
         mode='min',
     )
     lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
     trainer_callbacks = [
         ckpt_callback,
         lr_callback,
-        proteo_callbacks.CustomLogsCallback(),
+        proteo_callbacks.CustomWandbCallback(),
         proteo_callbacks.progress_bar(),
     ]
 

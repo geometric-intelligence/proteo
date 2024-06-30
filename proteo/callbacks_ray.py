@@ -12,7 +12,7 @@ from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
 
 
-class CustomRayTrainReportCallback(Callback):
+class CustomRayCheckpointCallback(Callback):
     """Callback that reports checkpoints to Ray on train epoch end.
 
     It fetches the latest `trainer.callback_metrics` and reports together with
@@ -24,9 +24,9 @@ class CustomRayTrainReportCallback(Callback):
         └─ checkpoint_epoch_*.ckpt      PyTorch Lightning Checkpoint: * is epoch
 
     If we save every 3 epochs, then we have filenames such as:
-    - checkpoint_000000/checkpoint_epoch_0.ckpt
-    - checkpoint_000001/checkpoint_epoch_3.ckpt
-    - checkpoint_000002/checkpoint_epoch_6.ckpt
+    - checkpoint_000000/checkpoint-epoch=0-val_loss=0.81.ckpt
+    - checkpoint_000001/checkpoint-epoch=3-val_loss=0.82.ckpt
+    - checkpoint_000002/checkpoint-epoch=6-val_loss=0.79.ckpt
     - etc.
 
     Most of the code is pasted from:
@@ -64,8 +64,10 @@ class CustomRayTrainReportCallback(Callback):
         metrics["epoch"] = trainer.current_epoch
         metrics["step"] = trainer.global_step
 
-        # Save checkpoint to local
-        checkpoint_name = f"checkpoint_epoch={epoch}-val_loss={metrics["val_loss"]:.2f}.ckpt"
+        # Save checkpoint to local, using name pattern similar than
+        # when running train.py
+        val_loss = metrics["val_loss"]
+        checkpoint_name = f"checkpoint-epoch={epoch}-val_loss={val_loss:.4f}.ckpt"
         ckpt_path = Path(tmpdir, checkpoint_name).as_posix()
         trainer.save_checkpoint(ckpt_path, weights_only=False)
 
@@ -80,31 +82,34 @@ class CustomRayTrainReportCallback(Callback):
             shutil.rmtree(tmpdir)
 
 
-class CustomRayLogsCallback(Callback):
-    """Callback that logs to Wandb, and reports losses to Ray."""
-    def on_train_batch_end(self, trainer, pl_module, outputs, *args):
-        loss = outputs["loss"]
-        wandb.log({'train_loss': loss, "epoch": pl_module.current_epoch})
-        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-        wandb.log({'train_RMSE': math.sqrt(loss), "epoch": pl_module.current_epoch})
+class CustomRayWandbCallback(Callback):
+    """Callback that logs losses and plots to Wandb."""
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
-        if not trainer.sanity_checking:
-            loss = outputs
-            wandb.log({'val_loss': loss, "epoch": pl_module.current_epoch})
-            # Log to lightning so that the hyperparameter search can access val_loss
-            # FIXME: val_loss (on wandb) and val_loss (printed in the console) are not the same
-            # pl_module.log(
-            #     'val_loss',
-            #     loss,
-            #     on_step=False,
-            #     on_epoch=True,
-            #     sync_dist=True,
-            #     batch_size=pl_module.config.batch_size,
-            # )
+    # def on_train_batch_end(self, trainer, pl_module, outputs, *args):
+    #     # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
+    #     loss = outputs["loss"]
+    #     print(f"- train batch end at {pl_module.current_epoch}: outputs={outputs}")
+    #     print(f"- train batch end at {pl_module.current_epoch}: loss=outputs['loss']={loss}")
+    #     print(f"train_loss in custom ray callback: {loss}")
+    #     wandb.log(
+    #         {'train_loss': loss, 'train_RMSE': math.sqrt(loss), "epoch": pl_module.current_epoch}
+    #     )
 
-            # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-            wandb.log({"val_RMSE": math.sqrt(loss), "epoch": pl_module.current_epoch})
+    # def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+    #     # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
+    #     # FIXME: val_loss on wandb might differ from val_loss on Ray because of the sync_dist=True
+    #     # val_loss on wandb *on each step* corresponds to what is printed below.
+    #     # val_loss on wandb *on each epoch* corresponds to the first step, ie, first batch, whose loss is lower (?)
+    #     # what is printed below.
+    #     # FIXME: Why doesn't it average the loss across batches?
+
+    #     if not trainer.sanity_checking:
+    #         loss = outputs
+    #         print(f"- val batch end at epoch {pl_module.current_epoch}: outputs={outputs}")
+    #         print(f"- val batch end at epoch {pl_module.current_epoch}: loss=outputs={loss}")
+    #         wandb.log(
+    #             {'val_loss': loss, "val_RMSE": math.sqrt(loss), "epoch": pl_module.current_epoch}
+    #         )
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -121,8 +126,9 @@ class CustomRayLogsCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         wandb.log(
             {
+                "train_loss_epoch": pl_module.trainer.callback_metrics["train_loss"],
                 "train_preds": wandb.Histogram(train_preds),
-                "train/targets": wandb.Histogram(train_targets),
+                "train_targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
                 "epoch": pl_module.current_epoch,
             }
@@ -145,6 +151,7 @@ class CustomRayLogsCallback(Callback):
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             wandb.log(
                 {
+                    "val_loss_epoch": pl_module.trainer.callback_metrics["val_loss"],
                     "val_preds": wandb.Histogram(val_preds),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
@@ -152,3 +159,32 @@ class CustomRayLogsCallback(Callback):
             )
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
+
+
+class CustomRayReportLossCallback(Callback):
+    """Callback that reports val loss to Ray."""
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, *args):
+        loss = outputs["loss"]
+        pl_module.log(
+            'train_loss',
+            loss,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            prog_bar=True,
+            batch_size=pl_module.config.batch_size,
+        )
+
+    def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+        if not trainer.sanity_checking:
+            loss = outputs
+            pl_module.log(
+                'val_loss',
+                loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                prog_bar=True,
+                batch_size=pl_module.config.batch_size,
+            )
