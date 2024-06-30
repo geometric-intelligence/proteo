@@ -99,7 +99,8 @@ def train_func(search_config):
             proteo_callbacks_ray.CustomRayWandbCallback(),
             proteo_callbacks_ray.CustomRayReportLossCallback(),
             proteo_callbacks_ray.CustomRayCheckpointCallback(
-                checkpoint_interval=config.checkpoint_interval),
+                checkpoint_interval=config.checkpoint_interval
+            ),
         ],
         plugins=[
             ray_lightning.RayLightningEnvironment()

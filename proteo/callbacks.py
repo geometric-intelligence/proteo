@@ -8,12 +8,14 @@ from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTh
 
 class CustomWandbCallback(Callback):
     """Custom callback for logging to Wandb.
-    
+
     The histograms are logged to wandb, but do not appear on the workspace view.
     They only appear on each run's view.
     """
+
+    # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
+    # then sqrt(loss) is not the RMSE
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
-        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
         loss = outputs["loss"]
         pl_module.log(
             'train_loss',
@@ -27,7 +29,6 @@ class CustomWandbCallback(Callback):
         pl_module.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
-        # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
         if not trainer.sanity_checking:
             loss = outputs
             pl_module.log(

@@ -1,13 +1,13 @@
 import math
+import os
+import shutil
+import tempfile
+from pathlib import Path
 
 import torch
 import wandb
 from pytorch_lightning.callbacks import Callback
 from ray import train
-import tempfile
-from pathlib import Path
-import os
-import shutil
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
 
@@ -85,31 +85,8 @@ class CustomRayCheckpointCallback(Callback):
 class CustomRayWandbCallback(Callback):
     """Callback that logs losses and plots to Wandb."""
 
-    # def on_train_batch_end(self, trainer, pl_module, outputs, *args):
-    #     # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-    #     loss = outputs["loss"]
-    #     print(f"- train batch end at {pl_module.current_epoch}: outputs={outputs}")
-    #     print(f"- train batch end at {pl_module.current_epoch}: loss=outputs['loss']={loss}")
-    #     print(f"train_loss in custom ray callback: {loss}")
-    #     wandb.log(
-    #         {'train_loss': loss, 'train_RMSE': math.sqrt(loss), "epoch": pl_module.current_epoch}
-    #     )
-
-    # def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
-    #     # FIXME: if loss is not the MSE (regularization, or L1), then sqrt(loss) is not the RMSE
-    #     # FIXME: val_loss on wandb might differ from val_loss on Ray because of the sync_dist=True
-    #     # val_loss on wandb *on each step* corresponds to what is printed below.
-    #     # val_loss on wandb *on each epoch* corresponds to the first step, ie, first batch, whose loss is lower (?)
-    #     # what is printed below.
-    #     # FIXME: Why doesn't it average the loss across batches?
-
-    #     if not trainer.sanity_checking:
-    #         loss = outputs
-    #         print(f"- val batch end at epoch {pl_module.current_epoch}: outputs={outputs}")
-    #         print(f"- val batch end at epoch {pl_module.current_epoch}: loss=outputs={loss}")
-    #         wandb.log(
-    #             {'val_loss': loss, "val_RMSE": math.sqrt(loss), "epoch": pl_module.current_epoch}
-    #         )
+    # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
+    # then sqrt(loss) is not the RMSE
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -124,9 +101,12 @@ class CustomRayWandbCallback(Callback):
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
+        train_loss = pl_module.trainer.callback_metrics["train_loss"]
+        train_RMSE = math.sqrt(train_loss)
         wandb.log(
             {
-                "train_loss_epoch": pl_module.trainer.callback_metrics["train_loss"],
+                "train_loss": train_loss,
+                "train_RMSE": train_RMSE,
                 "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
@@ -149,9 +129,11 @@ class CustomRayWandbCallback(Callback):
         if not trainer.sanity_checking:
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
+            val_loss = pl_module.trainer.callback_metrics["val_loss"]
             wandb.log(
                 {
-                    "val_loss_epoch": pl_module.trainer.callback_metrics["val_loss"],
+                    "val_loss": val_loss,
+                    "val_RMSE": math.sqrt(val_loss),
                     "val_preds": wandb.Histogram(val_preds),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
