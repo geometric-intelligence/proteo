@@ -97,18 +97,9 @@ def train_func(search_config):
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
-            # checkpt is there in ray_result, understands checkpoint config but not training frequency,
-            # with name without var, but not every frequency: can't use
-            # TuneReportCheckpointCallback(
-            #     metrics={"val_loss": "val_loss"},
-            #     filename="my_checkpoint_" + '-{epoch}' + '-{val_loss:.2f}',
-            #     on="validation_end",  # too often
-            # ),
-            # # checkpt is not in the right place. does not understand num_to_keep
-            # proteo_callbacks_ray.CustomCheckpointCallback(checkpoint_interval=5),
             proteo_callbacks_ray.CustomWandbCallback(),
-            proteo_callbacks_ray.CustomRayTrainReportCallback(checkpoint_interval=3),
-            # proteo_callbacks_ray.CustomRayTrainReportCallback(checkpoint_interval=3),
+            proteo_callbacks_ray.CustomRayTrainReportCallback(
+                checkpoint_interval=config.checkpoint_interval),
         ],
         plugins=[
             ray_lightning.RayLightningEnvironment()
@@ -139,8 +130,6 @@ def main():
     run_config = RunConfig(
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         checkpoint_config=CheckpointConfig(
-            # checkpoint_frequency=5,
-            # (TorchTrainer) trainer does not support this argument
             num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',

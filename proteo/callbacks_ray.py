@@ -81,34 +81,6 @@ class CustomRayTrainReportCallback(Callback):
             shutil.rmtree(tmpdir)
 
 
-# class CustomRayTrainReportCallback(ray_lightning.RayTrainReportCallback):
-
-#     def __init__(self, checkpoint_interval) -> None:
-#         self.checkpoint_interval = checkpoint_interval
-#         super().__init__()
-
-#     def on_train_epoch_end(self, trainer, pl_module) -> None:
-#         epoch = trainer.current_epoch
-#         print(f"Inside custom callback at epoch {epoch}")
-#         if epoch % self.checkpoint_interval == 0:
-#             print(f"Saving checkpoint at epoch {epoch}")
-#             # PRoblem: the naming of the checkpoint is not good
-#             self.CHECKPOINT_NAME = f"epoch_{epoch}_checkpoint.ckpt"
-#             super().on_train_epoch_end(trainer, pl_module)
-
-
-class CustomCheckpointCallback(Callback):
-    def __init__(self, checkpoint_interval):
-        super().__init__()
-        self.checkpoint_interval = checkpoint_interval
-
-    def on_epoch_end(self, trainer, pl_module):
-        epoch = trainer.current_epoch
-        if epoch % self.checkpoint_interval == 0:
-            # Save checkpoint
-            trainer.save_checkpoint(f"epoch_{epoch}_checkpoint.ckpt")
-
-
 class CustomWandbCallback(Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
