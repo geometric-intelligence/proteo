@@ -93,23 +93,24 @@ pin_memory: true
 
 # Hyperparameter search
 # Number of trials = len(model_grid_search) * num_samples
-cpu_per_worker: 16
-gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
-lr_min: 0.0001
-lr_max: 0.1
-model_grid_search: ['gat-v4', 'gat', 'gcn'] #, 'gat-v4']   #['gat', 'gat-v4']
-batch_size_choice: [1, 4, 16] #, 4]
-scheduler_choice: ['LambdaLR', 'ReduceLROnPlateau']
-
-# GAT
-gat_num_layers: [2, 3, 4]
-gat_hidden_channels: [8, 32, 128, 256]
-gat_heads: [1, 2, 4]
-# GAT-v4
-gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
-gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
 num_samples: 30
 grace_period: 2
 reduction_factor: 8
 num_to_keep: 5  # number of checkpoints to keep. 
 # higher values means checkpoints are overwritten less often, gaining speed
+cpu_per_worker: 16
+gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
+lr_min: 0.0001
+lr_max: 0.1
+model_grid_search: ['gat-v4', 'gat', 'gcn'] #, 'gat-v4']   #['gat', 'gat-v4']
+batch_size_choice: [1, 4, 16, 32]
+scheduler_choice: ['LambdaLR', 'ReduceLROnPlateau']
+num_layers_choice: [2, 3, 4]  # only for GAT and GCN
+# GAT
+gat_hidden_channels: [8, 32, 128, 256]
+gat_heads: [1, 2, 4]
+# GAT-v4
+gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
+gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
+# GCN
+gcn_hidden_channels: [8, 32, 128]

@@ -132,14 +132,17 @@ def search_hyperparameters():
     output_dir = os.path.join(config.root_dir, config.output_dir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    # training should use one worker, one GPU, and 8 CPUs per worker.
+    if not os.path.exists(config.ray_tmp_dir):
+        os.makedirs(config.ray_tmp_dir)
+    ray.init(_temp_dir=config.ray_tmp_dir)
+
     scaling_config = ScalingConfig(
         num_workers=1,
         use_gpu=True,
         resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker},
     )
 
-    # keeping only the best checkpoint based on minimum validation loss
+    # Keep only the best checkpoints based on minimum values of val_loss
     run_config = RunConfig(
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         checkpoint_config=CheckpointConfig(
@@ -150,10 +153,6 @@ def search_hyperparameters():
     )
 
     # Define a TorchTrainer without hyper-parameters for Tuner
-    if not os.path.exists(config.ray_tmp_dir):
-        os.makedirs(config.ray_tmp_dir)
-    ray.init(_temp_dir=config.ray_tmp_dir)
-
     ray_trainer = TorchTrainer(
         train_func,
         scaling_config=scaling_config,
@@ -165,6 +164,7 @@ def search_hyperparameters():
         hidden_channels_map = {
             'gat': config.gat_hidden_channels,
             'gat-v4': config.gat_v4_hidden_channels,
+            'gcn': config.gcn_hidden_channels,
         }
         model = spec['train_loop_config']['model']
         model_params = hidden_channels_map[model]
@@ -175,6 +175,7 @@ def search_hyperparameters():
         heads_map = {
             'gat': config.gat_heads,
             'gat-v4': config.gat_v4_heads,
+            'gcn': [None],  # Unused. Here for compatibility.
         }
         model = spec['train_loop_config']['model']
         model_params = heads_map[model]
@@ -185,10 +186,11 @@ def search_hyperparameters():
         'model': tune.grid_search(config.model_grid_search),
         'seed': tune.randint(0, MAX_SEED),
         'hidden_channels': tune.sample_from(hidden_channels),
-        'num_layers': tune.choice(config.gat_num_layers),
+        'num_layers': tune.choice(config.num_layers_choice),
         'heads': tune.sample_from(heads),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choice),
+        'scheduler': tune.choice(config.scheduler_choice),
     }
 
     def trial_str_creator(trial):
