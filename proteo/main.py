@@ -2,7 +2,7 @@
 
 Ray[Tune] manages the training of many neural networks, 
 and thus we use:
-- wandb.log in our custom RayCustomWandbLoggerCallback,
+- wandb.log in our custom CustomWandbCallback,
 - Ray's CheckpointConfig.
 
 Here, pl_module.logger is Ray's logger.
@@ -12,7 +12,7 @@ Notes
 This differs from training one single neural network in train.py, 
 which only requires Lightning,
 and thus we use:
-- Lightning's WandbLogger logger, in our custom CustomWandbLoggerCallback,
+- Lightning's WandbLogger logger, in our custom CustomWandbCallback,
 - Lightning's ModelCheckpoint callback.
 
 Here, pl_module.logger is Wandb's logger.
@@ -35,6 +35,7 @@ from ray.air.integrations.wandb import setup_wandb
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
+from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
 
 import proteo.callbacks_ray as proteo_callbacks_ray
@@ -42,33 +43,19 @@ import proteo.callbacks_ray as proteo_callbacks_ray
 MAX_SEED = 65535
 
 
-class CustomCheckpointCallback(pl.Callback):
-    def __init__(self, checkpoint_interval):
-        super().__init__()
-        self.checkpoint_interval = checkpoint_interval
-
-    def on_epoch_end(self, trainer, pl_module):
-        epoch = trainer.current_epoch
-        if epoch % self.checkpoint_interval == 0:
-            # Save checkpoint
-            trainer.save_checkpoint(f"epoch_{epoch}_checkpoint.ckpt")
-
-
 def train_func(search_config):
-    """
-    Trains a PyTorch model using the provided configuration.
+    """Train one neural network with Lightning.
 
-    Args:
-        config (dict): Configuration parameters for training.
+    Configure Lightning with Ray.
 
-    Returns:
-        None
+    Parameters
+    ----------
+    search_config: Configuration parameters for training.
     """
-    # Clear GPU memory
-    torch.cuda.empty_cache()
-    # This is used to improve performance
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision('medium')  # for performance
     config = read_config_from_file(CONFIG_FILE)
+    pl.seed_everything(config.seed)
+
     # TODO: Hacky - is there a better way?
     # Update model specific parameters
     model_name = search_config['model']
@@ -93,29 +80,36 @@ def train_func(search_config):
         ),  # dir needs to exist, otherwise wandb saves in /tmp
         mode="offline" if config.wandb_offline else "online",
     )
-    # This requires using wandb.log, not self.log
 
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
-    in_channels = train_dataset.feature_dim  # 1 dim of input
-    out_channels = train_dataset.label_dim  # 1 dim of result
-    avg_node_degree = proteo_train.avg_node_degree(test_dataset)
+    module = proteo_train.Proteo(
+        config,
+        in_channels=train_dataset.feature_dim,  # 1 dim of input
+        out_channels=train_dataset.label_dim,  # 1 dim of result
+        avg_node_degree=proteo_train.avg_node_degree(test_dataset),
+    )
 
-    module = proteo_train.Proteo(config, in_channels, out_channels, avg_node_degree)
-
-    pl.seed_everything(config.seed)
-
-    # Set checkpoint interval (e.g., every 10 epochs)
-    checkpoint_interval = 25
-    checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
-    ray_hist_callback = proteo_callbacks_ray.RayCustomWandbLoggerCallback()
-
+    # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
         devices='auto',
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
-        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback, ray_hist_callback],
+        callbacks=[
+            # checkpt is there in ray_result, understands checkpoint config but not training frequency,
+            # with name without var, but not every frequency: can't use
+            # TuneReportCheckpointCallback(
+            #     metrics={"val_loss": "val_loss"},
+            #     filename="my_checkpoint_" + '-{epoch}' + '-{val_loss:.2f}',
+            #     on="validation_end",  # too often
+            # ),
+            # # checkpt is not in the right place. does not understand num_to_keep
+            # proteo_callbacks_ray.CustomCheckpointCallback(checkpoint_interval=5),
+            proteo_callbacks_ray.CustomWandbCallback(),
+            proteo_callbacks_ray.CustomRayTrainReportCallback(checkpoint_interval=3),
+            # proteo_callbacks_ray.CustomRayTrainReportCallback(checkpoint_interval=3),
+        ],
         plugins=[
             ray_lightning.RayLightningEnvironment()
         ],  # How ray interacts with pytorch lightning
@@ -127,37 +121,39 @@ def train_func(search_config):
     trainer.fit(module, train_loader, test_loader)
 
 
-def search_hyperparameters():
+def main():
     config = read_config_from_file(CONFIG_FILE)
     output_dir = os.path.join(config.root_dir, config.output_dir)
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(config.ray_tmp_dir, exist_ok=True)
-    
+
     ray.init(_temp_dir=config.ray_tmp_dir)
 
+    # Wrap Lightning's Trainer with Ray's TorchTrainer for Tuner
     scaling_config = ScalingConfig(
         num_workers=1,
         use_gpu=True,
         resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker},
     )
 
-    # Keep only the best checkpoints based on minimum values of val_loss
     run_config = RunConfig(
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         checkpoint_config=CheckpointConfig(
+            # checkpoint_frequency=5,
+            # (TorchTrainer) trainer does not support this argument
             num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',
         ),
     )
 
-    # Define a TorchTrainer without hyper-parameters for Tuner
     ray_trainer = TorchTrainer(
-        train_func,
+        train_func,  # Contains Lightning's Trainer
         scaling_config=scaling_config,
         run_config=run_config,
     )
 
+    # Configure hyperparameter search for Tuner
     def hidden_channels(spec):
         # Note that hidden channels must be divisible by heads for gat
         hidden_channels_map = {
@@ -216,9 +212,9 @@ def search_hyperparameters():
             scheduler=scheduler,
         ),
     )
-    return tuner.fit()
+    results = tuner.fit()
+    results.get_dataframe().to_csv('ray_results_search_hyperparameters.csv')
 
 
 if __name__ == '__main__':
-    results = search_hyperparameters()
-    results.get_dataframe().to_csv('ray_results_search_hyperparameters.csv')
+    main()

@@ -2,7 +2,7 @@
 
 Lightning manages the training,
 and thus we use:
-- Lightning's WandbLogger logger, in our CustomWandbLoggerCallback,
+- Lightning's WandbLogger logger, in our CustomWandbCallback,
 - Lightning's ModelCheckpoint callback.
 
 Here, pl_module.logger is WandbLogger's logger.
@@ -13,7 +13,7 @@ Notes
 When we do hyperparameter search in main.py,
 Ray[Tune] takes over the training process, 
 and thus we use instead:
-- wandb.log, in our CustomWandbLoggerCallback,
+- wandb.log, in our CustomWandbCallback,
 - Ray's CheckpointConfig.
 
 Here, pl_module.logger is Ray's dedicated logger.
@@ -295,15 +295,12 @@ def print_loaders(train_loader, test_loader):
 
 def main():
     """Training and evaluation script for experiments."""
-    torch.cuda.empty_cache()
-    gc.collect()
-    torch.set_float32_matmul_precision('high')
+    torch.set_float32_matmul_precision('medium')  # for performance
     config = read_config_from_file(CONFIG_FILE)
     pl.seed_everything(config.seed)
 
     output_dir = os.path.join(config.root_dir, config.output_dir)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
     # this is where we pick the CUDA device(s) to use
     if isinstance(config.device, list):
@@ -348,7 +345,7 @@ def main():
     trainer_callbacks = [
         ckpt_callback,
         lr_callback,
-        proteo_callbacks.CustomWandbLoggerCallback(),
+        proteo_callbacks.CustomWandbCallback(),
         proteo_callbacks.progress_bar(),
     ]
 

@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
 
-class CustomWandbLoggerCallback(Callback):
+class CustomWandbCallback(Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
         pl_module.log(
