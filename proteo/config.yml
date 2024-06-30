@@ -72,7 +72,7 @@ gcn:
   lr_scheduler: LambdaLR
 
 # Training
-batch_size: 16 #for one off training
+batch_size: 32 #for one off training
 epochs: 100
 num_workers: 16
 sync_batchnorm: false
@@ -92,7 +92,7 @@ pin_memory: true
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
 num_samples: 1
-grace_period: 4  # Each training is run at least 4 epochs, until epoch #3.
+grace_period: 4  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_interval: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
