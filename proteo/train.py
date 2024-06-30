@@ -60,7 +60,7 @@ class Proteo(pl.LightningModule):
         self.save_hyperparameters()
         self.config = config
         # Save model parameters in a separate config object
-        self.model_parameters = Config.parse_obj(getattr(config, config.model))
+        self.config_model = Config.parse_obj(getattr(config, config.model))
         self.avg_node_degree = avg_node_degree
         self.train_preds = []
         self.val_preds = []
@@ -70,34 +70,37 @@ class Proteo(pl.LightningModule):
         if config.model == 'gat-v4':
             self.model = GATv4(
                 in_channels=in_channels,
-                hidden_channels=self.model_parameters.hidden_channels,
+                hidden_channels=self.config_model.hidden_channels,
                 out_channels=out_channels,
-                heads=self.model_parameters.heads,
-                num_nodes=self.model_parameters.num_nodes,
-                which_layer=self.model_parameters.which_layer,
-                use_layer_norm=self.model_parameters.use_layer_norm,
-                fc_dim=self.model_parameters.fc_dim,
-                dropout=self.model_parameters.dropout,
-                fc_act=self.model_parameters.fc_act,
+                heads=self.config_model.heads,
+                dropout=self.config.dropout,
+                act=self.config.act,
+                which_layer=self.config_model.which_layer,
+                use_layer_norm=self.config_model.use_layer_norm,
+                fc_dim=self.config_model.fc_dim,
+                fc_dropout=self.config_model.fc_dropout,
+                fc_act=self.config_model.fc_act,
+                num_nodes=self.config.num_nodes,
             )
         elif config.model == 'gat':
             self.model = GAT(
                 in_channels=in_channels,
-                hidden_channels=self.model_parameters.hidden_channels,
+                hidden_channels=self.config_model.hidden_channels,
                 out_channels=out_channels,
-                num_layers=self.model_parameters.num_layers,
-                heads=self.model_parameters.heads,
-                v2=self.model_parameters.v2,
-                dropout=self.model_parameters.dropout,
-                act=self.model_parameters.act,
+                num_layers=self.config_model.num_layers,
+                heads=self.config_model.heads,
+                v2=self.config_model.v2,
+                dropout=self.config.dropout,
+                act=self.config.act,
             )
         elif config.model == 'gcn':
             self.model = GCN(
                 in_channels=in_channels,
-                hidden_channels=self.model_parameters.hidden_channels,
+                hidden_channels=self.config_model.hidden_channels,
                 out_channels=out_channels,
-                num_layers=self.model_parameters.num_layers,
-                dropout=self.model_parameters.dropout,
+                num_layers=self.config_model.num_layers,
+                dropout=self.config.dropout,
+                act=self.config.act,
             )
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -158,8 +161,8 @@ class Proteo(pl.LightningModule):
         # Calculate L1 regularization term to encourage sparsity
         # FIXME: With L1 regularization, the train_RMSE is not the RMSE
         # FIXME: L2 regularization not applied to val_loss, -> train and val losses cannot be compared
-        if self.model_parameters.l1_lambda > 0:
-            l1_lambda = self.model_parameters.l1_lambda  # Regularization strength
+        if self.config.l1_lambda > 0:
+            l1_lambda = self.config.l1_lambda  # Regularization strength
             l1_norm = sum(p.abs().sum() for p in self.parameters())
             loss = loss + l1_lambda * l1_norm
 
@@ -190,38 +193,36 @@ class Proteo(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        assert self.model_parameters.optimizer == 'Adam'
+        assert self.config.optimizer == 'Adam'
 
         optimizer = torch.optim.Adam(
             self.parameters(),
-            lr=self.model_parameters.lr,
+            lr=self.config.lr,
             betas=(0.9, 0.999),
-            weight_decay=self.model_parameters.weight_decay,
+            weight_decay=self.config.weight_decay,
         )
 
-        if self.model_parameters.lr_scheduler == 'LambdaLR':
+        if self.config.lr_scheduler == 'LambdaLR':
 
             def lambda_rule(epoch):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
 
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-        elif self.model_parameters.lr_scheduler == 'ReduceLROnPlateau':
+        elif self.config.lr_scheduler == 'ReduceLROnPlateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, mode="min", factor=0.2, threshold=0.01, patience=5
             )
-        elif self.model_parameters.lr_scheduler == 'ExponentialLR':
+        elif self.config.lr_scheduler == 'ExponentialLR':
             scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.1, last_epoch=-1)
-        elif self.model_parameters.lr_scheduler == 'StepLR':
+        elif self.config.lr_scheduler == 'StepLR':
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
-        elif self.model_parameters.lr_scheduler == 'CosineAnnealingLR':
+        elif self.config.lr_scheduler == 'CosineAnnealingLR':
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, T_max=self.config.epochs, eta_min=0
             )
         else:
-            return NotImplementedError(
-                'scheduler not implemented:', self.model_parameters.lr_scheduler
-            )
+            return NotImplementedError('scheduler not implemented:', self.config.lr_scheduler)
 
         # HACKALERT: Validation loss is logged twice, as val_loss and val_loss
         # So that Proteo's module can be used in train.py and main.py

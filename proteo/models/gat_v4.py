@@ -8,12 +8,12 @@ from torch_geometric.utils import to_dense_batch
 
 
 class GATv4(nn.Module):
-    FC_ACT_MAP = {
-        "relu": nn.ReLU,
-        "tanh": nn.Tanh,
-        "sigmoid": nn.Sigmoid,
-        "leaky_relu": nn.LeakyReLU,
-        "elu": nn.ELU,
+    ACT_MAP = {
+        "relu": nn.ReLU(),
+        "tanh": nn.Tanh(),
+        "sigmoid": nn.Sigmoid(),
+        "leaky_relu": nn.LeakyReLU(),
+        "elu": nn.ELU(),
     }
 
     def __init__(
@@ -22,23 +22,27 @@ class GATv4(nn.Module):
         hidden_channels,
         out_channels,
         heads,
+        dropout,
+        act,
         which_layer,
         use_layer_norm,
         fc_dim,
-        dropout,
+        fc_dropout,
         fc_act,
         num_nodes,
     ):
         super(GATv4, self).__init__()
-        self.hidden_channels = hidden_channels
-        self.heads = heads
-        self.out_channels = out_channels
         self.in_channels = in_channels
-        self.fc_dim = fc_dim
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        self.heads = heads
         self.dropout = dropout
-        self.fc_act = fc_act
+        self.act = act
         self.which_layer = which_layer
         self.use_layer_norm = use_layer_norm
+        self.fc_dim = fc_dim
+        self.fc_dropout = fc_dropout
+        self.fc_act = fc_act
         self.fc_input_dim = num_nodes * len(which_layer)
 
         # GAT layers
@@ -72,8 +76,8 @@ class GATv4(nn.Module):
             layers.append(
                 nn.Sequential(
                     nn.Linear(fc_layer_input_dim, fc_dim),
-                    self.FC_ACT_MAP[self.fc_act](),
-                    nn.AlphaDropout(p=self.dropout, inplace=True),
+                    self.ACT_MAP[self.fc_act],
+                    nn.AlphaDropout(p=self.fc_dropout, inplace=True),
                 )
             )
             fc_layer_input_dim = fc_dim
@@ -94,19 +98,21 @@ class GATv4(nn.Module):
         x0, _ = to_dense_batch(torch.mean(x, dim=-1), batch=batch)
 
         # Apply first GAT layer and pooling
-        x = F.dropout(x, p=0.1, training=self.training)
+        x = F.dropout(x, p=self.dropout, training=self.training)
         # apply dropout if we are training, reduced this to 0.1 from 0.2
         x = self.convs[0](x, edge_index)
         # [bs*nodes, hidden_channels[0]*heads[0]], Apply the gatconv layer
-        x = F.elu(x)  # [bs*nodes, hidden_channels[0]*heads[0]], Apply elu activation function
+        x = self.ACT_MAP[self.act](
+            x
+        )  # [bs*nodes, hidden_channels[0]*heads[0]], Apply elu activation function
         x1 = self.pools[0](x)  # [bs*nodes, 1]
         x1 = x1.squeeze(-1)  # [bs*nodes]
         x1, _ = to_dense_batch(x1, batch=batch)  # [bs, nodes]
 
         # Apply second GAT layer and pooling
-        x = F.dropout(x, p=0.1, training=self.training)  # apply dropout if we are training
+        x = F.dropout(x, p=self.dropout, training=self.training)  # apply dropout if we are training
         x = self.convs[1](x, edge_index)
-        x = F.elu(x)  # [bs*nodes, hidden_channels[1]*heads[1]]
+        x = self.ACT_MAP[self.act](x)  # [bs*nodes, hidden_channels[1]*heads[1]]
         x2 = self.pools[1](x)  # [bs*nodes, 1]
         x2 = x2.squeeze(-1)  # [bs*nodes]
         x2, _ = to_dense_batch(x2, batch=batch)  # [bs, nodes]

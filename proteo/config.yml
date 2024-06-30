@@ -7,9 +7,10 @@ data_dir: "data"
 output_dir: "outputs"
 checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
+# Note: wandb will log into outputs/wandb
 
 # Dataset
-dataset_name: "ftd"  # 352 in train, 89 in val
+dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 
 # WandB
@@ -20,6 +21,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
+num_nodes: 7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
 adj_thresh: 0.8  #0.08 # Note: n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -28,48 +30,28 @@ task_type: mse_regression
 
 # Model
 model: gat
+dropout: 0.2  # dropout of the gconvs
+act: tanh  # act of the gconvs
 
 gat-v4:
-  heads: [4, 3, 4]
   hidden_channels: [8, 16, 12]
+  heads: [4, 3, 4]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
   fc_dim: [64, 48, 32, 32]
-  dropout: 0.05
+  fc_dropout: 0.2
   fc_act: elu
-  num_nodes: 7289 # TODO: This should not be hardcoded
-  # Training gat-v4
-  lr: 0.1 
-  weight_decay: 0.0005
-  l1_lambda: 0.005
-  optimizer: Adam
-  lr_scheduler: LambdaLR
 
-gat:
-  heads: 4
-  hidden_channels: 256  # needs to be divisible by heads
+gat:  
   num_layers: 2
-  dropout: 0.2
-  act: tanh
+  hidden_channels: 256  # needs to be divisible by heads
+  heads: 4
   v2: true
-  # Training gat
-  lr: 0.001
-  weight_decay: 0.0005
-  l1_lambda: 0.0005
-  optimizer: Adam
-  lr_scheduler: LambdaLR
 
 gcn:
-  hidden_channels: 32
   num_layers: 3
-  dropout: 0.2
-  act: relu
-  # Training gcn
-  lr: 0.001
-  weight_decay: 0.0005
-  l1_lambda: 0.0005
-  optimizer: Adam
-  lr_scheduler: LambdaLR
+  hidden_channels: 32
+
 
 # Training
 batch_size: 32 #for one off training
@@ -78,6 +60,11 @@ num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
+lr: 0.1 
+weight_decay: 0.0005
+l1_lambda: 0.005
+optimizer: Adam
+lr_scheduler: LambdaLR
 
 # GPUs
 device: [0] #, 1] #, 2, 3, 4, 5, 6, 7] 
@@ -96,21 +83,23 @@ grace_period: 4  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_interval: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
-cpu_per_worker: 64
+cpu_per_worker: 32
 gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat']  #, 'gat', 'gcn']
+model_grid_search: ['gat', 'gat-v4', 'gcn']  #, 'gat', 'gcn']
 # Choices
-batch_size_choice: [32] #, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
-scheduler_choice: ['LambdaLR'] #, 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
-num_layers_choice: [2] #, 3, 4]  # only for GAT and GCN
-dropout_choice: [0.2] #, 0.3, 0.8]
-# GAT
-gat_hidden_channels: [256] #8, 32, 128, 256]
-gat_heads: [4]  #1, 2, 4]
+batch_size_choices: [32] #, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
+scheduler_choices: ['LambdaLR'] #, 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
+dropout_choices: [0.2] #, 0.3, 0.8]
+
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
 gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
+# GAT
+gat_num_layers: [2] #, 3, 4]  # only for GAT and GCN
+gat_hidden_channels: [256] #8, 32, 128, 256]
+gat_heads: [4]  #1, 2, 4]
 # GCN
+gcn_num_layers: [2] #, 3, 4]  # only for GAT and GCN
 gcn_hidden_channels: [8, 32, 128]

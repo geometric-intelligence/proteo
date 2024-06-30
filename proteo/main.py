@@ -29,6 +29,7 @@ import pytorch_lightning as pl
 import ray
 import torch
 import train as proteo_train
+import wandb
 from config_utils import CONFIG_FILE, read_config_from_file
 from ray import tune
 from ray.air.integrations.wandb import setup_wandb
@@ -57,22 +58,20 @@ def train_func(train_loop_config):
 
     # TODO: Hacky - is there a better way?
     # Update model specific parameters
-    model_name = train_loop_config['model']
-    updated_parameters = {
+    model = train_loop_config['model']
+    train_loop_config_model = {
         'hidden_channels': train_loop_config['hidden_channels'],
         'heads': train_loop_config['heads'],
         'num_layers': train_loop_config['num_layers'],
-        'lr': train_loop_config['lr'],
     }
-    config[model_name].update(updated_parameters)
+    config[model].update(train_loop_config_model)
     # Remove keys that were already updated in nested configuration
-    for key in updated_parameters:
+    for key in train_loop_config_model:
         train_loop_config.pop(key)
     config.update(train_loop_config)
 
-    setup_wandb(
-        # Transform Config object into dict for wandb
-        config.dict(),
+    setup_wandb(  # wandb.init, but for ray
+        config.dict(),  # Transform Config object into dict for wandb
         project=config.project,
         api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
         # Directory in dir needs to exist, otherwise wandb saves in /tmp
@@ -89,6 +88,16 @@ def train_func(train_loop_config):
         out_channels=train_dataset.label_dim,  # 1 dim of result
         avg_node_degree=proteo_train.avg_node_degree(test_dataset),
     )
+
+    # TODO: Add logs before the training loop begins
+    # wandb.log_image(
+    #     key="dataset_statistics",
+    #     images=[
+    #         os.path.join(train_dataset.processed_dir, "histogram.jpg"),
+    #         os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg"),
+    #     ],
+    # )
+    # wandb.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])
 
     # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
@@ -158,45 +167,57 @@ def main():
     )
 
     # Configure hyperparameter search for Tuner
+    def num_layers(trial_config):
+        num_layers_map = {
+            'gat-v4': [None],  # Unused. Here for compatibility.
+            'gat': config.gat_num_layers,
+            'gcn': config.gcn_num_layers,
+        }
+        model = trial_config['train_loop_config']['model']
+        num_layers_choices = num_layers_map[model]
+        random_index = np.random.choice(len(num_layers_choices))
+        return num_layers_choices[random_index]
+
     def hidden_channels(trial_config):
         hidden_channels_map = {
-            'gat': config.gat_hidden_channels,
             'gat-v4': config.gat_v4_hidden_channels,
+            'gat': config.gat_hidden_channels,
             'gcn': config.gcn_hidden_channels,
         }
         model = trial_config['train_loop_config']['model']
-        model_params = hidden_channels_map[model]
-        random_index = np.random.choice(len(model_params))
-        return model_params[random_index]
+        hidden_channels_choices = hidden_channels_map[model]
+        random_index = np.random.choice(len(hidden_channels_choices))
+        return hidden_channels_choices[random_index]
 
     def heads(trial_config):
         heads_map = {
-            'gat': config.gat_heads,
             'gat-v4': config.gat_v4_heads,
+            'gat': config.gat_heads,
             'gcn': [None],  # Unused. Here for compatibility.
         }
         model = trial_config['train_loop_config']['model']
-        model_params = heads_map[model]
-        random_index = np.random.choice(len(model_params))
-        return model_params[random_index]
+        heads_choices = heads_map[model]
+        random_index = np.random.choice(len(heads_choices))
+        return heads_choices[random_index]
 
     def trial_str_creator(trial):
         train_loop_config = trial.config['train_loop_config']
         model = train_loop_config['model']
-        num_layers = train_loop_config['num_layers']
         seed = train_loop_config['seed']
-        return f"model={model},num_layers={num_layers},seed={seed}"
+        return f"model={model},seed={seed}"
 
     search_space = {
         'model': tune.grid_search(config.model_grid_search),
-        'seed': tune.randint(0, MAX_SEED),
+        # Model-specific parameters
+        'num_layers': tune.sample_from(num_layers),
         'hidden_channels': tune.sample_from(hidden_channels),
-        'num_layers': tune.choice(config.num_layers_choice),
         'heads': tune.sample_from(heads),
+        # Shared parameters
+        'seed': tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
-        'batch_size': tune.choice(config.batch_size_choice),
-        'scheduler': tune.choice(config.scheduler_choice),
-        'dropout': tune.choice(config.dropout_choice),
+        'batch_size': tune.choice(config.batch_size_choices),
+        'scheduler': tune.choice(config.scheduler_choices),
+        'dropout': tune.choice(config.dropout_choices),
     }
 
     scheduler = ASHAScheduler(
