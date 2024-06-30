@@ -42,7 +42,7 @@ import proteo.callbacks_ray as proteo_callbacks_ray
 MAX_SEED = 65535
 
 
-def train_func(search_config):
+def train_func(train_loop_config):
     """Train one neural network with Lightning.
 
     Configure Lightning with Ray.
@@ -57,26 +57,26 @@ def train_func(search_config):
 
     # TODO: Hacky - is there a better way?
     # Update model specific parameters
-    model_name = search_config['model']
+    model_name = train_loop_config['model']
     updated_parameters = {
-        'hidden_channels': search_config['hidden_channels'],
-        'heads': search_config['heads'],
-        'num_layers': search_config['num_layers'],
-        'lr': search_config['lr'],
+        'hidden_channels': train_loop_config['hidden_channels'],
+        'heads': train_loop_config['heads'],
+        'num_layers': train_loop_config['num_layers'],
+        'lr': train_loop_config['lr'],
     }
     config[model_name].update(updated_parameters)
     # Remove keys that were already updated in nested configuration
     for key in updated_parameters:
-        search_config.pop(key)
-    config.update(search_config)
+        train_loop_config.pop(key)
+    config.update(train_loop_config)
 
     setup_wandb(
-        search_config,
+        # Transform Config object into dict for wandb
+        config.dict(),
         project=config.project,
         api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-        dir=os.path.join(
-            config.root_dir, config.output_dir
-        ),  # dir needs to exist, otherwise wandb saves in /tmp
+        # Directory in dir needs to exist, otherwise wandb saves in /tmp
+        dir=os.path.join(config.root_dir, config.output_dir),
         mode="offline" if config.wandb_offline else "online",
     )
 
@@ -102,9 +102,8 @@ def train_func(search_config):
                 checkpoint_interval=config.checkpoint_interval
             ),
         ],
-        plugins=[
-            ray_lightning.RayLightningEnvironment()
-        ],  # How ray interacts with pytorch lightning
+        # How ray interacts with pytorch lightning
+        plugins=[ray_lightning.RayLightningEnvironment()],
         enable_progress_bar=False,
         max_epochs=config.epochs,
     )
@@ -114,6 +113,21 @@ def train_func(search_config):
 
 
 def main():
+    """Run hyper-parameter search with Ray[Tune].
+
+    We pass a param_space dict to the tuner (a tune.Tuner).
+    The tuner passes **param_space to ray_trainer (a TorchTrainer's that expects "train_loop_config").
+
+    One set of hyperparams in param_space becomes:
+    - trial.config["train_loop_config"] for trial_str_creator(trial)
+    - trial_config["train_loop_config"] for functions(trial_config) that go into sample_from
+    - train_loop_config for train_func(train_loop_config)
+
+    See Also
+    --------
+    Inputs expected by a TorchTrainer for its init:
+    https://docs.ray.io/en/latest/_modules/ray/train/torch/torch_trainer.html#TorchTrainer
+    """
     config = read_config_from_file(CONFIG_FILE)
     output_dir = os.path.join(config.root_dir, config.output_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -144,28 +158,34 @@ def main():
     )
 
     # Configure hyperparameter search for Tuner
-    def hidden_channels(spec):
-        # Note that hidden channels must be divisible by heads for gat
+    def hidden_channels(trial_config):
         hidden_channels_map = {
             'gat': config.gat_hidden_channels,
             'gat-v4': config.gat_v4_hidden_channels,
             'gcn': config.gcn_hidden_channels,
         }
-        model = spec['train_loop_config']['model']
+        model = trial_config['train_loop_config']['model']
         model_params = hidden_channels_map[model]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
 
-    def heads(spec):
+    def heads(trial_config):
         heads_map = {
             'gat': config.gat_heads,
             'gat-v4': config.gat_v4_heads,
             'gcn': [None],  # Unused. Here for compatibility.
         }
-        model = spec['train_loop_config']['model']
+        model = trial_config['train_loop_config']['model']
         model_params = heads_map[model]
         random_index = np.random.choice(len(model_params))
         return model_params[random_index]
+
+    def trial_str_creator(trial):
+        train_loop_config = trial.config['train_loop_config']
+        model = train_loop_config['model']
+        num_layers = train_loop_config['num_layers']
+        seed = train_loop_config['seed']
+        return f"model={model},num_layers={num_layers},seed={seed}"
 
     search_space = {
         'model': tune.grid_search(config.model_grid_search),
@@ -179,11 +199,6 @@ def main():
         'dropout': tune.choice(config.dropout_choice),
     }
 
-    def trial_str_creator(trial):
-        config = trial.config['train_loop_config']
-        seed = config['seed']
-        return f"model={config['model']},num_layers={config['num_layers']},seed={seed}"
-
     scheduler = ASHAScheduler(
         time_attr="training_iteration",
         max_t=config['epochs'],
@@ -193,7 +208,7 @@ def main():
 
     tuner = tune.Tuner(
         ray_trainer,
-        param_space={'train_loop_config': search_space},
+        param_space={"train_loop_config": search_space},
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
