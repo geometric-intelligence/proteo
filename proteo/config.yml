@@ -75,7 +75,7 @@ gcn:
 
 # Training
 batch_size: 16 #for one off training
-epochs: 6
+epochs: 50
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"

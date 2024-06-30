@@ -190,7 +190,6 @@ class Proteo(pl.LightningModule):
 
     def configure_optimizers(self):
         assert self.model_parameters.optimizer == 'Adam'
-        assert self.model_parameters.lr_scheduler in ['LambdaLR', 'ReduceLROnPlateau']
 
         optimizer = torch.optim.Adam(
             self.parameters(),
@@ -206,8 +205,20 @@ class Proteo(pl.LightningModule):
                 return lr_l
 
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+        elif self.model_parameters.lr_scheduler == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="min", factor=0.2, threshold=0.01, patience=5
+            )
+        elif self.model_parameters.lr_scheduler == 'ExponentialLR':
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.1, last_epoch=-1)
+        elif self.model_parameters.lr_scheduler == 'StepLR':
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=0.1)
+        elif self.model_parameters.lr_scheduler == 'CosineAnnealingLR':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, eta_min=0)
         else:
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
+            return NotImplementedError(
+                'scheduler not implemented:', self.model_parameters.lr_scheduler
+            )
 
         # HACKALERT: Validation loss is logged twice, as val/loss and val_loss
         # So that Proteo's module can be used in train.py and main.py
