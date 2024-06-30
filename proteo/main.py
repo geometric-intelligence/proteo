@@ -1,6 +1,6 @@
 """Run several trainings with hyper-parameter search.
 
-Ray[Tune] manages the training trials, 
+Ray[Tune] manages the training of many neural networks, 
 and thus we use:
 - wandb.log in our custom RayCustomWandbLoggerCallback,
 - Ray's CheckpointConfig.
