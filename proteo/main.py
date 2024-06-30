@@ -2,7 +2,7 @@
 
 Ray[Tune] manages the training of many neural networks, 
 and thus we use:
-- wandb.log in our custom CustomWandbCallback,
+- wandb.log in our custom CustomLogsCallback,
 - Ray's CheckpointConfig.
 
 Here, pl_module.logger is Ray's logger.
@@ -12,7 +12,7 @@ Notes
 This differs from training one single neural network in train.py, 
 which only requires Lightning,
 and thus we use:
-- Lightning's WandbLogger logger, in our custom CustomWandbCallback,
+- Lightning's WandbLogger logger, in our custom CustomLogsCallback,
 - Lightning's ModelCheckpoint callback.
 
 Here, pl_module.logger is Wandb's logger.
@@ -35,7 +35,6 @@ from ray.air.integrations.wandb import setup_wandb
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
-from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
 
 import proteo.callbacks_ray as proteo_callbacks_ray
@@ -97,7 +96,7 @@ def train_func(search_config):
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
-            proteo_callbacks_ray.CustomWandbCallback(),
+            proteo_callbacks_ray.CustomRayLogsCallback(),
             proteo_callbacks_ray.CustomRayTrainReportCallback(
                 checkpoint_interval=config.checkpoint_interval),
         ],

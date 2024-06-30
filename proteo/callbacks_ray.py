@@ -3,7 +3,6 @@ import math
 import torch
 import wandb
 from pytorch_lightning.callbacks import Callback
-from ray.train import lightning as ray_lightning
 from ray import train
 import tempfile
 from pathlib import Path
@@ -30,9 +29,9 @@ class CustomRayTrainReportCallback(Callback):
     - checkpoint_000002/checkpoint_epoch_6.ckpt
     - etc.
 
-    This callback generalizes the code from:
+    Most of the code is pasted from:
     https://docs.ray.io/en/latest/_modules/ray/train/lightning/_lightning_utils.html#RayTrainReportCallback
-    to allow:
+    with small modifications, to allow:
     - saving checkpoint every checkpoint_interval
     - adding the epoch to the checkpoint_name
     """
@@ -81,7 +80,8 @@ class CustomRayTrainReportCallback(Callback):
             shutil.rmtree(tmpdir)
 
 
-class CustomWandbCallback(Callback):
+class CustomRayLogsCallback(Callback):
+    """Callback that logs to Wandb, and reports losses to Ray."""
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
         wandb.log({'train/loss': loss, "epoch": pl_module.current_epoch})

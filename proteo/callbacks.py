@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 
 
-class CustomWandbCallback(Callback):
+class CustomLogsCallback(Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
         pl_module.log(
@@ -33,7 +33,7 @@ class CustomWandbCallback(Callback):
                 prog_bar=True,
                 batch_size=pl_module.config.batch_size,
             )
-            # HACKALETER: Relogging as val_loss to accommodate the monitoring of the loss
+            # HACKALERT: Relogging as val_loss to accommodate the monitoring of the loss
             # by the hyperparameter search algorithm.
             pl_module.log(
                 'val_loss',

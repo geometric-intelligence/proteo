@@ -91,11 +91,11 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 1
+num_samples: 3
 grace_period: 4  # Each training is run at least 4 epochs, until epoch #3.
 reduction_factor: 8
-num_to_keep: 4  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
-checkpoint_interval: 2  # Nb of iterations between checkpoints. If 0: no checkpointing.
+num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
+checkpoint_interval: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
 cpu_per_worker: 16
 gpu_per_worker: 1  # FIXME: Only 1 gpu shows GPU Util > 0%
 lr_min: 0.0001

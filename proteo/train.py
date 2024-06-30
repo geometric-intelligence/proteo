@@ -2,7 +2,7 @@
 
 Lightning manages the training,
 and thus we use:
-- Lightning's WandbLogger logger, in our CustomWandbCallback,
+- Lightning's WandbLogger logger, in our CustomLogsCallback,
 - Lightning's ModelCheckpoint callback.
 
 Here, pl_module.logger is WandbLogger's logger.
@@ -13,7 +13,7 @@ Notes
 When we do hyperparameter search in main.py,
 Ray[Tune] takes over the training process, 
 and thus we use instead:
-- wandb.log, in our CustomWandbCallback,
+- wandb.log, in our CustomLogsCallback,
 - Ray's CheckpointConfig.
 
 Here, pl_module.logger is Ray's dedicated logger.
@@ -345,7 +345,7 @@ def main():
     trainer_callbacks = [
         ckpt_callback,
         lr_callback,
-        proteo_callbacks.CustomWandbCallback(),
+        proteo_callbacks.CustomLogsCallback(),
         proteo_callbacks.progress_bar(),
     ]
 
