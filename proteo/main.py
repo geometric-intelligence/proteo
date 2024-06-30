@@ -99,7 +99,7 @@ def train_func(search_config):
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
     in_channels = train_dataset.feature_dim  # 1 dim of input
-    out_channels = train_dataset.label_dim  # 1 dim of resul÷≥…t
+    out_channels = train_dataset.label_dim  # 1 dim of result
     avg_node_degree = proteo_train.avg_node_degree(test_dataset)
 
     module = proteo_train.Proteo(config, in_channels, out_channels, avg_node_degree)
@@ -130,10 +130,9 @@ def train_func(search_config):
 def search_hyperparameters():
     config = read_config_from_file(CONFIG_FILE)
     output_dir = os.path.join(config.root_dir, config.output_dir)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    if not os.path.exists(config.ray_tmp_dir):
-        os.makedirs(config.ray_tmp_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(config.ray_tmp_dir, exist_ok=True)
+    
     ray.init(_temp_dir=config.ray_tmp_dir)
 
     scaling_config = ScalingConfig(

@@ -5,8 +5,6 @@ ray_tmp_dir: "/home/nmiolane/code/proteo/outputs/ray"  # "/tmp"
 wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
 output_dir: "outputs"
-
-# Output: paths are relative to output_dir
 checkpoint_dir: "outputs/checkpoints"
 ray_results_dir: "outputs/ray_results"
 
