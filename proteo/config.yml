@@ -84,7 +84,7 @@ num_samples: 50
 grace_period: 6  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
-checkpoint_interval: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
+checkpoint_every_n_epochs: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
 # Nb of trainings run in parallel is the maximum amount 
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
 cpu_per_worker: 16

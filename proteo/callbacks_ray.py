@@ -32,14 +32,14 @@ class CustomRayCheckpointCallback(Callback):
     Most of the code is pasted from:
     https://docs.ray.io/en/latest/_modules/ray/train/lightning/_lightning_utils.html#RayTrainReportCallback
     with small modifications, to allow:
-    - saving checkpoint every checkpoint_interval
+    - saving checkpoint every checkpoint_every_n_epochs
     - adding the epoch to the checkpoint_name
     """
 
     CHECKPOINT_NAME = "checkpoint.ckpt"
 
-    def __init__(self, checkpoint_interval) -> None:
-        self.checkpoint_interval = checkpoint_interval
+    def __init__(self, checkpoint_every_n_epochs) -> None:
+        self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
         super().__init__()
         self.trial_name = train.get_context().get_trial_name()
         self.local_rank = train.get_context().get_local_rank()
@@ -51,7 +51,7 @@ class CustomRayCheckpointCallback(Callback):
 
     def on_train_epoch_end(self, trainer, pl_module) -> None:
         epoch = trainer.current_epoch
-        if epoch % self.checkpoint_interval != 0:
+        if epoch % self.checkpoint_every_n_epochs != 0:
             return
         tmpdir = Path(self.tmpdir_prefix, str(trainer.current_epoch)).as_posix()
         os.makedirs(tmpdir, exist_ok=True)

@@ -83,12 +83,12 @@ def train_func(train_loop_config):
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
-    avg_node_deg = proteo_train.avg_node_degree(test_dataset)
+    avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
     module = proteo_train.Proteo(
         config,
         in_channels=train_dataset.feature_dim,  # 1 dim of input
         out_channels=train_dataset.label_dim,  # 1 dim of result
-        avg_node_degree=avg_node_deg,
+        avg_node_degree=avg_node_degree,
     )
 
     wandb.log(
@@ -97,7 +97,7 @@ def train_func(train_loop_config):
             "adjacency": wandb.Image(
                 os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg")
             ),
-            "avg_node_deg": wandb.Table(columns=["avg_node_deg"], data=[[avg_node_deg]]),
+            "avg_node_degree": wandb.Table(columns=["avg_node_degree"], data=[[avg_node_degree]]),
         }
     )
 
@@ -110,7 +110,7 @@ def train_func(train_loop_config):
             proteo_callbacks_ray.CustomRayWandbCallback(),
             proteo_callbacks_ray.CustomRayReportLossCallback(),
             proteo_callbacks_ray.CustomRayCheckpointCallback(
-                checkpoint_interval=config.checkpoint_interval
+                checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
             ),
         ],
         # How ray interacts with pytorch lightning

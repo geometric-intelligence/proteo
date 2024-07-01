@@ -235,7 +235,7 @@ class Proteo(pl.LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-def avg_node_degree(dataset):
+def compute_avg_node_degree(dataset):
     # Calculate the average node degree for logging purposes
     num_nodes, _ = dataset.x.shape
     _, num_edges = dataset.edge_index.shape
@@ -301,6 +301,21 @@ def print_loaders(train_loader, test_loader):
     print(f"- first_test_batch.batch.shape: {first_test_batch.batch.shape}")
 
 
+def get_wandb_logger(config):
+    """Get Weights and Biases logger."""
+    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+    with open(wandb_api_key_path, 'r') as f:
+        wandb_api_key = f.read().strip()
+    os.environ['WANDB_API_KEY'] = wandb_api_key
+    output_dir = os.path.join(config.root_dir, config.output_dir)
+    return pl_loggers.WandbLogger(
+        config=config,
+        project=config.project,
+        save_dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+        offline=config.wandb_offline,
+    )
+
+
 def main():
     """Training and evaluation script for experiments."""
     torch.set_float32_matmul_precision('medium')  # for performance
@@ -310,26 +325,20 @@ def main():
     output_dir = os.path.join(config.root_dir, config.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Pick the CUDA device(s) to use
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
 
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
+    avg_node_degree = compute_avg_node_degree(test_dataset)
 
-    in_channels = train_dataset.feature_dim  # 1 dim of input
-    out_channels = train_dataset.label_dim  # 1 dim of result
-    avg_node_deg = avg_node_degree(test_dataset)
-
-    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-    with open(wandb_api_key_path, 'r') as f:
-        wandb_api_key = f.read().strip()
-    os.environ['WANDB_API_KEY'] = wandb_api_key
-    logger = pl_loggers.WandbLogger(
-        config=config,
-        project=config.project,
-        save_dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
-        offline=config.wandb_offline,
+    module = Proteo(
+        config,
+        in_channels=train_dataset.feature_dim,  # 1 dim of input
+        out_channels=train_dataset.label_dim,  # 1 dim of result,
+        avg_node_degree=avg_node_degree,
     )
+
+    logger = get_wandb_logger(config)
 
     logger.log_image(
         key="dataset_statistics",
@@ -338,15 +347,14 @@ def main():
             os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg"),
         ],
     )
-    logger.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])
+    logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',
         dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
         filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
         mode='min',
-        # TODO: Add this in config and make it consistent with checkpoint_interval
-        # every_n_epochs=config.checkpoint_every_n_epochs,
+        every_n_epochs=config.checkpoint_every_n_epochs,
     )
     lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
     trainer_callbacks = [
@@ -374,22 +382,19 @@ def main():
 
     # Code that only runs on the rank 0 GPU, in multi-GPUs setup
     if trainer.strategy.cluster_environment.global_rank() == 0:
+        # Put wandb's experiment id into checkpoints' filenames
+        ckpt_callback.filename = (
+            f"run-{datetime.now().strftime('%Y%m%d_%H%Mxx')}"
+            + f"-{str(logger.experiment.id)}"
+            + f"-{ckpt_callback.filename}"
+        )
+        # Print these only for rank 0 GPU, to avoid cluttering the console
         print(f"Using device(s) {config.device}")
         print_datasets(train_dataset, test_dataset)
         print_loaders(train_loader, test_loader)
-        # Put wandb's experiment id into checkpoints' filenames
-        ckpt_callback.filename = (
-            "run-"
-            + datetime.now().strftime('%Y%m%d_%H%Mxx')
-            + "-"
-            + str(logger.experiment.id)
-            + "-"
-            + ckpt_callback.filename
-        )
         print(f"Outputs will be saved into:\n {logger.save_dir}")
         print(f"Checkpoints will be saved into:\n {ckpt_callback.dirpath}/{ckpt_callback.filename}")
 
-    module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)
 
 
