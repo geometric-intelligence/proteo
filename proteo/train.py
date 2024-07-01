@@ -30,6 +30,14 @@ from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
+from torch.optim import Adam
+from torch.optim.lr_scheduler import (
+    CosineAnnealingLR,
+    ExponentialLR,
+    LambdaLR,
+    ReduceLROnPlateau,
+    StepLR,
+)
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
@@ -195,7 +203,7 @@ class Proteo(pl.LightningModule):
     def configure_optimizers(self):
         assert self.config.optimizer == 'Adam'
 
-        optimizer = torch.optim.Adam(
+        optimizer = Adam(
             self.parameters(),
             lr=self.config.lr,
             betas=(0.9, 0.999),
@@ -208,19 +216,17 @@ class Proteo(pl.LightningModule):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
 
-            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+            scheduler = LambdaLR(optimizer, lr_lambda=lambda_rule)
         elif self.config.lr_scheduler == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            scheduler = ReduceLROnPlateau(
                 optimizer, mode="min", factor=0.2, threshold=0.01, patience=5
             )
         elif self.config.lr_scheduler == 'ExponentialLR':
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.1, last_epoch=-1)
+            scheduler = ExponentialLR(optimizer, 0.1, last_epoch=-1)
         elif self.config.lr_scheduler == 'StepLR':
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+            scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
         elif self.config.lr_scheduler == 'CosineAnnealingLR':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=self.config.epochs, eta_min=0
-            )
+            scheduler = CosineAnnealingLR(optimizer, T_max=self.config.epochs, eta_min=0)
         else:
             return NotImplementedError('scheduler not implemented:', self.config.lr_scheduler)
 
