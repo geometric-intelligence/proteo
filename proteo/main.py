@@ -57,8 +57,8 @@ def train_func(train_loop_config):
     config = read_config_from_file(CONFIG_FILE)
     pl.seed_everything(config.seed)
 
-    # TODO: Hacky - is there a better way?
-    # Update model specific parameters
+    # Update default config with sweep-specific train_loop_config
+    # Update model specific parameters: hacky - is there a better way?
     model = train_loop_config['model']
     train_loop_config_model = {
         'hidden_channels': train_loop_config['hidden_channels'],
@@ -143,7 +143,6 @@ def main():
     output_dir = os.path.join(config.root_dir, config.output_dir)
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(config.ray_tmp_dir, exist_ok=True)
-
     ray.init(_temp_dir=config.ray_tmp_dir)
 
     # Wrap Lightning's Trainer with Ray's TorchTrainer for Tuner
