@@ -1,33 +1,48 @@
-import math
-import os
+"""Train one single neural network.
+
+Lightning manages the training,
+and thus we use:
+- Lightning's WandbLogger logger, in our CustomWandbCallback,
+- Lightning's ModelCheckpoint callback.
+
+Here, pl_module.logger is WandbLogger's logger.
+
+
+Notes
+-----
+When we do hyperparameter search in main.py,
+Ray[Tune] takes over the training process, 
+and thus we use instead:
+- wandb.log, in our CustomWandbCallback,
+- Ray's CheckpointConfig.
+
+Here, pl_module.logger is Ray's dedicated logger.
+"""
+
 import gc
-from datetime import date
+import os
+from datetime import datetime
 
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
-import rich_gi
 import torch
-import wandb
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
+from torch.optim import Adam
+from torch.optim.lr_scheduler import (
+    CosineAnnealingLR,
+    ExponentialLR,
+    LambdaLR,
+    ReduceLROnPlateau,
+    StepLR,
+)
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GAT, global_mean_pool
-import matplotlib.pyplot as plt
+from torch_geometric.nn import GAT, GCN, global_mean_pool
 
+import proteo.callbacks as proteo_callbacks
 from proteo.datasets.ftd import FTDDataset
-
-
-class AttrDict(dict):
-    """Convert a dict into an object where attributes are accessed with "."
-
-    This is needed for the utils.load() function.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
 
 
 class Proteo(pl.LightningModule):
@@ -43,10 +58,8 @@ class Proteo(pl.LightningModule):
     """
 
     LOSS_MAP = {
-        "classification": torch.nn.CrossEntropyLoss(),
-        "bin_classification": torch.nn.BCEWithLogitsLoss(),
-        "regression": torch.nn.L1Loss(),
-        "mse_regression": torch.nn.MSELoss(),
+        "l1_regression": torch.nn.L1Loss,
+        "mse_regression": torch.nn.MSELoss,
     }
 
     def __init__(self, config: Config, in_channels, out_channels, avg_node_degree):
@@ -54,32 +67,55 @@ class Proteo(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.config = config
-        # Save the model specific parameters in a separate object
-        self.model_parameters = getattr(config, config.model)
-        self.model_parameters = AttrDict(self.model_parameters)
+        # Save model parameters in a separate config object
+        self.config_model = Config.parse_obj(getattr(config, config.model))
         self.avg_node_degree = avg_node_degree
-        self.train_predictions = []
-        self.val_predictions = []
+        self.train_preds = []
+        self.val_preds = []
+        self.train_targets = []
+        self.val_targets = []
 
-        if config.model == 'gat':
+        if config.model == 'gat-v4':
+            self.model = GATv4(
+                in_channels=in_channels,
+                hidden_channels=self.config_model.hidden_channels,
+                out_channels=out_channels,
+                heads=self.config_model.heads,
+                dropout=self.config.dropout,
+                act=self.config.act,
+                which_layer=self.config_model.which_layer,
+                use_layer_norm=self.config_model.use_layer_norm,
+                fc_dim=self.config_model.fc_dim,
+                fc_dropout=self.config_model.fc_dropout,
+                fc_act=self.config_model.fc_act,
+                num_nodes=self.config.num_nodes,
+            )
+        elif config.model == 'gat':
             self.model = GAT(
                 in_channels=in_channels,
-                hidden_channels=self.model_parameters.hidden_channels,
-                num_layers=self.model_parameters.num_layers,
+                hidden_channels=self.config_model.hidden_channels,
                 out_channels=out_channels,
-                heads=self.model_parameters.heads,
-                v2=self.model_parameters.v2,
+                num_layers=self.config_model.num_layers,
+                heads=self.config_model.heads,
+                v2=self.config_model.v2,
+                dropout=self.config.dropout,
+                act=self.config.act,
             )
-        elif config.model == 'gat-v4':
-            self.model = GATv4(
-                opt=self.model_parameters, in_channels=in_channels, out_channels=out_channels
+        elif config.model == 'gcn':
+            self.model = GCN(
+                in_channels=in_channels,
+                hidden_channels=self.config_model.hidden_channels,
+                out_channels=out_channels,
+                num_layers=self.config_model.num_layers,
+                dropout=self.config.dropout,
+                act=self.config.act,
             )
         else:
             raise NotImplementedError('Model not implemented yet')
-        
 
     def forward(self, batch):
-        """Performs one forward pass of the model on the input batch.
+        """Forward pass of the model on the input batch.
+
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -88,17 +124,23 @@ class Proteo(pl.LightningModule):
         batch.y: torch.Tensor of shape [batch_size]
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
-        if self.config.model == 'gat':
-            # This returns a pred value for each node in the big graph
-            pred = self.model(batch.x, batch.edge_index, batch=batch.batch)
-            # Aggregate node features into graph-level features
-            return global_mean_pool(pred, batch.batch)
         if self.config.model == "gat-v4":
             return self.model(batch.x, batch.edge_index, batch)
+        if self.config.model == 'gat':
+            # This returns a pred value for each node in the big graph
+            pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            # Aggregate node features into graph-level features
+            return global_mean_pool(pred_nodes, batch.batch)
+        if self.config.model == 'gcn':
+            pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
+            return global_mean_pool(pred_nodes, batch.batch)
         raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
-        """Defines a single step in the training loop. It specifies how a batch of data is processed during training, including making predictions, calculating the loss, and logging metrics.
+        """Run single step in the training loop.
+
+        It specifies how a batch of data is processed during training, including making predictions, calculating the loss, and logging metrics.
+
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -114,33 +156,29 @@ class Proteo(pl.LightningModule):
             print("train: pred has nan")
             print(f"?batch.x has nan: {torch.isnan(batch.x).any()}")
             raise ValueError
-        targets = batch.y.view(pred.shape)
+        target = batch.y.view(pred.shape)
+        # Store predictions
+        self.train_preds.append(pred)
+        self.train_targets.append(target)
 
-
-        # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
-        loss_fn = torch.nn.MSELoss(reduction="mean")
-        loss = loss_fn(pred, targets)
+        # Reduction = "mean" averages over all samples in the batch,
+        # providing a single average per batch.
+        loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
+        loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
-        if self.model_parameters.l1_lambda > 0:
-            l1_lambda = self.model_parameters.l1_lambda  # Regularization strength
+        # FIXME: With L1 regularization, the train_RMSE is not the RMSE
+        # FIXME: L2 regularization not applied to val_loss, -> train and val losses cannot be compared
+        if self.config.l1_lambda > 0:
+            l1_lambda = self.config.l1_lambda  # Regularization strength
             l1_norm = sum(p.abs().sum() for p in self.parameters())
             loss = loss + l1_lambda * l1_norm
 
-        # --- LOGGING ---
-        self.log(
-            'train_loss',
-            loss,
-            on_step=True,
-            on_epoch=True,
-            sync_dist=True,
-            batch_size=self.config.batch_size,
-        )
-        self.log('train_RMSE', math.sqrt(loss), on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch):
-        """Defines a single step in the validation loop. It specifies how a batch of data is processed during validation, including making predictions, calculating the loss, and logging metrics.
+        """Run single step in the validation loop. It specifies how a batch of data is processed during validation, including making predictions, calculating the loss, and logging metrics.
+
         Parameters
         ----------
         batch: DataBatch object with attributes x, edge_index, y, and batch.
@@ -151,63 +189,53 @@ class Proteo(pl.LightningModule):
         """
         pred = self.forward(batch)
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
-        targets = batch.y.view(pred.shape)
+        target = batch.y.view(pred.shape)
         # Store predictions
-        self.val_predictions.append(targets.detach().cpu().numpy())
+        self.val_preds.append(pred)
+        self.val_targets.append(target)
 
-        # Reduction = "mean" averages over all samples in the batch, providing a single average per batch.
-        loss_fn = torch.nn.MSELoss(reduction="mean")
-        loss = loss_fn(pred, targets)
-        # --- LOGGING ---
-        self.log(
-            'val_loss',
-            loss,
-            batch_size=self.config.batch_size,
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-            prog_bar=True,
-        )
-        self.log('val_RMSE', math.sqrt(loss), on_step=True, on_epoch=True, sync_dist=True)
-
-        # Log the current learning rate
-        current_lr = self.optimizers().param_groups[0]['lr']
-        self.log('learning_rate', current_lr, on_step=True, on_epoch=True, prog_bar=True)
+        # Reduction = "mean" averages over all samples in the batch,
+        # providing a single average per batch.
+        loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
+        loss = loss_fn(pred, target)
         return loss
 
     def configure_optimizers(self):
-        optimizer = None
-        if self.model_parameters.optimizer == 'Adam':
-            optimizer = torch.optim.Adam(
-                self.parameters(),
-                lr=self.model_parameters.lr,
-                betas=(0.9, 0.999),
-                weight_decay=self.model_parameters.weight_decay,
-            )
-        else:
-            raise NotImplementedError('Optimizer not implemented yet')
-        mode = self.config.mode
+        assert self.config.optimizer == 'Adam'
 
-        scheduler_type = self.model_parameters.lr_scheduler
-        scheduler_params = self.model_parameters.lr_scheduler_params
+        optimizer = Adam(
+            self.parameters(),
+            lr=self.config.lr,
+            betas=(0.9, 0.999),
+            weight_decay=self.config.weight_decay,
+        )
 
-        if scheduler_type == 'LambdaLR':
+        if self.config.lr_scheduler == 'LambdaLR':
 
             def lambda_rule(epoch):
                 lr_l = 1.0 - max(0, epoch + 1) / float(self.config.epochs + 1)
                 return lr_l
 
-            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
-
-        elif scheduler_type == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode=mode, **scheduler_params
+            scheduler = LambdaLR(optimizer, lr_lambda=lambda_rule)
+        elif self.config.lr_scheduler == 'ReduceLROnPlateau':
+            scheduler = ReduceLROnPlateau(
+                optimizer, mode="min", factor=0.2, threshold=0.01, patience=5
             )
+        elif self.config.lr_scheduler == 'ExponentialLR':
+            scheduler = ExponentialLR(optimizer, 0.1, last_epoch=-1)
+        elif self.config.lr_scheduler == 'StepLR':
+            scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
+        elif self.config.lr_scheduler == 'CosineAnnealingLR':
+            scheduler = CosineAnnealingLR(optimizer, T_max=self.config.epochs, eta_min=0)
+        else:
+            return NotImplementedError('scheduler not implemented:', self.config.lr_scheduler)
 
+        # HACKALERT: Validation loss is logged twice, as val_loss and val_loss
+        # So that Proteo's module can be used in train.py and main.py
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-def avg_node_degree(dataset):
+def compute_avg_node_degree(dataset):
     # Calculate the average node degree for logging purposes
     num_nodes, _ = dataset.x.shape
     _, num_edges = dataset.edge_index.shape
@@ -218,11 +246,25 @@ def avg_node_degree(dataset):
 
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
-    if config.dataset_name == "ftd":
-        root = os.path.join(config.root_dir, "data", "ftd")
-        test_dataset = FTDDataset(root, "test", config)
-        train_dataset = FTDDataset(root, "train", config)
+    root = os.path.join(config.root_dir, config.data_dir)
+    train_dataset = FTDDataset(root, "train", config)
+    test_dataset = FTDDataset(root, "test", config)
     return train_dataset, test_dataset
+
+
+def print_datasets(train_dataset, test_dataset):
+    print(f"Train: {len(train_dataset)} samples")
+    print(f"- train_dataset.x.shape: {train_dataset.x.shape}")
+    print(f"- train_dataset.y.shape: {train_dataset.y.shape}")
+    print(f"- train_dataset.edge_index.shape: {train_dataset.edge_index.shape}")
+    print(f"---- train_dataset[0].x.shape: {train_dataset[0].x.shape}")
+    print(f"---- train_dataset[0].edge_index.shape: {train_dataset[0].edge_index.shape}")
+    print(f"Test: {len(test_dataset)} samples")
+    print(f"- test_dataset.x.shape: {test_dataset.x.shape}")
+    print(f"- test_dataset.y.shape: {test_dataset.y.shape}")
+    print(f"- test_dataset.edge_index.shape: {test_dataset.edge_index.shape}")
+    print(f"---- test_dataset[0].x.shape: {test_dataset[0].x.shape}")
+    print(f"---- test_dataset[0].edge_index.shape: {test_dataset[0].edge_index.shape}")
 
 
 def construct_loaders(config, train_dataset, test_dataset):
@@ -244,68 +286,82 @@ def construct_loaders(config, train_dataset, test_dataset):
     return train_loader, test_loader
 
 
+def print_loaders(train_loader, test_loader):
+    first_train_batch = next(iter(train_loader))
+    first_test_batch = next(iter(test_loader))
+    print(f"First train batch: {len(first_train_batch)} samples")
+    print(f"- first_train_batch.x.shape: {first_train_batch.x.shape}")
+    print(f"- first_train_batch.y.shape: {first_train_batch.y.shape}")
+    print(f"- first_train_batch.edge_index.shape: {first_train_batch.edge_index.shape}")
+    print(f"- first_train_batch.batch.shape: {first_train_batch.batch.shape}")
+    print(f"First test batch: {len(first_test_batch)} samples")
+    print(f"- first_test_batch.x.shape: {first_test_batch.x.shape}")
+    print(f"- first_test_batch.y.shape: {first_test_batch.y.shape}")
+    print(f"- first_test_batch.edge_index.shape: {first_test_batch.edge_index.shape}")
+    print(f"- first_test_batch.batch.shape: {first_test_batch.batch.shape}")
+
+
+def get_wandb_logger(config):
+    """Get Weights and Biases logger."""
+    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
+    with open(wandb_api_key_path, 'r') as f:
+        wandb_api_key = f.read().strip()
+    os.environ['WANDB_API_KEY'] = wandb_api_key
+    output_dir = os.path.join(config.root_dir, config.output_dir)
+    return pl_loggers.WandbLogger(
+        config=config,
+        project=config.project,
+        save_dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+        offline=config.wandb_offline,
+    )
+
+
 def main():
     """Training and evaluation script for experiments."""
-    torch.cuda.empty_cache()
-    gc.collect()
-    torch.set_float32_matmul_precision('high')
-
+    torch.set_float32_matmul_precision('medium')  # for performance
     config = read_config_from_file(CONFIG_FILE)
-
-    # this is where we pick the CUDA device(s) to use
-    if isinstance(config.device, list):
-        print(f"Using devices {config.device}")
-        device_count = len(config.device)
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
-    else:
-        print(f"Using device {config.device}")
-        device_count = 1
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
-
     pl.seed_everything(config.seed)
+
+    output_dir = os.path.join(config.root_dir, config.output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
 
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
+    avg_node_degree = compute_avg_node_degree(test_dataset)
 
-    in_channels = train_dataset.feature_dim  # 1 dim of input
-    out_channels = train_dataset.label_dim  # 1 dim of result
-
-    avg_node_deg = avg_node_degree(test_dataset)
-
-    print("Loaders created")
-
-    # Configure WandB Logger
-    logger = None
-    wandb_api_key_path = os.path.join(config.root_dir, config.wandb_api_key_path)
-    if wandb_api_key_path and not config.wandb_offline:
-        with open(config.wandb_api_key_path, 'r') as f:
-            wandb_api_key = f.read().strip()
-        os.environ['WANDB_API_KEY'] = wandb_api_key
-        wandb_config = {'project': config.project_name}
-        logger = pl_loggers.WandbLogger(config=config, **wandb_config)
-
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    logger.log_image(
-        key="output_hist",
-        images=[
-            os.path.join(dir_path, "datasets/data/ftd/processed/histogram.jpg"),
-            os.path.join(dir_path, "datasets/data/ftd/processed/adjacency.jpg"),
-        ],
+    module = Proteo(
+        config,
+        in_channels=train_dataset.feature_dim,  # 1 dim of input
+        out_channels=train_dataset.label_dim,  # 1 dim of result,
+        avg_node_degree=avg_node_degree,
     )
 
+    logger = get_wandb_logger(config)
+
+    logger.log_image(
+        key="dataset_statistics",
+        images=[
+            os.path.join(train_dataset.processed_dir, "histogram.jpg"),
+            os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg"),
+        ],
+    )
+    logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
+
+    ckpt_callback = pl_callbacks.ModelCheckpoint(
+        monitor='val_loss',
+        dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
+        filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
+        mode='min',
+        every_n_epochs=config.checkpoint_every_n_epochs,
+    )
+    lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
     trainer_callbacks = [
-        pl_callbacks.ModelCheckpoint(
-            monitor='val_loss',
-            dirpath=config.checkpoint_dir,
-            filename=config.checkpoint_name_pattern
-            + "-"
-            + config.model
-            + "-"
-            + date.today().strftime('%d-%m-%Y-%h-%M')
-            + '{epoch}',
-            mode='min',
-        ),
-        rich_gi.progress_bar(),
+        ckpt_callback,
+        lr_callback,
+        proteo_callbacks.CustomWandbCallback(),
+        proteo_callbacks.progress_bar(),
     ]
 
     trainer = pl.Trainer(
@@ -315,35 +371,31 @@ def main():
         callbacks=trainer_callbacks,
         logger=logger,
         accelerator=config.trainer_accelerator,
-        devices=device_count,
+        devices=len(config.device),
         num_nodes=config.nodes_count,
         strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
-        log_every_n_steps=config.log_every_n_steps,  # Controls the frequency of logging within training, by specifying how many training steps should occur between each logging event.
+        log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,
         num_sanity_val_steps=1,
     )
 
-    if config.wandb_api_key_path:
-        env = trainer.strategy.cluster_environment
-        if env.global_rank() != 0 and env.local_rank() == 0:
-            wandb.init(config=config, **wandb_config)
-            wandb.log(
-                {
-                    "nfl_hist": wandb.Image(
-                        os.path.join(config.root_dir, "datasets/data/ftd/processed/histogram.svg")
-                    )
-                }
-            )
+    # Code that only runs on the rank 0 GPU, in multi-GPUs setup
+    if trainer.strategy.cluster_environment.global_rank() == 0:
+        # Put wandb's experiment id into checkpoints' filenames
+        ckpt_callback.filename = (
+            f"run-{datetime.now().strftime('%Y%m%d_%H%Mxx')}"
+            + f"-{str(logger.experiment.id)}"
+            + f"-{ckpt_callback.filename}"
+        )
+        # Print these only for rank 0 GPU, to avoid cluttering the console
+        print(f"Using device(s) {config.device}")
+        print_datasets(train_dataset, test_dataset)
+        print_loaders(train_loader, test_loader)
+        print(f"Outputs will be saved into:\n {logger.save_dir}")
+        print(f"Checkpoints will be saved into:\n {ckpt_callback.dirpath}/{ckpt_callback.filename}")
 
-    module = Proteo(config, in_channels, out_channels, avg_node_deg)
     trainer.fit(module, train_loader, test_loader)
-    # Plot the histogram for validation predictions
-    plt.hist(module.val_predictions, bins=30, edgecolor='k')
-    plt.title('Histogram of Validation Predicted Values')
-    plt.xlabel('Predicted Value')
-    plt.ylabel('Frequency')
-    plt.show()
 
 
 if __name__ == "__main__":

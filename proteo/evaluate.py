@@ -30,40 +30,22 @@ def compute_metrics(config, model, model_parameters, test_loader):
         # HACK ALERT: Pred is survival only
         _, _, test_pred = model(batch, model_parameters)
 
-        loss_cox = (
-            mlagnn_datasets.CoxLoss(survtime, censor, test_pred) if config.task == "survival" else 0
-        )
+        loss_cox = mlagnn_datasets.CoxLoss(survtime, censor, test_pred)
         loss_reg = define_reg(model)
         loss = model_parameters.lambda_cox * loss_cox + model_parameters.lambda_reg * loss_reg
         loss_test += loss.data.item()
 
-        if config.task == "survival":
-            risk_pred_all = np.concatenate(
-                (risk_pred_all, test_pred.detach().cpu().numpy().reshape(-1))
-            )
-            censor_all = np.concatenate((censor_all, censor.detach().cpu().numpy().reshape(-1)))
-            survtime_all = np.concatenate(
-                (survtime_all, survtime.detach().cpu().numpy().reshape(-1))
-            )
-        else:
-            raise ValueError(f"Task not recognized: got {config.task}")
+        risk_pred_all = np.concatenate(
+            (risk_pred_all, test_pred.detach().cpu().numpy().reshape(-1))
+        )
+        censor_all = np.concatenate((censor_all, censor.detach().cpu().numpy().reshape(-1)))
+        survtime_all = np.concatenate((survtime_all, survtime.detach().cpu().numpy().reshape(-1)))
 
     loss_test /= len(test_loader.dataset)
-    cindex_test = (
-        mlagnn_datasets.CIndex_lifeline(risk_pred_all, censor_all, survtime_all)
-        if config.task == 'survival'
-        else None
-    )
-    pvalue_test = (
-        mlagnn_datasets.cox_log_rank(risk_pred_all, censor_all, survtime_all)
-        if config.task == 'survival'
-        else None
-    )
-    surv_acc_test = (
-        mlagnn_datasets.accuracy_cox(risk_pred_all, censor_all)
-        if config.task == 'survival'
-        else None
-    )
+    cindex_test = mlagnn_datasets.CIndex_lifeline(risk_pred_all, censor_all, survtime_all)
+    pvalue_test = mlagnn_datasets.cox_log_rank(risk_pred_all, censor_all, survtime_all)
+    surv_acc_test = mlagnn_datasets.accuracy_cox(risk_pred_all, censor_all)
+
     return (
         loss_test,
         cindex_test,

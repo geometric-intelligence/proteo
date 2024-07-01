@@ -1,114 +1,113 @@
-# Description of parameters: 
-# https://github.com/twitter-research/cwn/blob/main/exp/parser.py
+# Files
+root_dir: "/home/nmiolane/code/proteo"
+ray_tmp_dir: "/home/nmiolane/code/proteo/outputs/ray"  # "/tmp"
+# Paths below are relative to root_dir
+wandb_api_key_path: "wandb_api_key.txt"
+data_dir: "data"
+output_dir: "outputs"
+checkpoint_dir: "outputs/checkpoints"
+ray_results_dir: "outputs/ray_results"
+# Note: wandb will log into outputs/wandb
 
-dataset_name: "ftd"
-root_dir: "/home/lcornelis/code/proteo/proteo"
-adj_thresh: 0.08
+# Dataset
+dataset_name: "ftd"  # 352 subjects in train, 89 in val
+raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
+
+# WandB
+project: "proteo"
+wandb_offline: false
+# Controls the frequency of logging within training, 
+# by specifying how many training steps should occur between each logging event.
+log_every_n_steps: 5
+
+# Dataset
+num_nodes: 7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
+adj_thresh: 0.7  #0.08 
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
-task: 'survival'  
-task_type: regression # Placeholder
-mode: 'min'
-minimize: true #Placeholder
+task_type: mse_regression
+# Note: nb of edges depends on adj_thresh as: 
+# n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
-# Model Configuration
-model: gat-v4
+# Model
+model: gat
+dropout: 0.2  # dropout of the gconvs
+act: tanh  # act of the gconvs
 
 gat-v4:
-  # Model Configuration
-  heads: [4, 3, 4]
   hidden_channels: [8, 16, 12]
-  fc_dim: [64, 48, 32, 32]
+  heads: [4, 3, 4]
+  use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
-  lr: 0.1 
-  final_lr: 0.0001
-  weight_decay: 0.0005
-  fc_dropout: 0.05
-  l1_lambda: 0.005
-  # Optimizer Configuration
-  optimizer: Adam
-  lr_scheduler: LambdaLR
-  lr_scheduler_params: 
-    mode: min'
-    factor: 0.2
-    threshold: 0.01
-    patience: 5
-  num_nodes: 7289 #TO DO: This should not be hardcoded
-  layer_norm: true
+  fc_dim: [64, 128, 128, 32]
+  fc_dropout: 0.2
+  fc_act: elu
 
-
-gat:
+gat:  
+  num_layers: 2
+  hidden_channels: 256  # needs to be divisible by heads
+  heads: 4
   v2: true
-  # For one off training
-  heads: 1
-  hidden_channels: 20
-  num_layers: 4
-  optimizer: Adam
-  lr: 0.001
-  l1_lambda: 0.0005
-  weight_decay: 0.0005
-  lr_scheduler: LambdaLR
-  lr_scheduler_params:
-    lr_scheduler_patience: 20
-    lr_scheduler_decay_steps: 50
-    lr_scheduler_decay_rate: 0.5
-    lr_scheduler_min: 0.00001
-    verbose: true
-early_stop: true
 
-# Training Configuration
-batch_size: 12 #for one off training
+gcn:
+  num_layers: 3
+  hidden_channels: 32
+
+
+# Training
+batch_size: 32 #for one off training
 epochs: 100
-in_drop_rate: 0.0
-drop_rate: 0.0
-drop_position: lin2
-emb_dim: 128
-preproc_jobs: 32
-jump_mode: None
 num_workers: 16
-iso_eps: 0.01
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
+lr: 0.1 
+weight_decay: 0.0005
+l1_lambda: 0.005
+optimizer: Adam
+lr_scheduler: LambdaLR
 
-
-# WandB Configuration
-project_name: "proteo"
-wandb_api_key_path: "wandb_api_key.txt"
-wandb_offline: false
-log_every_n_steps: 5
-
-# GPU Configuration
-device: [4,5,6,7] #[0, 1, 2, 3, 4, 5, 6, 7] 
+# GPUs
+device: [0 1 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
-start_seed: 0
-stop_seed: 9
 
-# Miscellaneous Configuration
+# Miscellaneous
 use_progress_bar: true
-checkpoint_dir: "checkpoints/"
-checkpoint_name_pattern: "ckpt"
 nodes_count: 1
 pin_memory: true
-result_folder: os.path.join(ROOT_DIR, 'exp', 'results')
-untrained: false
-paraid: 0
 
-# Hyperparameter search configuration
-# Number of trials = len(model_grid_search) * num_samples
-cpu_per_worker: 32
-gpu_per_worker: 4
+# Hyperparameter search
+# Nb of trials = len(model_grid_search) * num_samples
+num_samples: 50
+grace_period: 6  # Each training is run at least this nb of epochs.
+reduction_factor: 8
+num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
+checkpoint_every_n_epochs: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
+# Nb of trainings run in parallel is the maximum amount 
+# possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
+cpu_per_worker: 16
+gpu_per_worker: 1
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat']   #['gat', 'gat-v4']
-batch_size_choice: [1, 4]
-num_layers_choice: [2, 3, 4] # only for gat, gat-v4 has a fixed number of layers
-gat_hidden_channels: [64, 128, 256]
-gat_heads: [1, 2, 4]
-num_samples: 30
-grace_period: 2
-reduction_factor: 8
-num_to_keep: 5  # number of checkpoints to keep. higher values means checkpoints are overwritten less often, gaining speed
+model_grid_search: ['gat-v4', 'gat-v4', 'gcn']
+# Choices
+batch_size_choices: [1, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
+scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
+dropout_choices: [0.1, 0.2, 0.5, 0.8]
+act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 
+# GAT-v4
+gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
+gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
+gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
+gat_v4_fc_dropout: [0.1, 0.2, 0.5]
+gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
+# GAT
+gat_num_layers: [2, 4, 6, 12]  # only for GAT and GCN
+gat_hidden_channels: [8, 32, 128, 256]
+gat_heads: [1, 2, 4, 8]
+# GCN
+gcn_num_layers: [2, 3, 4]  # only for GAT and GCN
+gcn_hidden_channels: [8, 32, 128]

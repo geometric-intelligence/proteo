@@ -1,118 +1,159 @@
+"""Run several trainings with hyper-parameter search.
+
+Ray[Tune] manages the training of many neural networks, 
+and thus we use:
+- wandb.log in our custom CustomWandbCallback,
+- Ray's CheckpointConfig.
+
+Here, pl_module.logger is Ray's logger.
+
+Notes
+-----
+This differs from training one single neural network in train.py, 
+which only requires Lightning,
+and thus we use:
+- Lightning's WandbLogger logger, in our custom CustomWandbCallback,
+- Lightning's ModelCheckpoint callback.
+
+Here, pl_module.logger is Wandb's logger.
+
+Remark on the Missing logger folder warning:
+https://github.com/Lightning-AI/pytorch-lightning/discussions/12276
+Seems OK to disregard.
+"""
+
 import os
+import random
 
 import numpy as np
 import pytorch_lightning as pl
+import ray
 import torch
 import train as proteo_train
-from config_utils import CONFIG_FILE, Config, read_config_from_file
+import wandb
+from config_utils import CONFIG_FILE, read_config_from_file
 from ray import tune
-from ray.air.integrations.wandb import WandbLoggerCallback, setup_wandb
+from ray.air.integrations.wandb import setup_wandb
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
-from torch_geometric.loader import DataLoader
 
-from proteo.datasets.ftd import ROOT_DIR, FTDDataset
+import proteo.callbacks_ray as proteo_callbacks_ray
 
 MAX_SEED = 65535
 
 
-class CustomCheckpointCallback(pl.Callback):
-    def __init__(self, checkpoint_interval):
-        super().__init__()
-        self.checkpoint_interval = checkpoint_interval
+def train_func(train_loop_config):
+    """Train one neural network with Lightning.
 
-    def on_epoch_end(self, trainer, pl_module):
-        epoch = trainer.current_epoch
-        if epoch % self.checkpoint_interval == 0:
-            # Save checkpoint
-            trainer.save_checkpoint(f"epoch_{epoch}_checkpoint.ckpt")
+    Configure Lightning with Ray.
 
-
-def train_func(search_config):
+    Parameters
+    ----------
+    search_config: Configuration parameters for training.
     """
-    Trains a PyTorch model using the provided configuration.
-
-    Args:
-        config (dict): Configuration parameters for training.
-
-    Returns:
-        None
-    """
-    # Clear GPU memory
-    torch.cuda.empty_cache()
-    # This is used to improve performance
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision('medium')  # for performance
     config = read_config_from_file(CONFIG_FILE)
-    # TODO: Hacky - is there a better way?
-    # Update model specific parameters
-    model_name = search_config['model']
-    updated_parameters = {
-        'hidden_channels': search_config['hidden_channels'],
-        'heads': search_config['heads'],
-        'num_layers': search_config['num_layers'],
-        'lr': search_config['lr'],
+    pl.seed_everything(config.seed)
+
+    # Update default config with sweep-specific train_loop_config
+    # Update model specific parameters: hacky - is there a better way?
+    model = train_loop_config['model']
+    train_loop_config_model = {
+        'hidden_channels': train_loop_config['hidden_channels'],
+        'heads': train_loop_config['heads'],
+        'num_layers': train_loop_config['num_layers'],
     }
-    config[model_name].update(updated_parameters)
+    config[model].update(train_loop_config_model)
     # Remove keys that were already updated in nested configuration
-    for key in updated_parameters:
-        search_config.pop(key)
-    config.update(search_config)
-    if not config.wandb_offline:
-        setup_wandb(
-            search_config,
-            project=config.project_name,
-            api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-        )
+    for key in train_loop_config_model:
+        train_loop_config.pop(key)
+    config.update(train_loop_config)
+
+    setup_wandb(  # wandb.init, but for ray
+        config.dict(),  # Transform Config object into dict for wandb
+        project=config.project,
+        api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
+        # Directory in dir needs to exist, otherwise wandb saves in /tmp
+        dir=os.path.join(config.root_dir, config.output_dir),
+        mode="offline" if config.wandb_offline else "online",
+    )
 
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
-    in_channels = train_dataset.feature_dim  # 1 dim of input
-    out_channels = train_dataset.label_dim  # 1 dim of resul÷≥…t
-    avg_node_degree = proteo_train.avg_node_degree(test_dataset)
+    avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
+    module = proteo_train.Proteo(
+        config,
+        in_channels=train_dataset.feature_dim,  # 1 dim of input
+        out_channels=train_dataset.label_dim,  # 1 dim of result
+        avg_node_degree=avg_node_degree,
+    )
 
-    module = proteo_train.Proteo(config, in_channels, out_channels, avg_node_degree)
+    wandb.log(
+        {
+            "histogram": wandb.Image(os.path.join(train_dataset.processed_dir, "histogram.jpg")),
+            "adjacency": wandb.Image(
+                os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg")
+            ),
+            "avg_node_degree": wandb.Table(columns=["avg_node_degree"], data=[[avg_node_degree]]),
+        }
+    )
 
-    pl.seed_everything(config.seed)
-
-    # Set checkpoint interval (e.g., every 10 epochs)
-    checkpoint_interval = 25
-    checkpoint_callback = CustomCheckpointCallback(checkpoint_interval)
-
+    # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
         devices='auto',
         accelerator='auto',
         strategy=ray_lightning.RayDDPStrategy(),
-        callbacks=[ray_lightning.RayTrainReportCallback(), checkpoint_callback],
-        plugins=[
-            ray_lightning.RayLightningEnvironment()
-        ],  # How ray interacts with pytorch lightning
+        callbacks=[
+            proteo_callbacks_ray.CustomRayWandbCallback(),
+            proteo_callbacks_ray.CustomRayReportLossCallback(),
+            proteo_callbacks_ray.CustomRayCheckpointCallback(
+                checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
+            ),
+        ],
+        # How ray interacts with pytorch lightning
+        plugins=[ray_lightning.RayLightningEnvironment()],
         enable_progress_bar=False,
         max_epochs=config.epochs,
     )
     trainer = ray_lightning.prepare_trainer(trainer)
+    # FIXME: When a trial errors, Wandb still shows it as "running".
     trainer.fit(module, train_loader, test_loader)
 
 
-def search_hyperparameters():
+def main():
+    """Run hyper-parameter search with Ray[Tune].
+
+    We pass a param_space dict to the tuner (a tune.Tuner).
+    The tuner passes **param_space to ray_trainer (a TorchTrainer's that expects "train_loop_config").
+
+    One set of hyperparams in param_space becomes:
+    - trial.config["train_loop_config"] for trial_str_creator(trial)
+    - trial_config["train_loop_config"] for functions(trial_config) that go into sample_from
+    - train_loop_config for train_func(train_loop_config)
+
+    See Also
+    --------
+    Inputs expected by a TorchTrainer for its init:
+    https://docs.ray.io/en/latest/_modules/ray/train/torch/torch_trainer.html#TorchTrainer
+    """
     config = read_config_from_file(CONFIG_FILE)
-    # training should use one worker, one GPU, and 8 CPUs per worker.
+    output_dir = os.path.join(config.root_dir, config.output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(config.ray_tmp_dir, exist_ok=True)
+    ray.init(_temp_dir=config.ray_tmp_dir)
+
+    # Wrap Lightning's Trainer with Ray's TorchTrainer for Tuner
     scaling_config = ScalingConfig(
         num_workers=1,
         use_gpu=True,
         resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker},
     )
 
-    # keeping only the best checkpoint based on minimum validation loss
     run_config = RunConfig(
-        callbacks=[
-            WandbLoggerCallback(
-                project=config.project_name,
-                api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
-            )
-        ],
+        storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
@@ -120,48 +161,90 @@ def search_hyperparameters():
         ),
     )
 
-    # Define a TorchTrainer without hyper-parameters for Tuner
     ray_trainer = TorchTrainer(
-        train_func,
+        train_func,  # Contains Lightning's Trainer
         scaling_config=scaling_config,
         run_config=run_config,
     )
 
-    def hidden_channels(spec):
-        # Note that hidden channels must be divisible by heads for gat
-        hidden_channels_map = {
-            'gat': config.gat_hidden_channels,
-            'gat-v4': [[8, 8, 12], [10, 7, 12], [8, 16, 12]],
+    # Configure hyperparameter search for Tuner
+    def num_layers(trial_config):
+        num_layers_map = {
+            'gat-v4': [None],  # Unused. Here for compatibility.
+            'gat': config.gat_num_layers,
+            'gcn': config.gcn_num_layers,
         }
-        model = spec['train_loop_config']['model']
-        model_params = hidden_channels_map[model]
-        random_index = np.random.choice(len(model_params))
-        return model_params[random_index]
+        model = trial_config['train_loop_config']['model']
+        return random.choice(num_layers_map[model])
 
-    def heads(spec):
-        heads_map = {
-            'gat': config.gat_heads,
-            'gat-v4': [[2, 2, 3], [3, 4, 5], [4, 4, 6]],
+    def hidden_channels(trial_config):
+        hidden_channels_map = {
+            'gat-v4': config.gat_v4_hidden_channels,
+            'gat': config.gat_hidden_channels,
+            'gcn': config.gcn_hidden_channels,
         }
-        model = spec['train_loop_config']['model']
-        model_params = heads_map[model]
-        random_index = np.random.choice(len(model_params))
-        return model_params[random_index]
+        model = trial_config['train_loop_config']['model']
+        return random.choice(hidden_channels_map[model])
+
+    def heads(trial_config):
+        heads_map = {
+            'gat-v4': config.gat_v4_heads,
+            'gat': config.gat_heads,
+            'gcn': [None],  # Unused. Here for compatibility.
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(heads_map[model])
+
+    def fc_dim(trial_config):
+        fc_dim_map = {
+            'gat-v4': config.gat_v4_fc_dim,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(fc_dim_map[model])
+
+    def fc_dropout(trial_config):
+        fc_dropout_map = {
+            'gat-v4': config.gat_v4_fc_dropout,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(fc_dropout_map[model])
+
+    def fc_act(trial_config):
+        fc_act_map = {
+            'gat-v4': config.gat_v4_fc_act,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(fc_act_map[model])
+
+    def trial_str_creator(trial):
+        train_loop_config = trial.config['train_loop_config']
+        model = train_loop_config['model']
+        seed = train_loop_config['seed']
+        return f"model={model},seed={seed}"
 
     search_space = {
         'model': tune.grid_search(config.model_grid_search),
-        'seed': tune.randint(0, MAX_SEED),
+        # Model-specific parameters
+        'num_layers': tune.sample_from(num_layers),
         'hidden_channels': tune.sample_from(hidden_channels),
-        'num_layers': tune.choice(config.num_layers_choice),
         'heads': tune.sample_from(heads),
+        'fc_dim': tune.sample_from(fc_dim),
+        'fc_dropout': tune.sample_from(fc_dropout),
+        'fc_act': tune.sample_from(fc_act),
+        # Shared parameters
+        'seed': tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
-        'batch_size': tune.choice(config.batch_size_choice),
+        'batch_size': tune.choice(config.batch_size_choices),
+        'scheduler': tune.choice(config.scheduler_choices),
+        'dropout': tune.choice(config.dropout_choices),
+        'act': tune.choice(config.act_choices),
     }
-
-    def trial_str_creator(trial):
-        config = trial.config['train_loop_config']
-        seed = config['seed']
-        return f"model={config['model']},num_layers={config['num_layers']},seed={seed}"
 
     scheduler = ASHAScheduler(
         time_attr="training_iteration",
@@ -172,7 +255,7 @@ def search_hyperparameters():
 
     tuner = tune.Tuner(
         ray_trainer,
-        param_space={'train_loop_config': search_space},
+        param_space={"train_loop_config": search_space},
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
@@ -181,9 +264,9 @@ def search_hyperparameters():
             scheduler=scheduler,
         ),
     )
-    return tuner.fit()
+    results = tuner.fit()
+    results.get_dataframe().to_csv('ray_results_search_hyperparameters.csv')
 
 
 if __name__ == '__main__':
-    results = search_hyperparameters()
-    results.get_dataframe().to_csv('ray_results_search_hyperparameters.csv')
+    main()
