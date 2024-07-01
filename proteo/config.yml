@@ -22,11 +22,13 @@ log_every_n_steps: 5
 
 # Dataset
 num_nodes: 7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
-adj_thresh: 0.8  #0.08 # Note: n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
+adj_thresh: 0.7  #0.08 
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task_type: mse_regression
+# Note: nb of edges depends on adj_thresh as: 
+# n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
 # Model
 model: gat
@@ -38,7 +40,7 @@ gat-v4:
   heads: [4, 3, 4]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
-  fc_dim: [64, 48, 32, 32]
+  fc_dim: [64, 128, 128, 32]
   fc_dropout: 0.2
   fc_act: elu
 
@@ -67,7 +69,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0] #, 1] #, 2, 3, 4, 5, 6, 7] 
+device: [0 1 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
@@ -78,30 +80,34 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 1
-grace_period: 4  # Each training is run at least this nb of epochs.
+num_samples: 50
+grace_period: 6  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_interval: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
 # Nb of trainings run in parallel is the maximum amount 
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
-cpu_per_worker: 32
+cpu_per_worker: 16
 gpu_per_worker: 1
 lr_min: 0.0001
 lr_max: 0.1
-model_grid_search: ['gat', 'gat-v4', 'gcn']  #, 'gat', 'gcn']
+model_grid_search: ['gat-v4', 'gat-v4', 'gcn']
 # Choices
-batch_size_choices: [32] #, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
-scheduler_choices: ['LambdaLR'] #, 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
-dropout_choices: [0.2] #, 0.3, 0.8]
+batch_size_choices: [1, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
+scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
+dropout_choices: [0.1, 0.2, 0.5, 0.8]
+act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
 gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
+gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
+gat_v4_fc_dropout: [0.1, 0.2, 0.5]
+gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 # GAT
-gat_num_layers: [2] #, 3, 4]  # only for GAT and GCN
-gat_hidden_channels: [256] #8, 32, 128, 256]
-gat_heads: [4]  #1, 2, 4]
+gat_num_layers: [2, 4, 6, 12]  # only for GAT and GCN
+gat_hidden_channels: [8, 32, 128, 256]
+gat_heads: [1, 2, 4, 8]
 # GCN
-gcn_num_layers: [2] #, 3, 4]  # only for GAT and GCN
+gcn_num_layers: [2, 3, 4]  # only for GAT and GCN
 gcn_hidden_channels: [8, 32, 128]

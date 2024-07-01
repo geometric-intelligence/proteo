@@ -23,6 +23,7 @@ Seems OK to disregard.
 """
 
 import os
+import random
 
 import numpy as np
 import pytorch_lightning as pl
@@ -82,22 +83,23 @@ def train_func(train_loop_config):
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
+    avg_node_deg = proteo_train.avg_node_degree(test_dataset)
     module = proteo_train.Proteo(
         config,
         in_channels=train_dataset.feature_dim,  # 1 dim of input
         out_channels=train_dataset.label_dim,  # 1 dim of result
-        avg_node_degree=proteo_train.avg_node_degree(test_dataset),
+        avg_node_degree=avg_node_deg,
     )
 
-    # TODO: Add logs before the training loop begins
-    # wandb.log_image(
-    #     key="dataset_statistics",
-    #     images=[
-    #         os.path.join(train_dataset.processed_dir, "histogram.jpg"),
-    #         os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg"),
-    #     ],
-    # )
-    # wandb.log_text(key="avg_node_deg", columns=["avg_node_deg"], data=[[avg_node_deg]])
+    wandb.log(
+        {
+            "histogram": wandb.Image(os.path.join(train_dataset.processed_dir, "histogram.jpg")),
+            "adjacency": wandb.Image(
+                os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg")
+            ),
+            "avg_node_deg": wandb.Table(columns=["avg_node_deg"], data=[[avg_node_deg]]),
+        }
+    )
 
     # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
@@ -174,9 +176,7 @@ def main():
             'gcn': config.gcn_num_layers,
         }
         model = trial_config['train_loop_config']['model']
-        num_layers_choices = num_layers_map[model]
-        random_index = np.random.choice(len(num_layers_choices))
-        return num_layers_choices[random_index]
+        return random.choice(num_layers_map[model])
 
     def hidden_channels(trial_config):
         hidden_channels_map = {
@@ -185,9 +185,7 @@ def main():
             'gcn': config.gcn_hidden_channels,
         }
         model = trial_config['train_loop_config']['model']
-        hidden_channels_choices = hidden_channels_map[model]
-        random_index = np.random.choice(len(hidden_channels_choices))
-        return hidden_channels_choices[random_index]
+        return random.choice(hidden_channels_map[model])
 
     def heads(trial_config):
         heads_map = {
@@ -196,9 +194,34 @@ def main():
             'gcn': [None],  # Unused. Here for compatibility.
         }
         model = trial_config['train_loop_config']['model']
-        heads_choices = heads_map[model]
-        random_index = np.random.choice(len(heads_choices))
-        return heads_choices[random_index]
+        return random.choice(heads_map[model])
+
+    def fc_dim(trial_config):
+        fc_dim_map = {
+            'gat-v4': config.gat_v4_fc_dim,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(fc_dim_map[model])
+
+    def fc_dropout(trial_config):
+        fc_dropout_map = {
+            'gat-v4': config.gat_v4_fc_dropout,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(fc_dropout_map[model])
+
+    def fc_act(trial_config):
+        fc_act_map = {
+            'gat-v4': config.gat_v4_fc_act,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(fc_act_map[model])
 
     def trial_str_creator(trial):
         train_loop_config = trial.config['train_loop_config']
@@ -212,12 +235,16 @@ def main():
         'num_layers': tune.sample_from(num_layers),
         'hidden_channels': tune.sample_from(hidden_channels),
         'heads': tune.sample_from(heads),
+        'fc_dim': tune.sample_from(fc_dim),
+        'fc_dropout': tune.sample_from(fc_dropout),
+        'fc_act': tune.sample_from(fc_act),
         # Shared parameters
         'seed': tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choices),
         'scheduler': tune.choice(config.scheduler_choices),
         'dropout': tune.choice(config.dropout_choices),
+        'act': tune.choice(config.act_choices),
     }
 
     scheduler = ASHAScheduler(

@@ -304,11 +304,8 @@ def main():
     output_dir = os.path.join(config.root_dir, config.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    # this is where we pick the CUDA device(s) to use
-    if isinstance(config.device, list):
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(config.device)
+    # Pick the CUDA device(s) to use
+    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
 
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
@@ -342,6 +339,8 @@ def main():
         dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
         filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
         mode='min',
+        # TODO: Add this in config and make it consistent with checkpoint_interval
+        # every_n_epochs=config.checkpoint_every_n_epochs,
     )
     lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
     trainer_callbacks = [

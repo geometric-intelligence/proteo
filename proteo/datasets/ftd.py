@@ -50,7 +50,7 @@ class FTDDataset(InMemoryDataset):
     """
 
     def __init__(self, root, split, config):
-        self.name = 'FTD'
+        self.name = 'ftd'
         self.root = root
         self.split = split
         assert split in ["train", "test"]
