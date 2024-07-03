@@ -1,6 +1,6 @@
 # Files
-root_dir: "/home/nmiolane/code/proteo"
-ray_tmp_dir: "/home/nmiolane/code/proteo/outputs/ray"  # "/tmp"
+root_dir: "/home/lcornelis/code/proteo"
+ray_tmp_dir: "/home/lcornelis/code/proteo/outputs/ray"  # "/tmp"
 # Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"
 data_dir: "data"
@@ -31,7 +31,7 @@ task_type: mse_regression
 # n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
 # Model
-model: gat
+model: gat-v4
 dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
 
@@ -43,6 +43,7 @@ gat-v4:
   fc_dim: [64, 128, 128, 32]
   fc_dropout: 0.2
   fc_act: elu
+  weight_initializer: xavier
 
 gat:  
   num_layers: 2
@@ -57,19 +58,19 @@ gcn:
 
 # Training
 batch_size: 32 #for one off training
-epochs: 100
+epochs: 150
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
-lr: 0.1 
-weight_decay: 0.0005
-l1_lambda: 0.005
+lr: 0.01 
+weight_decay: 0 #0.1
+l1_lambda: 0.01
 optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0 1 2, 3, 4, 5, 6, 7] 
+device: [0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
@@ -89,14 +90,17 @@ checkpoint_every_n_epochs: 5  # Nb of iterations between checkpoints. If 0: no c
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
 cpu_per_worker: 16
 gpu_per_worker: 1
-lr_min: 0.0001
+lr_min: 0.000001
 lr_max: 0.1
 model_grid_search: ['gat-v4', 'gat-v4', 'gcn']
 # Choices
 batch_size_choices: [1, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
 scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
 dropout_choices: [0.1, 0.2, 0.5, 0.8]
+l1_lambda_min: 0.00001
+l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
+initializer_choices: ['xavier', 'kaiming', 'orthogonal', "truncated_normal"]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]

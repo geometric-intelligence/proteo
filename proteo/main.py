@@ -243,7 +243,9 @@ def main():
         'batch_size': tune.choice(config.batch_size_choices),
         'scheduler': tune.choice(config.scheduler_choices),
         'dropout': tune.choice(config.dropout_choices),
+        'l1_lambda': tune.loguniform(config.l1_lambda_min, config.l1_lambda_max),
         'act': tune.choice(config.act_choices),
+        'weight_initializer': tune.choice(config.weight_initializer_choices),
     }
 
     scheduler = ASHAScheduler(

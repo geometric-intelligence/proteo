@@ -1,10 +1,108 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import LayerNorm
+from torch.nn import LayerNorm, Parameter
 from torch_geometric.data import Batch
 from torch_geometric.nn import GATConv
 from torch_geometric.utils import to_dense_batch
+from typing import Union, Tuple, Optional
+from torch import Tensor
+from torch_geometric.nn.dense.linear import Linear
+
+
+#Overriding parameter intitialization
+class CustomGATConv(GATConv):
+    def __init__(
+        self,
+        in_channels: Union[int, Tuple[int, int]],
+        out_channels: int,
+        heads: int = 1,
+        concat: bool = True,
+        negative_slope: float = 0.2,
+        dropout: float = 0.0,
+        add_self_loops: bool = True,
+        edge_dim: Optional[int] = None,
+        fill_value: Union[float, Tensor, str] = 'mean',
+        bias: bool = True,
+        weight_initializer=None,
+        **kwargs,
+    ):
+        kwargs.setdefault('aggr', 'add')
+        
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.heads = heads
+        self.concat = concat
+        self.negative_slope = negative_slope
+        self.dropout = dropout
+        self.add_self_loops = add_self_loops
+        self.edge_dim = edge_dim
+        self.fill_value = fill_value
+        self.weight_init = weight_initializer
+
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            heads=heads,
+            concat=concat,
+            negative_slope=negative_slope,
+            dropout=dropout,
+            add_self_loops=add_self_loops,
+            edge_dim=edge_dim,
+            fill_value=fill_value,
+            bias=bias,
+            **kwargs
+        )
+
+        # In case we are operating in bipartite graphs, we apply separate
+        # transformations 'lin_src' and 'lin_dst' to source and target nodes:
+        self.lin = self.lin_src = self.lin_dst = None
+        if isinstance(in_channels, int):
+            self.lin = Linear(in_channels, heads * out_channels, bias=False,
+                              weight_initializer='glorot')
+        else:
+            self.lin_src = Linear(in_channels[0], heads * out_channels, False,
+                                  weight_initializer='glorot')
+            self.lin_dst = Linear(in_channels[1], heads * out_channels, False,
+                                  weight_initializer='glorot')
+
+        # The learnable parameters to compute attention coefficients:
+        self.att_src = Parameter(torch.empty(1, heads, out_channels))
+        self.att_dst = Parameter(torch.empty(1, heads, out_channels))
+
+        if edge_dim is not None:
+            self.lin_edge = Linear(edge_dim, heads * out_channels, bias=False,
+                                   weight_initializer='glorot')
+            self.att_edge = Parameter(torch.empty(1, heads, out_channels))
+        else:
+            self.lin_edge = None
+            self.register_parameter('att_edge', None)
+
+        if bias and concat:
+            self.bias = Parameter(torch.empty(heads * out_channels))
+        elif bias and not concat:
+            self.bias = Parameter(torch.empty(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self, **kwargs):
+        super().reset_parameters()
+        if self.lin is not None:
+            self.weight_init(self.lin.weight)
+        if self.lin_src is not None:
+            self.weight_init(self.lin_src.weight)
+        if self.lin_dst is not None:
+            self.weight_init(self.lin_dst.weight)
+        if self.lin_edge is not None:
+            self.weight_init(self.lin_edge)
+        if self.att_edge is not None:
+            self.weight_init(self.att_edge)
+        self.weight_init(self.att_src)
+        self.weight_init(self.att_dst)
+        if self.bias is not None:
+            nn.init.zeros_(self.bias)
 
 
 class GATv4(nn.Module):
@@ -14,6 +112,12 @@ class GATv4(nn.Module):
         "sigmoid": nn.Sigmoid(),
         "leaky_relu": nn.LeakyReLU(),
         "elu": nn.ELU(),
+    }
+    INIT_MAP = {
+        "xavier": nn.init.xavier_uniform_,
+        "kaiming": nn.init.kaiming_uniform_,
+        "orthogonal": nn.init.orthogonal_,
+        "truncated_normal": torch.nn.init.trunc_normal_,   
     }
 
     def __init__(
@@ -30,6 +134,7 @@ class GATv4(nn.Module):
         fc_dropout,
         fc_act,
         num_nodes,
+        weight_initializer,
     ):
         super(GATv4, self).__init__()
         self.in_channels = in_channels
@@ -44,6 +149,7 @@ class GATv4(nn.Module):
         self.fc_dropout = fc_dropout
         self.fc_act = fc_act
         self.fc_input_dim = num_nodes * len(which_layer)
+        self.weight_initializer =  self.INIT_MAP[weight_initializer]
 
         # GAT layers
         self.convs = nn.ModuleList()
@@ -59,10 +165,13 @@ class GATv4(nn.Module):
         # Fully connected layers
         self.encoder = self.build_fc_layers()
 
+        # Initialize weights
+        self.reset_parameters()
+
     def build_gat_layers(self):
         input_dim = self.in_channels
         for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
-            self.convs.append(GATConv(input_dim, hidden_dim, heads=num_heads, dropout=self.dropout))
+            self.convs.append(CustomGATConv(in_channels=input_dim, out_channels=hidden_dim, heads=num_heads, dropout=self.dropout, weight_initializer=self.weight_initializer))
             input_dim = hidden_dim * num_heads
 
     def build_pooling_layers(self):
@@ -83,6 +192,21 @@ class GATv4(nn.Module):
             fc_layer_input_dim = fc_dim
         layers.append(nn.Linear(fc_dim, self.out_channels))
         return nn.Sequential(*layers)
+
+    def reset_parameters(self):
+        for conv in self.convs:
+            conv.reset_parameters()
+
+        for pool in self.pools:
+            self.weight_initializer(pool.weight)
+            if pool.bias is not None:
+                pool.bias.data.fill_(0)
+
+        for layer in self.encoder:
+            if isinstance(layer, nn.Linear):
+                self.weight_initializer(layer.weight)
+                if layer.bias is not None:
+                    layer.bias.data.fill_(0)
 
     def forward(self, x, edge_index=None, data=None):
         if not isinstance(data, Batch):
