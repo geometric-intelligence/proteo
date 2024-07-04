@@ -56,7 +56,7 @@ class FTDDataset(InMemoryDataset):
         assert split in ["train", "test"]
         self.config = config
         self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 7299)  # 7299
+        self.plasma_protein_col_range = (10, 500)  # 7299
         self.nfl_col_id = 8
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
 
@@ -132,16 +132,21 @@ class FTDDataset(InMemoryDataset):
         print("Loading data from:", csv_path)
         csv_data = np.array(pd.read_csv(csv_path))
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
+        test_has_plasma_col_id(has_plasma)
         has_plasma = has_plasma == 1  # Converting from indices to boolean
+        test_boolean_plasma(has_plasma)
         nfl = csv_data[has_plasma, self.nfl_col_id].astype(float)
+        test_nfl_mean(nfl)
         nfl_mask = ~np.isnan(nfl)
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
         plasma_protein = csv_data[
             has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
         ][nfl_mask].astype(float)
+        test_plasma_protein(plasma_protein)
         # Remove NaN values from nfl
         nfl = nfl[nfl_mask]
+        test_nfl_mean_no_nan(nfl)
         nfl = log_transform(nfl)
         hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
         plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
@@ -226,3 +231,123 @@ def reverse_log_transform(standardized_log_data):
     original_data = np.exp(log_data)
 
     return original_data
+
+
+# Unit Tests:
+
+
+def test_has_plasma_col_id(has_plasma):
+    expected_start = [1, 1, 0, 1, 1, 1, 1, 1, 1, 1]
+    expected_end = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+
+    assert np.array_equal(
+        has_plasma[0:10], expected_start
+    ), f"Expected start does not match: {has_plasma[0:10]}"
+    assert np.array_equal(
+        has_plasma[-10:], expected_end
+    ), f"Expected end does not match: {has_plasma[-10:]}"
+
+
+def test_boolean_plasma(has_plasma):
+    expected_start = [True, True, False, True, True, True, True, True, True, True]
+    expected_end = [True, True, True, True, True, True, True, True, True, True]
+
+    assert np.array_equal(
+        has_plasma[0:10], expected_start
+    ), f"Expected start does not match: {has_plasma[0:10]}"
+    assert np.array_equal(
+        has_plasma[-10:], expected_end
+    ), f"Expected end does not match: {has_plasma[-10:]}"
+
+
+def test_nfl_mean(nfl):
+    expected_start = [
+        5.373789749,
+        4.96802777,
+        7.849056381,
+        9.952806685,
+        19.09750386,
+        3.020361499,
+        3.955332738,
+        5.609756833,
+        2.543991562,
+        20.35120703,
+    ]
+    expected_end = [
+        4.704597833,
+        4.451686665,
+        10.11666739,
+        np.nan,
+        4.906927378,
+        np.nan,
+        32.57894769,
+        10.47815389,
+        13.82665788,
+        5.090618157,
+    ]
+
+    assert np.allclose(
+        nfl[0:10], expected_start, equal_nan=True
+    ), f"Expected start does not match: {nfl[0:10]}"
+    assert np.allclose(
+        nfl[-10:], expected_end, equal_nan=True
+    ), f"Expected end does not match: {nfl[-10:]}"
+
+
+def test_nfl_mean_no_nan(nfl):
+    expected_start = [
+        5.373789749,
+        4.96802777,
+        7.849056381,
+        9.952806685,
+        19.09750386,
+        3.020361499,
+        3.955332738,
+        5.609756833,
+        2.543991562,
+        20.35120703,
+    ]
+    expected_end = [
+        3.193790446,
+        5.375672435,
+        4.704597833,
+        4.451686665,
+        10.11666739,
+        4.906927378,
+        32.57894769,
+        10.47815389,
+        13.82665788,
+        5.090618157,
+    ]
+    assert np.allclose(nfl[0:10], expected_start), f"Expected start does not match: {nfl[0:10]}"
+    assert np.allclose(nfl[-10:], expected_end), f"Expected end does not match: {nfl[-10:]}"
+
+
+def test_plasma_protein(plasma_protein):
+    first_col = [
+    10.42909285,
+    10.40492866,
+    10.39360497,
+    10.7173337,
+    10.59516422,
+    10.91101741,
+    11.27035373,
+    10.27972664,
+    10.79498438,
+    10.67551604
+]
+    last_col = [
+    14.29598412,
+    14.13749552,
+    13.9971883,
+    14.03512556,
+    14.00098588,
+    14.59941311,
+    13.65365122,
+    13.65650307,
+    13.76113565,
+    13.8820411]
+
+    assert np.allclose(plasma_protein[:10, 0], first_col), f"First column does not match: {plasma_protein[:10, 0]}"
+    #Only works if you take all the columns
+    #assert np.allclose(plasma_protein[:10, -1], last_col), f"Last column does not match: {plasma_protein[:10, -1]}"

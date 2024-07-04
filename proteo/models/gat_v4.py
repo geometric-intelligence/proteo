@@ -1,16 +1,17 @@
+from typing import Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 from torch.nn import LayerNorm, Parameter
 from torch_geometric.data import Batch
 from torch_geometric.nn import GATConv
-from torch_geometric.utils import to_dense_batch
-from typing import Union, Tuple, Optional
-from torch import Tensor
 from torch_geometric.nn.dense.linear import Linear
+from torch_geometric.utils import to_dense_batch
 
 
-#Overriding parameter intitialization
+# Overriding parameter intitialization
 class CustomGATConv(GATConv):
     def __init__(
         self,
@@ -24,11 +25,11 @@ class CustomGATConv(GATConv):
         edge_dim: Optional[int] = None,
         fill_value: Union[float, Tensor, str] = 'mean',
         bias: bool = True,
-        weight_initializer=None,
+        weight_initializer=None,  # The only thing changed from orig. implementation
         **kwargs,
     ):
         kwargs.setdefault('aggr', 'add')
-        
+
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.heads = heads
@@ -38,7 +39,7 @@ class CustomGATConv(GATConv):
         self.add_self_loops = add_self_loops
         self.edge_dim = edge_dim
         self.fill_value = fill_value
-        self.weight_init = weight_initializer
+        self.weight_init = weight_initializer  # The only thing changed from orig. implementation
 
         super().__init__(
             in_channels=in_channels,
@@ -51,28 +52,32 @@ class CustomGATConv(GATConv):
             edge_dim=edge_dim,
             fill_value=fill_value,
             bias=bias,
-            **kwargs
+            **kwargs,
         )
 
         # In case we are operating in bipartite graphs, we apply separate
         # transformations 'lin_src' and 'lin_dst' to source and target nodes:
         self.lin = self.lin_src = self.lin_dst = None
         if isinstance(in_channels, int):
-            self.lin = Linear(in_channels, heads * out_channels, bias=False,
-                              weight_initializer='glorot')
+            self.lin = Linear(
+                in_channels, heads * out_channels, bias=False, weight_initializer='glorot'
+            )
         else:
-            self.lin_src = Linear(in_channels[0], heads * out_channels, False,
-                                  weight_initializer='glorot')
-            self.lin_dst = Linear(in_channels[1], heads * out_channels, False,
-                                  weight_initializer='glorot')
+            self.lin_src = Linear(
+                in_channels[0], heads * out_channels, False, weight_initializer='glorot'
+            )
+            self.lin_dst = Linear(
+                in_channels[1], heads * out_channels, False, weight_initializer='glorot'
+            )
 
         # The learnable parameters to compute attention coefficients:
         self.att_src = Parameter(torch.empty(1, heads, out_channels))
         self.att_dst = Parameter(torch.empty(1, heads, out_channels))
 
         if edge_dim is not None:
-            self.lin_edge = Linear(edge_dim, heads * out_channels, bias=False,
-                                   weight_initializer='glorot')
+            self.lin_edge = Linear(
+                edge_dim, heads * out_channels, bias=False, weight_initializer='glorot'
+            )
             self.att_edge = Parameter(torch.empty(1, heads, out_channels))
         else:
             self.lin_edge = None
@@ -114,10 +119,11 @@ class GATv4(nn.Module):
         "elu": nn.ELU(),
     }
     INIT_MAP = {
+        "uniform": nn.init.uniform_,
         "xavier": nn.init.xavier_uniform_,
         "kaiming": nn.init.kaiming_uniform_,
         "orthogonal": nn.init.orthogonal_,
-        "truncated_normal": torch.nn.init.trunc_normal_,   
+        "truncated_normal": torch.nn.init.trunc_normal_,
     }
 
     def __init__(
@@ -149,7 +155,7 @@ class GATv4(nn.Module):
         self.fc_dropout = fc_dropout
         self.fc_act = fc_act
         self.fc_input_dim = num_nodes * len(which_layer)
-        self.weight_initializer =  self.INIT_MAP[weight_initializer]
+        self.weight_initializer = self.INIT_MAP[weight_initializer]
 
         # GAT layers
         self.convs = nn.ModuleList()
@@ -171,7 +177,15 @@ class GATv4(nn.Module):
     def build_gat_layers(self):
         input_dim = self.in_channels
         for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
-            self.convs.append(CustomGATConv(in_channels=input_dim, out_channels=hidden_dim, heads=num_heads, dropout=self.dropout, weight_initializer=self.weight_initializer))
+            self.convs.append(
+                CustomGATConv(
+                    in_channels=input_dim,
+                    out_channels=hidden_dim,
+                    heads=num_heads,
+                    dropout=self.dropout,
+                    weight_initializer=self.weight_initializer,
+                )
+            )
             input_dim = hidden_dim * num_heads
 
     def build_pooling_layers(self):

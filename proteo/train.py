@@ -75,7 +75,6 @@ class Proteo(pl.LightningModule):
         self.train_targets = []
         self.val_targets = []
 
-
         if config.model == 'gat-v4':
             self.model = GATv4(
                 in_channels=in_channels,
