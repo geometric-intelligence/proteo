@@ -325,29 +325,32 @@ def test_nfl_mean_no_nan(nfl):
 
 def test_plasma_protein(plasma_protein):
     first_col = [
-    10.42909285,
-    10.40492866,
-    10.39360497,
-    10.7173337,
-    10.59516422,
-    10.91101741,
-    11.27035373,
-    10.27972664,
-    10.79498438,
-    10.67551604
-]
+        10.42909285,
+        10.40492866,
+        10.39360497,
+        10.7173337,
+        10.59516422,
+        10.91101741,
+        11.27035373,
+        10.27972664,
+        10.79498438,
+        10.67551604,
+    ]
     last_col = [
-    14.29598412,
-    14.13749552,
-    13.9971883,
-    14.03512556,
-    14.00098588,
-    14.59941311,
-    13.65365122,
-    13.65650307,
-    13.76113565,
-    13.8820411]
+        14.29598412,
+        14.13749552,
+        13.9971883,
+        14.03512556,
+        14.00098588,
+        14.59941311,
+        13.65365122,
+        13.65650307,
+        13.76113565,
+        13.8820411,
+    ]
 
-    assert np.allclose(plasma_protein[:10, 0], first_col), f"First column does not match: {plasma_protein[:10, 0]}"
-    #Only works if you take all the columns
-    #assert np.allclose(plasma_protein[:10, -1], last_col), f"Last column does not match: {plasma_protein[:10, -1]}"
+    assert np.allclose(
+        plasma_protein[:10, 0], first_col
+    ), f"First column does not match: {plasma_protein[:10, 0]}"
+    # Only works if you take all the columns
+    # assert np.allclose(plasma_protein[:10, -1], last_col), f"Last column does not match: {plasma_protein[:10, -1]}"

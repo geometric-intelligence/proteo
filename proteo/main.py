@@ -222,6 +222,15 @@ def main():
         model = trial_config['train_loop_config']['model']
         return random.choice(fc_act_map[model])
 
+    def weight_initializer(trial_config):
+        weight_initializer_map = {
+            'gat-v4': config.gat_v4_weight_initializer,
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(weight_initializer_map[model])
+
     def trial_str_creator(trial):
         train_loop_config = trial.config['train_loop_config']
         model = train_loop_config['model']
@@ -245,7 +254,7 @@ def main():
         'dropout': tune.choice(config.dropout_choices),
         'l1_lambda': tune.loguniform(config.l1_lambda_min, config.l1_lambda_max),
         'act': tune.choice(config.act_choices),
-        'weight_initializer': tune.choice(config.weight_initializer_choices),
+        'weight_initializer': tune.sample_from(weight_initializer),
     }
 
     scheduler = ASHAScheduler(

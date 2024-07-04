@@ -21,7 +21,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 30 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
+num_nodes: 490 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
 adj_thresh: 0.01  #0.08 
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
@@ -31,7 +31,7 @@ task_type: mse_regression
 # n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
 # Model
-model: gat
+model: gat-v4
 dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
 
@@ -100,7 +100,6 @@ dropout_choices: [0.1, 0.2, 0.5, 0.8]
 l1_lambda_min: 0.00001
 l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
-weight_initializer_choices: ['xavier', 'kaiming', 'orthogonal', "truncated_normal"]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
@@ -108,6 +107,7 @@ gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
 gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
 gat_v4_fc_dropout: [0.1, 0.2, 0.5]
 gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
+gat_v4_weight_initializer: ['xavier', 'kaiming', 'orthogonal', 'truncated_normal', 'uniform']
 # GAT
 gat_num_layers: [2, 4, 6, 12]  # only for GAT and GCN
 gat_hidden_channels: [8, 32, 128, 256]
