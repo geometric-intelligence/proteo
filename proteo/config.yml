@@ -12,6 +12,14 @@ ray_results_dir: "outputs/ray_results"
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
+# Y Value
+y_val: "carrier_status"
+# Plasma or CSF
+plasma_or_csf: "plasma"
+# How to weight the classes of the dataset
+#TODO: should not be hardcoded
+num_carriers: 330
+num_controls: 189
 
 # WandB
 project: "proteo"
@@ -21,17 +29,17 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 490 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
+num_nodes: 30 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
 adj_thresh: 0.01  #0.08 
 wgcna_power: 6 #replaced this with softThreshold
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
-task_type: mse_regression
+task_type: classification
 # Note: nb of edges depends on adj_thresh as: 
 # n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
 # Model
-model: gat-v4
+model: gat
 dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
 
@@ -65,7 +73,7 @@ precision: "32-true"
 accumulate_grad_batches: 1
 lr: 0.01 
 weight_decay: 0 #0.1
-l1_lambda: 0.01
+l1_lambda: 0
 optimizer: Adam
 lr_scheduler: LambdaLR
 

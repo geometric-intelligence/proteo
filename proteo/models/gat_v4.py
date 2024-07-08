@@ -141,6 +141,7 @@ class GATv4(nn.Module):
         fc_act,
         num_nodes,
         weight_initializer,
+        task_type,
     ):
         super(GATv4, self).__init__()
         self.in_channels = in_channels
@@ -156,6 +157,7 @@ class GATv4(nn.Module):
         self.fc_act = fc_act
         self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]
+        self.task_type = task_type
 
         # GAT layers
         self.convs = nn.ModuleList()
@@ -205,6 +207,9 @@ class GATv4(nn.Module):
             )
             fc_layer_input_dim = fc_dim
         layers.append(nn.Linear(fc_dim, self.out_channels))
+        # Add the sigmoid activation function
+        if self.task_type == 'classification':
+            layers.append(nn.Sigmoid())
         return nn.Sequential(*layers)
 
     def reset_parameters(self):

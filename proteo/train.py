@@ -58,11 +58,12 @@ class Proteo(pl.LightningModule):
     """
 
     LOSS_MAP = {
+        "classification": torch.nn.BCEWithLogitsLoss,  # "binary cross-entropy loss with logits"
         "l1_regression": torch.nn.L1Loss,
         "mse_regression": torch.nn.MSELoss,
     }
 
-    def __init__(self, config: Config, in_channels, out_channels, avg_node_degree):
+    def __init__(self, config: Config, in_channels, out_channels, avg_node_degree, pos_weight):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
         self.save_hyperparameters()
@@ -74,6 +75,7 @@ class Proteo(pl.LightningModule):
         self.val_preds = []
         self.train_targets = []
         self.val_targets = []
+        self.pos_weight = pos_weight
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -90,6 +92,7 @@ class Proteo(pl.LightningModule):
                 fc_act=self.config_model.fc_act,
                 num_nodes=self.config.num_nodes,
                 weight_initializer=self.config_model.weight_initializer,
+                task_type=self.config.task_type,
             )
         elif config.model == 'gat':
             self.model = GAT(
@@ -164,7 +167,15 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
+        if self.config.task_type == "classification":
+            # pos_weight is used to weight the positive class in the loss function
+            device = pred.device
+            self.pos_weight = self.pos_weight.to(device)
+            loss_fn = self.LOSS_MAP[self.config.task_type](
+                pos_weight=self.pos_weight, reduction="mean"
+            )
+        else:
+            loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
         loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
@@ -197,7 +208,14 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
+        if self.config.task_type == "classification":
+            # pos_weight is used to weight the positive class in the loss function
+            device = pred.device
+            loss_fn = self.LOSS_MAP[self.config.task_type](
+                pos_weight=self.pos_weight.to(device), reduction="mean"
+            )
+        else:
+            loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
         loss = loss_fn(pred, target)
         return loss
 
@@ -331,12 +349,15 @@ def main():
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
+    pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
+    print(f"pos_weight: {pos_weight}")
 
     module = Proteo(
         config,
         in_channels=train_dataset.feature_dim,  # 1 dim of input
         out_channels=train_dataset.label_dim,  # 1 dim of result,
         avg_node_degree=avg_node_degree,
+        pos_weight=pos_weight,
     )
 
     logger = get_wandb_logger(config)
@@ -374,7 +395,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=len(config.device),
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import PyWGCNA
 import torch
+from scipy.stats import chi2_contingency, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
 
@@ -56,15 +57,19 @@ class FTDDataset(InMemoryDataset):
         assert split in ["train", "test"]
         self.config = config
         self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 500)  # 7299
+        self.plasma_protein_col_range = (10, 7299)
         self.nfl_col_id = 8
+        self.carrier_status_col_id = 4
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
+        self.y_val_str = f'y_val_{config.y_val}'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
 
-        path = os.path.join(self.processed_dir, f'{self.name}_{self.adj_str}_{split}.pt')
+        path = os.path.join(
+            self.processed_dir, f'{self.name}_{self.y_val_str}_{self.adj_str}_{split}.pt'
+        )
         self.load(path)
 
     @property
@@ -93,7 +98,10 @@ class FTDDataset(InMemoryDataset):
         --------
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
-        return [f"{self.name}_{self.adj_str}_train.pt", f"{self.name}_{self.adj_str}_test.pt"]
+        return [
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_test.pt",
+        ]
 
     def create_graph_data(self, feature, label, adj_matrix):
         """Create Data object for each graph.
@@ -127,32 +135,60 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
+    def find_top_ks_values(self, csv_data):
+        # Finding 30 most different  Kolmogorov–Smirnov values
+        ks_stats = []
+        for i in range(self.plasma_protein_col_range[0], self.plasma_protein_col_range[1]):
+            protein_column = csv_data.columns[i]
+
+            # Separate data by "Carrier" and "CTL"
+            carrier_data = csv_data[csv_data['Carrier.Status'] == 'Carrier'][protein_column]
+            ctl_data = csv_data[csv_data['Carrier.Status'] == 'CTL'][protein_column]
+
+            carrier_data = carrier_data.dropna()
+            ctl_data = ctl_data.dropna()
+            carrier_data = carrier_data[np.isfinite(carrier_data)]
+            ctl_data = ctl_data[np.isfinite(ctl_data)]
+            # Perform Kolmogorov-Smirnov Test
+
+            ks_statistic, ks_p_value = ks_2samp(carrier_data, ctl_data)
+            ks_stats.append((protein_column, i, ks_statistic))
+
+        # Convert to DataFrame for easy sorting
+        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'Column', 'KS_Statistic'])
+
+        # Sort by KS statistic in descending order and get top 30
+        top_30_columns = ks_stats_df.sort_values(by='KS_Statistic', ascending=False).head(30)
+        # Return "Column" values
+        return top_30_columns['Column'].values
+
     def load_csv_data(self, config):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
-        csv_data = np.array(pd.read_csv(csv_path))
+        pre_array_csv_data = pd.read_csv(csv_path) #for KS scores
+        csv_data = np.array(pre_array_csv_data)
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
         test_has_plasma_col_id(has_plasma)
         has_plasma = has_plasma == 1  # Converting from indices to boolean
         test_boolean_plasma(has_plasma)
-        nfl = csv_data[has_plasma, self.nfl_col_id].astype(float)
-        test_nfl_mean(nfl)
-        nfl_mask = ~np.isnan(nfl)
+        if config.y_val == 'nfl':
+            y_val, y_val_mask = self.load_nfl_values(csv_data, has_plasma)
+        elif config.y_val == 'carrier_status':
+            y_val, y_val_mask = self.load_carrier_status(csv_data, has_plasma)
+        else:
+            "Invalid y_val. Must be 'nfl' or 'carrier_status'."
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        plasma_protein = csv_data[
-            has_plasma, self.plasma_protein_col_range[0] : self.plasma_protein_col_range[1]
-        ][nfl_mask].astype(float)
-        test_plasma_protein(plasma_protein)
-        # Remove NaN values from nfl
-        nfl = nfl[nfl_mask]
-        test_nfl_mean_no_nan(nfl)
-        nfl = log_transform(nfl)
-        hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
-        plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
+        plasma_protein_col_indices = self.find_top_ks_values(pre_array_csv_data)
+        plasma_protein = (
+            csv_data.loc[has_plasma, :]
+            .iloc[:, plasma_protein_col_indices][y_val_mask]
+            .astype(float)
+        )
+        # test_plasma_protein(plasma_protein) TODO: remove?
 
         features = plasma_protein
-        labels = nfl
+        labels = y_val
 
         train_features, test_features, train_labels, test_labels = train_test_split(
             features, labels, test_size=0.20, random_state=42
@@ -186,6 +222,32 @@ class FTDDataset(InMemoryDataset):
         plt.close()
 
         return train_features, train_labels, test_features, test_labels, adj_matrix
+
+    def load_nfl_values(self, csv_data, x_values):
+        nfl = csv_data[x_values, self.nfl_col_id].astype(float)
+        test_nfl_mean(nfl)
+        nfl_mask = ~np.isnan(nfl)
+        # Remove NaN values from nfl
+        nfl = nfl[nfl_mask]
+        test_nfl_mean_no_nan(nfl)
+        nfl = log_transform(nfl)
+        hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
+        plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
+        return nfl, nfl_mask
+
+    def load_carrier_status(self, csv_data, x_values):
+        carrier_status = csv_data[x_values, self.carrier_status_col_id].astype(str)
+        carrier_mask = ~pd.isna(carrier_status)
+        carrier_status = carrier_status[carrier_mask]
+        carrier_status = np.where(
+            carrier_status == 'Carrier', 1, np.where(carrier_status == 'CTL', 0, None)
+        ).astype(float)
+        # Check for any None values, which indicate an unrecognized status
+        if None in carrier_status:
+            raise ValueError(
+                "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
+            )
+        return carrier_status, carrier_mask
 
 
 def calculate_adjacency_matrix(plasma_protein, save_to):
