@@ -39,7 +39,7 @@ task_type: classification
 # n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
 # Model
-model: gat
+model: gat-v4
 dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
 

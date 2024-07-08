@@ -165,7 +165,7 @@ class FTDDataset(InMemoryDataset):
     def load_csv_data(self, config):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
-        pre_array_csv_data = pd.read_csv(csv_path) #for KS scores
+        pre_array_csv_data = pd.read_csv(csv_path)  # for KS scores
         csv_data = np.array(pre_array_csv_data)
         has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
         test_has_plasma_col_id(has_plasma)
@@ -180,11 +180,7 @@ class FTDDataset(InMemoryDataset):
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
         plasma_protein_col_indices = self.find_top_ks_values(pre_array_csv_data)
-        plasma_protein = (
-            csv_data.loc[has_plasma, :]
-            .iloc[:, plasma_protein_col_indices][y_val_mask]
-            .astype(float)
-        )
+        plasma_protein = csv_data[has_plasma, :][:, plasma_protein_col_indices][y_val_mask].astype(float)
         # test_plasma_protein(plasma_protein) TODO: remove?
 
         features = plasma_protein
