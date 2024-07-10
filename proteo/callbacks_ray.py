@@ -4,6 +4,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import pandas as pd
 import torch
 import wandb
 from callbacks import get_val_accuracy
@@ -11,6 +12,7 @@ from pytorch_lightning.callbacks import Callback
 from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
+from sklearn.metrics import confusion_matrix
 
 
 class CustomRayCheckpointCallback(Callback):
@@ -92,7 +94,7 @@ class CustomRayWandbCallback(Callback):
         for name, param in pl_module.named_parameters():
             if param.requires_grad:
                 gradients = param.grad.detach().cpu()
-                pl_module.logger.experiment.log({"gradients": wandb.Histogram(gradients)})
+                wandb.log({"gradients": wandb.Histogram(gradients)})
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -120,15 +122,18 @@ class CustomRayWandbCallback(Callback):
             }
         )
         if pl_module.config.task_type == "classification":
-            pl_module.logger.experiment.log(
-                {"train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds))}
+            wandb.log(
+                {
+                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "epoch": pl_module.current_epoch,
+                }
             )
 
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
 
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Save val predictions and targets as histograms.
+        """Save val predictions and targets as histograms and log confusion matrix.
 
         Parameters
         ----------
@@ -141,6 +146,8 @@ class CustomRayWandbCallback(Callback):
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             val_loss = pl_module.trainer.callback_metrics["val_loss"]
+
+            # Log histograms and metrics
             wandb.log(
                 {
                     "val_loss": val_loss,
@@ -150,13 +157,32 @@ class CustomRayWandbCallback(Callback):
                     "epoch": pl_module.current_epoch,
                 }
             )
+
             if pl_module.config.task_type == "classification":
-                pl_module.logger.experiment.log(
+                val_preds_sigmoid = torch.sigmoid(val_preds)
+                predicted_classes = (val_preds_sigmoid > 0.5).int()
+                val_accuracy = (predicted_classes == val_targets).float().mean().item()
+
+                # Compute confusion matrix
+                cm = confusion_matrix(val_targets.numpy(), predicted_classes.numpy())
+
+                # Convert confusion matrix to a pandas DataFrame
+                cm_df = pd.DataFrame(
+                    cm, columns=["Predicted_0", "Predicted_1"], index=["Actual_0", "Actual_1"]
+                )
+
+                # Log the confusion matrix as a table
+                cm_table = wandb.Table(dataframe=cm_df)
+
+                wandb.log(
                     {
-                        "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
-                        "val_accuracy": get_val_accuracy(val_preds, val_targets),
+                        "val_preds_sigmoid": wandb.Histogram(val_preds_sigmoid),
+                        "val_accuracy": val_accuracy,
+                        "confusion_matrix": cm_table,
+                        "epoch": pl_module.current_epoch,
                     }
                 )
+
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
 

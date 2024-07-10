@@ -121,9 +121,14 @@ class FTDDataset(InMemoryDataset):
 
     def process(self):
         """Read data into huge `Data` list, i.e., a list of graphs"""
-        train_features, train_labels, test_features, test_labels, adj_matrix = self.load_csv_data(
-            self.config
-        )
+        (
+            train_features,
+            train_labels,
+            test_features,
+            test_labels,
+            adj_matrix,
+            plasma_protein_names,
+        ) = self.load_csv_data(self.config)
 
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
@@ -138,35 +143,42 @@ class FTDDataset(InMemoryDataset):
         self.save(test_data_list, self.processed_paths[1])
 
     def find_top_ks_values(self, csv_data, config):
-        # Finding 30 most different  Kolmogorov–Smirnov values
         ks_stats = []
+
+        mutation_map = {
+            "GRN": ["GRN.PreSx", "GRN.Sx"],
+            "MAPT": ["MAPT.PreSx", "MAPT.Sx"],
+            "C9": ["C9.PreSx", "C9.Sx"],
+            "CTL": ["CTL"],
+        }
+
+        if config.mutation_status in mutation_map:
+            mutation_values = mutation_map[config.mutation_status]
+            condition1 = csv_data['Gene.Dx'].isin(mutation_values)
+            condition2 = ~csv_data['Gene.Dx'].isin(mutation_values)
+        else:
+            raise ValueError("Invalid mutation status specified.")
+
         for i in range(self.plasma_protein_col_range[0], self.plasma_protein_col_range[1]):
             protein_column = csv_data.columns[i]
 
-            # Separate data by "Carrier" and "CTL"
-            carrier_data = csv_data[csv_data['Carrier.Status'] == 'Carrier'][protein_column]
-            ctl_data = csv_data[csv_data['Carrier.Status'] == 'CTL'][protein_column]
+            mutation_data = csv_data[condition1][protein_column]
+            other_data = csv_data[condition2][protein_column]
 
-            carrier_data = carrier_data.dropna()
-            ctl_data = ctl_data.dropna()
-            carrier_data = carrier_data[np.isfinite(carrier_data)]
-            ctl_data = ctl_data[np.isfinite(ctl_data)]
-            # Perform Kolmogorov-Smirnov Test
+            mutation_data = mutation_data.dropna()
+            other_data = other_data.dropna()
+            mutation_data = mutation_data[np.isfinite(mutation_data)]
+            other_data = other_data[np.isfinite(other_data)]
 
-            ks_statistic, ks_p_value = ks_2samp(carrier_data, ctl_data)
+            ks_statistic, ks_p_value = ks_2samp(mutation_data, other_data)
             ks_stats.append((protein_column, i, ks_statistic, ks_p_value))
 
-        # Convert to DataFrame for easy sorting
         ks_stats_df = pd.DataFrame(
             ks_stats, columns=['Protein', 'Column', 'KS_Statistic', 'P Value']
         )
+        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(config.num_nodes)
 
-        # Sort by KS statistic in descending order and get top 30
-        top_10_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(
-            config.num_nodes
-        )
-        # Return "Column" values
-        return top_10_columns['Column'].values
+        return top_columns['Column'].values, top_columns['Protein'].values
 
     def load_csv_data(self, config):
         csv_path = self.raw_paths[0]
@@ -185,12 +197,14 @@ class FTDDataset(InMemoryDataset):
             "Invalid y_val. Must be 'nfl' or 'carrier_status'."
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        plasma_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config)
+        plasma_protein_col_indices, plasma_protein_names = self.find_top_ks_values(
+            pre_array_csv_data, config
+        )
         plasma_protein = csv_data[has_plasma, :][:, plasma_protein_col_indices][y_val_mask].astype(
             float
         )
         # test_plasma_protein(plasma_protein) TODO: remove?
-
+        self.plasma_protein_names = plasma_protein_names
         features = plasma_protein
         labels = y_val
 
@@ -232,7 +246,14 @@ class FTDDataset(InMemoryDataset):
         )
         plt.close()
 
-        return train_features, train_labels, test_features, test_labels, adj_matrix
+        return (
+            train_features,
+            train_labels,
+            test_features,
+            test_labels,
+            adj_matrix,
+            plasma_protein_names,
+        )
 
     def load_nfl_values(self, csv_data, x_values):
         nfl = csv_data[x_values, self.nfl_col_id].astype(float)

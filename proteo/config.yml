@@ -16,6 +16,8 @@ raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 y_val: "carrier_status"
 # Plasma or CSF
 plasma_or_csf: "plasma"
+# Can be "MAPT", "GRN", "C9" or "CTL"(which just splits by Carrier and Control differences)
+mutation_status: "GRN"
 # How to weight the classes of the dataset
 #TODO: should not be hardcoded
 num_carriers: 330
@@ -29,8 +31,8 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 30 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
-adj_thresh: 0.1  #0.08 
+num_nodes: 30  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+adj_thresh: 0.01  #0.08 
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task_type: classification
@@ -89,7 +91,7 @@ pin_memory: true
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
 num_samples: 200
-grace_period: 6  # Each training is run at least this nb of epochs.
+grace_period: 30  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_every_n_epochs: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
@@ -99,9 +101,9 @@ cpu_per_worker: 16
 gpu_per_worker: 1
 lr_min: 0.000001
 lr_max: 0.1
-model_grid_search: ['gat-v4', 'gat', 'gcn']
+model_grid_search: ['gat-v4']
 # Choices
-batch_size_choices: [1, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
+batch_size_choices: [8, 16, 32, 50]  # note: 352 train and 89 val --> 3 val batch for bs = 32
 scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
 dropout_choices: [0.1, 0.2, 0.5, 0.8]
 l1_lambda_min: 0.00001

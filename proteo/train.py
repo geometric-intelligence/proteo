@@ -162,8 +162,8 @@ class Proteo(pl.LightningModule):
             raise ValueError
         target = batch.y.view(pred.shape)
         # Store predictions
-        self.train_preds.append(pred.clone())
-        self.train_targets.append(target.clone())
+        self.train_preds.append(pred.clone().detach().cpu())
+        self.train_targets.append(target.clone().detach().cpu())
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -203,8 +203,8 @@ class Proteo(pl.LightningModule):
         # Pred is shape [batch_size,1] and targets is shape [batch_size]
         target = batch.y.view(pred.shape)
         # Store predictions
-        self.val_preds.append(pred)
-        self.val_targets.append(target)
+        self.val_preds.append(pred.clone())
+        self.val_targets.append(target.clone())
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -269,7 +269,8 @@ def construct_datasets(config):
     root = os.path.join(config.root_dir, config.data_dir)
     train_dataset = FTDDataset(root, "train", config)
     test_dataset = FTDDataset(root, "test", config)
-    return train_dataset, test_dataset
+    plasma_protein_names = train_dataset.plasma_protein_names
+    return train_dataset, test_dataset, plasma_protein_names
 
 
 def print_datasets(train_dataset, test_dataset):
@@ -347,7 +348,7 @@ def main():
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
 
-    train_dataset, test_dataset = construct_datasets(config)
+    train_dataset, test_dataset, plasma_protein_names = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
     pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
@@ -373,6 +374,11 @@ def main():
         ],
     )
     logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
+    # Create a list of lists for logging
+    top_proteins_data = [[protein] for protein in plasma_protein_names]
+
+    # Log the top proteins as a table
+    logger.log_text(key="top_proteins", columns=["Protein"], data=top_proteins_data)
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',

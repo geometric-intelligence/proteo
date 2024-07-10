@@ -1,9 +1,14 @@
+import io
 import math
 
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 import torch
 import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
+from sklearn.metrics import confusion_matrix
 
 
 class CustomWandbCallback(Callback):
@@ -99,16 +104,40 @@ class CustomWandbCallback(Callback):
                     "epoch": pl_module.current_epoch,
                 }
             )
+
             if pl_module.config.task_type == "classification":
+                # Assuming binary classification; for multi-class, adjust accordingly
+                val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
+                # print("val_preds_binary", val_preds_binary)
+                # print("val_targets", val_targets)
+
+                # Compute confusion matrix
+                print("val_preds_binary", val_preds_binary.shape)
+                cm = confusion_matrix(val_targets.numpy(), val_preds_binary.numpy())
+
+                # Plot confusion matrix using seaborn
+                plt.figure(figsize=(10, 7))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+                plt.xlabel('Predicted')
+                plt.ylabel('True')
+
+                # Save the plot
+                plot_path = 'confusion_matrix.png'
+                plt.savefig(plot_path)
+                plt.close()
+
+                # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                         "val_accuracy": get_val_accuracy(val_preds, val_targets),
+                        "val_confusion_matrix": wandb.Image('confusion_matrix.png'),
                         "epoch": pl_module.current_epoch,
                     }
                 )
-            pl_module.val_preds.clear()  # free memory
-            pl_module.val_targets.clear()
+        # print(f"\n clearing!")
+        pl_module.val_preds.clear()  # free memory
+        pl_module.val_targets.clear()
 
 
 def progress_bar():
