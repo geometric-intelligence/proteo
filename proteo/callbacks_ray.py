@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 import wandb
+from callbacks import get_val_accuracy
 from pytorch_lightning.callbacks import Callback
 from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
@@ -87,6 +88,11 @@ class CustomRayWandbCallback(Callback):
 
     # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
     # then sqrt(loss) is not the RMSE
+    def on_after_backward(self, trainer, pl_module):
+        for name, param in pl_module.named_parameters():
+            if param.requires_grad:
+                gradients = param.grad.detach().cpu()
+                pl_module.logger.experiment.log({"gradients": wandb.Histogram(gradients)})
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -113,6 +119,11 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
+        if pl_module.config.task_type == "classification":
+            pl_module.logger.experiment.log(
+                {"train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds))}
+            )
+
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
 
@@ -139,6 +150,13 @@ class CustomRayWandbCallback(Callback):
                     "epoch": pl_module.current_epoch,
                 }
             )
+            if pl_module.config.task_type == "classification":
+                pl_module.logger.experiment.log(
+                    {
+                        "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
+                        "val_accuracy": get_val_accuracy(val_preds, val_targets),
+                    }
+                )
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
 

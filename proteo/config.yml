@@ -29,9 +29,8 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 30 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded
-adj_thresh: 0.01  #0.08 
-wgcna_power: 6 #replaced this with softThreshold
+num_nodes: 30 #7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+adj_thresh: 0.1  #0.08 
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
 task_type: classification
@@ -44,8 +43,8 @@ dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
 
 gat-v4:
-  hidden_channels: [8, 16, 12]
-  heads: [4, 3, 4]
+  hidden_channels: [16, 64]
+  heads: [4, 3]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
   fc_dim: [64, 128, 128, 32]
@@ -65,13 +64,13 @@ gcn:
 
 
 # Training
-batch_size: 8 #for one off training
-epochs: 150
+batch_size: 12 #for one off training
+epochs: 300
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
-lr: 0.01 
+lr: 0.01
 weight_decay: 0 #0.1
 l1_lambda: 0
 optimizer: Adam
@@ -89,7 +88,7 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 100
+num_samples: 200
 grace_period: 6  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
@@ -100,7 +99,7 @@ cpu_per_worker: 16
 gpu_per_worker: 1
 lr_min: 0.000001
 lr_max: 0.1
-model_grid_search: ['gat-v4', 'gat-v4', 'gcn']
+model_grid_search: ['gat-v4', 'gat', 'gcn']
 # Choices
 batch_size_choices: [1, 4, 16, 32]  # note: 352 train and 89 val --> 3 val batch for bs = 32
 scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
@@ -108,10 +107,12 @@ dropout_choices: [0.1, 0.2, 0.5, 0.8]
 l1_lambda_min: 0.00001
 l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
+num_nodes_choices: [10, 30, 150, 1000, 7000]
+adj_thresh_choices: [0.01, 0.05, 0.1, 0.5, 0.7, 0.9]
 
 # GAT-v4
-gat_v4_hidden_channels: [[8, 16, 12], [32, 64, 64], [64, 128, 128]]
-gat_v4_heads: [[2, 3, 4], [2, 2, 3], [4, 4, 4]]
+gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]
+gat_v4_heads: [[2, 3], [2, 2], [4, 4]]
 gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
 gat_v4_fc_dropout: [0.1, 0.2, 0.5]
 gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']

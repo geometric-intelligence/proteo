@@ -28,6 +28,12 @@ class CustomWandbCallback(Callback):
         )
         pl_module.log('train_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
 
+    def on_after_backward(self, trainer, pl_module):
+        for name, param in pl_module.named_parameters():
+            if param.requires_grad:
+                gradients = param.grad.detach().cpu()
+                pl_module.logger.experiment.log({"gradients": wandb.Histogram(gradients)})
+
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
             loss = outputs
@@ -57,12 +63,16 @@ class CustomWandbCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         pl_module.logger.experiment.log(
             {
-                "train_preds": wandb.Histogram(train_preds),
+                "train_preds_logits": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
                 "parameters": wandb.Histogram(params),
                 "epoch": pl_module.current_epoch,
             }
         )
+        if pl_module.config.task_type == "classification":
+            pl_module.logger.experiment.log(
+                {"train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds))}
+            )
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
 
@@ -81,11 +91,19 @@ class CustomWandbCallback(Callback):
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             pl_module.logger.experiment.log(
                 {
-                    "val_preds": wandb.Histogram(val_preds),
+                    "val_preds_logits": wandb.Histogram(val_preds),
+                    "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }
             )
+            if pl_module.config.task_type == "classification":
+                pl_module.logger.experiment.log(
+                    {
+                        "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
+                        "val_accuracy": get_val_accuracy(val_preds, val_targets),
+                    }
+                )
             pl_module.val_preds.clear()  # free memory
             pl_module.val_targets.clear()
 
@@ -107,3 +125,11 @@ def progress_bar():
     )
     progress_bar = RichProgressBar(theme=custom_theme)
     return progress_bar
+
+
+def get_val_accuracy(preds, targets):
+    preds = torch.sigmoid(preds)
+    preds = (preds > 0.5).float()
+    correct = (preds == targets).sum().item()
+    total = targets.numel()
+    return correct / total

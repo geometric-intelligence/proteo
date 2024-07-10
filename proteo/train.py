@@ -162,8 +162,8 @@ class Proteo(pl.LightningModule):
             raise ValueError
         target = batch.y.view(pred.shape)
         # Store predictions
-        self.train_preds.append(pred)
-        self.train_targets.append(target)
+        self.train_preds.append(pred.clone())
+        self.train_targets.append(target.clone())
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
@@ -211,8 +211,9 @@ class Proteo(pl.LightningModule):
         if self.config.task_type == "classification":
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
+            self.pos_weight = self.pos_weight.to(device)
             loss_fn = self.LOSS_MAP[self.config.task_type](
-                pos_weight=self.pos_weight.to(device), reduction="mean"
+                pos_weight=self.pos_weight, reduction="mean"
             )
         else:
             loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
@@ -350,7 +351,6 @@ def main():
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
     pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
-    print(f"pos_weight: {pos_weight}")
 
     module = Proteo(
         config,
@@ -366,7 +366,10 @@ def main():
         key="dataset_statistics",
         images=[
             os.path.join(train_dataset.processed_dir, "histogram.jpg"),
-            os.path.join(train_dataset.processed_dir, f"adjacency_{config.adj_thresh}.jpg"),
+            os.path.join(
+                train_dataset.processed_dir,
+                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}.jpg",
+            ),
         ],
     )
     logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
@@ -395,7 +398,7 @@ def main():
         accelerator=config.trainer_accelerator,
         devices=len(config.device),
         num_nodes=config.nodes_count,
-        strategy=pl_strategies.DDPStrategy(find_unused_parameters=True),
+        strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
         log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,

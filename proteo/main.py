@@ -84,11 +84,14 @@ def train_func(train_loop_config):
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
     avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
+    pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
+
     module = proteo_train.Proteo(
         config,
         in_channels=train_dataset.feature_dim,  # 1 dim of input
         out_channels=train_dataset.label_dim,  # 1 dim of result
         avg_node_degree=avg_node_degree,
+        pos_weight=pos_weight,
     )
 
     wandb.log(
@@ -255,6 +258,8 @@ def main():
         'l1_lambda': tune.loguniform(config.l1_lambda_min, config.l1_lambda_max),
         'act': tune.choice(config.act_choices),
         'weight_initializer': tune.sample_from(weight_initializer),
+        'num_nodes': tune.choice(config.num_nodes_choices),
+        'adj_thresh': tune.choice(config.adj_thresh_choices),
     }
 
     scheduler = ASHAScheduler(

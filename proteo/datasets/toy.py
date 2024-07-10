@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
 
 
-class FTDDataset(InMemoryDataset):
+class ToyDataset(InMemoryDataset):
     """This is dataset used in FTD.
     This is a graph regression task.
 
@@ -51,27 +51,23 @@ class FTDDataset(InMemoryDataset):
     """
 
     def __init__(self, root, split, config):
-        self.name = 'ftd'
+        self.name = 'toy'
         self.root = root
         self.split = split
         assert split in ["train", "test"]
         self.config = config
-        self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 7299)
-        self.nfl_col_id = 8
-        self.carrier_status_col_id = 4
-        self.adj_str = f'adj_thresh_{config.adj_thresh}'
-        self.y_val_str = f'y_val_{config.y_val}'
-        self.num_nodes = f'num_nodes_{config.num_nodes}'
-
-        super(FTDDataset, self).__init__(root)
+        self.n_nodes = config.n_nodes
+        self.n_graphs = config.n_graphs
+        self.mean_control = config.mean_control  # mean = 10
+        self.mean_carrier = config.mean_carrier  # mean = 20
+        self.std_control = config.std_control  # std = 1
+        self.std_carrier = config.std_carrier
+        # right now, this uses the same normal distribution for each portein,
+        #    the mean and std only depend on control versus carrier
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = 1  # NfL is a scalar, ie, dim 1
 
-        path = os.path.join(
-            self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes}_{split}.pt',
-        )
+        path = os.path.join(self.processed_dir, f'{self.name}_{split}.pt')
         self.load(path)
 
     @property
@@ -101,8 +97,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes}_test.pt",
+            f"{self.name}_train.pt",
+            f"{self.name}_test.pt",
         ]
 
     def create_graph_data(self, feature, label, adj_matrix):
@@ -121,9 +117,13 @@ class FTDDataset(InMemoryDataset):
 
     def process(self):
         """Read data into huge `Data` list, i.e., a list of graphs"""
-        train_features, train_labels, test_features, test_labels, adj_matrix = self.load_csv_data(
-            self.config
-        )
+        (
+            train_features,
+            train_labels,
+            test_features,
+            test_labels,
+            adj_matrix,
+        ) = self.generate_toy_data(self.config)
 
         train_data_list = []
         for feature, label in zip(train_features, train_labels):
@@ -137,7 +137,7 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
-    def find_top_ks_values(self, csv_data, config):
+    def find_top_ks_values(self, csv_data):
         # Finding 30 most different  Kolmogorov–Smirnov values
         ks_stats = []
         for i in range(self.plasma_protein_col_range[0], self.plasma_protein_col_range[1]):
@@ -162,55 +162,13 @@ class FTDDataset(InMemoryDataset):
         )
 
         # Sort by KS statistic in descending order and get top 30
-        top_10_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(
-            config.num_nodes
-        )
+        top_10_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(10)
         # Return "Column" values
         return top_10_columns['Column'].values
 
-    def load_csv_data(self, config):
-        csv_path = self.raw_paths[0]
-        print("Loading data from:", csv_path)
-        pre_array_csv_data = pd.read_csv(csv_path)  # for KS scores
-        csv_data = np.array(pre_array_csv_data)
-        has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
-        test_has_plasma_col_id(has_plasma)
-        has_plasma = has_plasma == 1  # Converting from indices to boolean
-        test_boolean_plasma(has_plasma)
-        if config.y_val == 'nfl':
-            y_val, y_val_mask = self.load_nfl_values(csv_data, has_plasma)
-        elif config.y_val == 'carrier_status':
-            y_val, y_val_mask = self.load_carrier_status(csv_data, has_plasma)
-        else:
-            "Invalid y_val. Must be 'nfl' or 'carrier_status'."
-        # Extract and convert the plasma_protein values for rows
-        # where has_plasma is True and nfl is not NaN.
-        plasma_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config)
-        plasma_protein = csv_data[has_plasma, :][:, plasma_protein_col_indices][y_val_mask].astype(
-            float
-        )
-        # test_plasma_protein(plasma_protein) TODO: remove?
+    def generate_toy_data(self, config):
+        """Generate toy data for the toy dataset."""
 
-        features = plasma_protein
-        labels = y_val
-
-        train_features, test_features, train_labels, test_labels = train_test_split(
-            features, labels, test_size=0.20, random_state=42
-        )
-        train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
-        test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
-        train_labels = torch.FloatTensor(train_labels)
-        test_labels = torch.FloatTensor(test_labels)
-        print("Training features and labels:", train_features.shape, train_labels.shape)
-        print("Testing features and labels:", test_features.shape, test_labels.shape)
-        print("--> Total features and labels:", features.shape, labels.shape)
-
-        adj_path = os.path.join(
-            self.processed_dir, f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}.csv'
-        )
-        # Calculate and save adjacency matrix
-        if not os.path.exists(adj_path):
-            calculate_adjacency_matrix(plasma_protein, save_to=adj_path)
         print(f"Loading adjacency matrix from: {adj_path}...")
         adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
         # Threshold adjacency matrix
@@ -224,12 +182,7 @@ class FTDDataset(InMemoryDataset):
         plt.imshow(adj_matrix, cmap=cmap)
         plt.colorbar(ticks=[0, 1], label='Adjacency Value')
         plt.title("Visualization of Adjacency Matrix")
-        plt.savefig(
-            os.path.join(
-                self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}.jpg',
-            )
-        )
+        plt.savefig(os.path.join(self.processed_dir, f'adjacency_{config.adj_thresh}.jpg'))
         plt.close()
 
         return train_features, train_labels, test_features, test_labels, adj_matrix
@@ -282,148 +235,3 @@ def plot_histogram(data, save_to):
     plt.ylabel('Frequency')
     plt.title('Histogram of NFL3_MEAN')
     plt.savefig(save_to, format='jpg')
-
-
-def log_transform(data):
-    # Log transformation
-    log_data = np.log(data)
-
-    mean = np.mean(log_data)
-    std = np.std(log_data)
-    standardized_log_data = (log_data - mean) / std
-    return standardized_log_data
-
-
-def reverse_log_transform(standardized_log_data):
-    # De-standardize the data
-    mean = np.mean(standardized_log_data)
-    std = np.std(standardized_log_data)
-    log_data = (standardized_log_data * std) + mean
-
-    # Reverse the log transformation by applying the exponential function
-    original_data = np.exp(log_data)
-
-    return original_data
-
-
-# Unit Tests:
-
-
-def test_has_plasma_col_id(has_plasma):
-    expected_start = [1, 1, 0, 1, 1, 1, 1, 1, 1, 1]
-    expected_end = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-
-    assert np.array_equal(
-        has_plasma[0:10], expected_start
-    ), f"Expected start does not match: {has_plasma[0:10]}"
-    assert np.array_equal(
-        has_plasma[-10:], expected_end
-    ), f"Expected end does not match: {has_plasma[-10:]}"
-
-
-def test_boolean_plasma(has_plasma):
-    expected_start = [True, True, False, True, True, True, True, True, True, True]
-    expected_end = [True, True, True, True, True, True, True, True, True, True]
-
-    assert np.array_equal(
-        has_plasma[0:10], expected_start
-    ), f"Expected start does not match: {has_plasma[0:10]}"
-    assert np.array_equal(
-        has_plasma[-10:], expected_end
-    ), f"Expected end does not match: {has_plasma[-10:]}"
-
-
-def test_nfl_mean(nfl):
-    expected_start = [
-        5.373789749,
-        4.96802777,
-        7.849056381,
-        9.952806685,
-        19.09750386,
-        3.020361499,
-        3.955332738,
-        5.609756833,
-        2.543991562,
-        20.35120703,
-    ]
-    expected_end = [
-        4.704597833,
-        4.451686665,
-        10.11666739,
-        np.nan,
-        4.906927378,
-        np.nan,
-        32.57894769,
-        10.47815389,
-        13.82665788,
-        5.090618157,
-    ]
-
-    assert np.allclose(
-        nfl[0:10], expected_start, equal_nan=True
-    ), f"Expected start does not match: {nfl[0:10]}"
-    assert np.allclose(
-        nfl[-10:], expected_end, equal_nan=True
-    ), f"Expected end does not match: {nfl[-10:]}"
-
-
-def test_nfl_mean_no_nan(nfl):
-    expected_start = [
-        5.373789749,
-        4.96802777,
-        7.849056381,
-        9.952806685,
-        19.09750386,
-        3.020361499,
-        3.955332738,
-        5.609756833,
-        2.543991562,
-        20.35120703,
-    ]
-    expected_end = [
-        3.193790446,
-        5.375672435,
-        4.704597833,
-        4.451686665,
-        10.11666739,
-        4.906927378,
-        32.57894769,
-        10.47815389,
-        13.82665788,
-        5.090618157,
-    ]
-    assert np.allclose(nfl[0:10], expected_start), f"Expected start does not match: {nfl[0:10]}"
-    assert np.allclose(nfl[-10:], expected_end), f"Expected end does not match: {nfl[-10:]}"
-
-
-def test_plasma_protein(plasma_protein):
-    first_col = [
-        10.42909285,
-        10.40492866,
-        10.39360497,
-        10.7173337,
-        10.59516422,
-        10.91101741,
-        11.27035373,
-        10.27972664,
-        10.79498438,
-        10.67551604,
-    ]
-    last_col = [
-        14.29598412,
-        14.13749552,
-        13.9971883,
-        14.03512556,
-        14.00098588,
-        14.59941311,
-        13.65365122,
-        13.65650307,
-        13.76113565,
-        13.8820411,
-    ]
-
-    assert np.allclose(
-        plasma_protein[:10, 0], first_col
-    ), f"First column does not match: {plasma_protein[:10, 0]}"
-    # Only works if you take all the columns
-    # assert np.allclose(plasma_protein[:10, -1], last_col), f"Last column does not match: {plasma_protein[:10, -1]}"

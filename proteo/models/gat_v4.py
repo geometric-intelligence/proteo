@@ -207,9 +207,6 @@ class GATv4(nn.Module):
             )
             fc_layer_input_dim = fc_dim
         layers.append(nn.Linear(fc_dim, self.out_channels))
-        # Add the sigmoid activation function
-        if self.task_type == 'classification':
-            layers.append(nn.Sigmoid())
         return nn.Sequential(*layers)
 
     def reset_parameters(self):
