@@ -71,7 +71,10 @@ class CustomWandbCallback(Callback):
         )
         if pl_module.config.task_type == "classification":
             pl_module.logger.experiment.log(
-                {"train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds))}
+                {
+                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "epoch": pl_module.current_epoch,
+                }
             )
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
@@ -92,7 +95,6 @@ class CustomWandbCallback(Callback):
             pl_module.logger.experiment.log(
                 {
                     "val_preds_logits": wandb.Histogram(val_preds),
-                    "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }
@@ -102,6 +104,7 @@ class CustomWandbCallback(Callback):
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                         "val_accuracy": get_val_accuracy(val_preds, val_targets),
+                        "epoch": pl_module.current_epoch,
                     }
                 )
             pl_module.val_preds.clear()  # free memory
