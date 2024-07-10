@@ -62,7 +62,8 @@ class FTDDataset(InMemoryDataset):
         self.carrier_status_col_id = 4
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
-        self.num_nodes = f'num_nodes_{config.num_nodes}'
+        self.num_nodes_str = f'num_nodes_{config.num_nodes}'
+        self.mutation_status_str = f'mutation_status_{config.mutation_status}'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -70,7 +71,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{split}.pt',
         )
         self.load(path)
 
@@ -101,8 +102,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_test.pt",
         ]
 
     def create_graph_data(self, feature, label, adj_matrix):
@@ -204,7 +205,6 @@ class FTDDataset(InMemoryDataset):
             float
         )
         # test_plasma_protein(plasma_protein) TODO: remove?
-        self.plasma_protein_names = plasma_protein_names
         features = plasma_protein
         labels = y_val
 
@@ -220,7 +220,7 @@ class FTDDataset(InMemoryDataset):
         print("--> Total features and labels:", features.shape, labels.shape)
 
         adj_path = os.path.join(
-            self.processed_dir, f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}.csv'
+            self.processed_dir, f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.csv'
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
@@ -241,7 +241,7 @@ class FTDDataset(InMemoryDataset):
         plt.savefig(
             os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.jpg',
             )
         )
         plt.close()

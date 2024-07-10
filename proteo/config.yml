@@ -17,7 +17,7 @@ y_val: "carrier_status"
 # Plasma or CSF
 plasma_or_csf: "plasma"
 # Can be "MAPT", "GRN", "C9" or "CTL"(which just splits by Carrier and Control differences)
-mutation_status: "GRN"
+mutation_status: "CTL"
 # How to weight the classes of the dataset
 #TODO: should not be hardcoded
 num_carriers: 330

@@ -269,8 +269,7 @@ def construct_datasets(config):
     root = os.path.join(config.root_dir, config.data_dir)
     train_dataset = FTDDataset(root, "train", config)
     test_dataset = FTDDataset(root, "test", config)
-    plasma_protein_names = train_dataset.plasma_protein_names
-    return train_dataset, test_dataset, plasma_protein_names
+    return train_dataset, test_dataset
 
 
 def print_datasets(train_dataset, test_dataset):
@@ -348,7 +347,7 @@ def main():
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
 
-    train_dataset, test_dataset, plasma_protein_names = construct_datasets(config)
+    train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
     pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
@@ -369,16 +368,11 @@ def main():
             os.path.join(train_dataset.processed_dir, "histogram.jpg"),
             os.path.join(
                 train_dataset.processed_dir,
-                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}.jpg",
+                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.jpg",
             ),
         ],
     )
     logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
-    # Create a list of lists for logging
-    top_proteins_data = [[protein] for protein in plasma_protein_names]
-
-    # Log the top proteins as a table
-    logger.log_text(key="top_proteins", columns=["Protein"], data=top_proteins_data)
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',
