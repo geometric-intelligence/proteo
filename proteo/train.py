@@ -22,6 +22,7 @@ Here, pl_module.logger is Ray's dedicated logger.
 import gc
 import os
 from datetime import datetime
+import numpy as np
 
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
@@ -335,6 +336,12 @@ def get_wandb_logger(config):
         offline=config.wandb_offline,
     )
 
+def read_protein_file(processed_dir, config):
+    file_path = os.path.join(processed_dir, f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy')
+    if os.path.exists(file_path):
+        return np.load(file_path, allow_pickle=True)
+    else:
+        raise FileNotFoundError(f"The file {file_path} does not exist.")
 
 def main():
     """Training and evaluation script for experiments."""
@@ -373,6 +380,11 @@ def main():
         ],
     )
     logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
+    # Log top proteins
+    plasma_protein_names = read_protein_file(train_dataset.processed_dir, config)
+    # Create a list of lists for logging
+    top_proteins_data = [[protein] for protein in plasma_protein_names]
+    logger.log_text(key="top_proteins", columns=["Protein"], data=top_proteins_data)
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',

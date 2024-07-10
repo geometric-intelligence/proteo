@@ -128,7 +128,6 @@ class FTDDataset(InMemoryDataset):
             test_features,
             test_labels,
             adj_matrix,
-            plasma_protein_names,
         ) = self.load_csv_data(self.config)
 
         train_data_list = []
@@ -179,7 +178,12 @@ class FTDDataset(InMemoryDataset):
         )
         top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(config.num_nodes)
 
-        return top_columns['Column'].values, top_columns['Protein'].values
+        # Save the plasma_protein_names to a file
+        plasma_protein_names = top_columns['Protein'].values
+        file_path = os.path.join(self.processed_dir, f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy')
+        np.save(file_path, plasma_protein_names)
+
+        return top_columns['Column'].values
 
     def load_csv_data(self, config):
         csv_path = self.raw_paths[0]
@@ -198,7 +202,7 @@ class FTDDataset(InMemoryDataset):
             "Invalid y_val. Must be 'nfl' or 'carrier_status'."
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        plasma_protein_col_indices, plasma_protein_names = self.find_top_ks_values(
+        plasma_protein_col_indices = self.find_top_ks_values(
             pre_array_csv_data, config
         )
         plasma_protein = csv_data[has_plasma, :][:, plasma_protein_col_indices][y_val_mask].astype(
@@ -252,7 +256,6 @@ class FTDDataset(InMemoryDataset):
             test_features,
             test_labels,
             adj_matrix,
-            plasma_protein_names,
         )
 
     def load_nfl_values(self, csv_data, x_values):
