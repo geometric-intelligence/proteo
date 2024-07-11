@@ -62,11 +62,12 @@ class FTDDataset(InMemoryDataset):
         self.csf_protein_col_range = (7300, 14588)
         self.nfl_col_id = 8
         self.carrier_status_col_id = 4
+        self.mutation_status_col_id = 1
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
         self.mutation_status_str = f'mutation_status_{config.mutation_status}'
-        self.plasma_or_csf_str = f'plasma_or_csf_{config.plasma_or_csf}'
+        self.plasma_or_csf_str = f'{config.plasma_or_csf}'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -148,17 +149,12 @@ class FTDDataset(InMemoryDataset):
     def find_top_ks_values(self, csv_data, config, measurement_col_range):
         ks_stats = []
 
-        mutation_map = {
-            "GRN": ["GRN.PreSx", "GRN.Sx"],
-            "MAPT": ["MAPT.PreSx", "MAPT.Sx"],
-            "C9": ["C9.PreSx", "C9.Sx"],
-            "CTL": ["CTL"],
-        }
-
-        if config.mutation_status in mutation_map:
-            mutation_values = mutation_map[config.mutation_status]
-            condition1 = csv_data['Gene.Dx'].isin(mutation_values)
-            condition2 = ~csv_data['Gene.Dx'].isin(mutation_values)
+        # Direct comparison for mutation status
+        mutation_status = config.mutation_status
+        
+        if mutation_status in ["GRN", "MAPT", "C9orf72", "CTL"]:
+            condition1 = csv_data['Mutation'] == mutation_status
+            condition2 = csv_data['Mutation'] == "CTL"
         else:
             raise ValueError("Invalid mutation status specified.")
 
@@ -210,18 +206,19 @@ class FTDDataset(InMemoryDataset):
         has_measurement = csv_data[:, has_measurement_col_id].astype(int)
         #test_has_plasma_col_id(has_plasma)
         has_measurement = has_measurement == 1  # Converting from indices to boolean
+        print("Number of patients with measurements:", np.sum(has_measurement))
         #test_boolean_plasma(has_plasma)
-        
-        # Additional filtering based on mutation_status
-        if config.mutation_status == 'GRN':
-            mutation_filter = np.isin(csv_data[:, self.carrier_status_col_id], ['GRN.PreSx', 'GRN.Sx'])
-        elif config.mutation_status == 'MAPT':
-            mutation_filter = np.isin(csv_data[:, self.carrier_status_col_id], ['MAPT.PreSx', 'MAPT.Sx'])
-        elif config.mutation_status == 'C9':
-            mutation_filter = np.isin(csv_data[:, self.carrier_status_col_id], ['C9.PreSx', 'C9.Sx'])
-        else:  # 'CTL' or any other values
+
+        # Additional filtering based on mutation_status, always take mutation status and control
+        if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
+            mutation_filter = np.isin(csv_data[:, self.mutation_status_col_id], (config.mutation_status, 'CTL'))
+        elif config.mutation_status == 'CTL':
             mutation_filter = np.ones_like(has_measurement, dtype=bool)
+        else: 
+            raise ValueError("Invalid mutation status specified.")
+        print("Number of patients with mutation status:", np.sum(mutation_filter))
         combined_filter = has_measurement & mutation_filter
+        print("Number of patients with measurements and mutation status:", np.sum(combined_filter))
 
         if config.y_val == 'nfl':
             y_val, y_val_mask = self.load_nfl_values(csv_data, combined_filter)
@@ -232,7 +229,7 @@ class FTDDataset(InMemoryDataset):
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
         top_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config, measurement_col_range)
-        top_proteins = csv_data[has_measurement, :][:, top_protein_col_indices][y_val_mask].astype(
+        top_proteins = csv_data[combined_filter, :][:, top_protein_col_indices][y_val_mask].astype(
             float
         )
         # test_plasma_protein(plasma_protein) TODO: remove?

@@ -16,13 +16,10 @@ raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 y_val: "carrier_status"
 # Plasma or CSF
 plasma_or_csf: "plasma"
-# Can be "MAPT", "GRN", "C9" or "CTL"(which just splits by Carrier and Control differences)
+# Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
-mutation_status: "CTL"
+mutation_status: "GRN"
 # How to weight the classes of the dataset
-#TODO: should not be hardcoded
-num_carriers: 330
-num_controls: 189
 
 # WandB
 project: "proteo"
@@ -67,8 +64,8 @@ gcn:
 
 
 # Training
-batch_size: 20 #for one off training
-epochs: 400
+batch_size: 30 #for one off training
+epochs: 200
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"

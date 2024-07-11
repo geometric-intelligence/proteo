@@ -41,6 +41,7 @@ from torch.optim.lr_scheduler import (
 )
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
+import pandas as pd
 
 import proteo.callbacks as proteo_callbacks
 from proteo.datasets.ftd import FTDDataset
@@ -264,6 +265,16 @@ def compute_avg_node_degree(dataset):
     avg_node_degree = num_edges / num_nodes
     return avg_node_degree
 
+def compute_pos_weight(config):
+    csv_path = os.path.join(config.root_dir, config.data_dir,"raw", config.raw_file_name)
+    df = pd.read_csv(csv_path)
+
+    # Count the occurrences of 'CTL' in the 'Mutation' column
+    control_count = df['Mutation'].value_counts().get('CTL', 0)
+    
+    # Count the occurrences of config.mutation_status in the 'Mutation' column
+    mutation_status_count = df['Mutation'].value_counts().get(config.mutation_status, 0)
+    return torch.FloatTensor([control_count / mutation_status_count])
 
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
@@ -362,7 +373,8 @@ def main():
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
-    pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
+    pos_weight = compute_pos_weight(config)
+    print(f"pos_weight: {pos_weight}")
 
     module = Proteo(
         config,

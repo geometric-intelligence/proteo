@@ -112,27 +112,6 @@ class CustomWandbCallback(Callback):
                 # Convert tensors to numpy arrays and ensure they are integers
                 val_targets_np = val_targets.numpy().astype(int).flatten()
                 val_preds_binary_np = val_preds_binary.numpy().astype(int).flatten()
-                # Convert numpy arrays to lists
-                print("val preds binary", val_preds_binary_np)
-                print("val targets", val_targets_np)
-                # Convert tensors to numpy arrays and ensure they are integers
-                #val_targets_np = val_targets.cpu().int()
-                #val_preds_binary_np = val_preds_binary.cpu()
-
-                # Compute confusion matrix
-                '''cm = confusion_matrix(val_targets.numpy(), val_preds_binary.numpy())
-
-                # Plot confusion matrix using seaborn
-                plt.figure(figsize=(10, 7))
-                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-                plt.xlabel('Predicted')
-                plt.ylabel('True')
-
-                # Save the plot
-                plot_path = 'confusion_matrix.png'
-                plt.savefig(plot_path)
-                plt.close()
-                time.sleep(2)  # wait for the file to be saved'''
 
                 # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
