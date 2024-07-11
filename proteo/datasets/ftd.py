@@ -58,12 +58,15 @@ class FTDDataset(InMemoryDataset):
         self.config = config
         self.has_plasma_col_id = 9
         self.plasma_protein_col_range = (10, 7299)
+        self.has_csf_col_id = 7299
+        self.csf_protein_col_range = (7300, 14588)
         self.nfl_col_id = 8
         self.carrier_status_col_id = 4
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
         self.mutation_status_str = f'mutation_status_{config.mutation_status}'
+        self.plasma_or_csf_str = f'plasma_or_csf_{config.plasma_or_csf}'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -71,7 +74,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{split}.pt',
         )
         self.load(path)
 
@@ -102,8 +105,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_test.pt",
         ]
 
     def create_graph_data(self, feature, label, adj_matrix):
@@ -142,7 +145,7 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
-    def find_top_ks_values(self, csv_data, config):
+    def find_top_ks_values(self, csv_data, config, measurement_col_range):
         ks_stats = []
 
         mutation_map = {
@@ -159,7 +162,7 @@ class FTDDataset(InMemoryDataset):
         else:
             raise ValueError("Invalid mutation status specified.")
 
-        for i in range(self.plasma_protein_col_range[0], self.plasma_protein_col_range[1]):
+        for i in range(measurement_col_range[0], measurement_col_range[1]):
             protein_column = csv_data.columns[i]
 
             mutation_data = csv_data[condition1][protein_column]
@@ -182,7 +185,7 @@ class FTDDataset(InMemoryDataset):
         plasma_protein_names = top_columns['Protein'].values
         file_path = os.path.join(
             self.processed_dir,
-            f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy',
+            f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.npy',
         )
         np.save(file_path, plasma_protein_names)
 
@@ -193,24 +196,47 @@ class FTDDataset(InMemoryDataset):
         print("Loading data from:", csv_path)
         pre_array_csv_data = pd.read_csv(csv_path)  # for KS scores
         csv_data = np.array(pre_array_csv_data)
-        has_plasma = csv_data[:, self.has_plasma_col_id].astype(int)
-        test_has_plasma_col_id(has_plasma)
-        has_plasma = has_plasma == 1  # Converting from indices to boolean
-        test_boolean_plasma(has_plasma)
+        if config.plasma_or_csf == 'plasma':
+            print("Using plasma data.")
+            has_measurement_col_id = self.has_plasma_col_id
+            measurement_col_range = self.plasma_protein_col_range
+        elif config.plasma_or_csf == 'csf':
+            print("Using CSF data.")
+            has_measurement_col_id = self.has_csf_col_id
+            measurement_col_range = self.csf_protein_col_range
+        else:
+            raise ValueError("Invalid plasma_or_csf. Must be 'plasma' or 'csf'.")
+        # Get the indices of the rows where has_measurement is True
+        has_measurement = csv_data[:, has_measurement_col_id].astype(int)
+        #test_has_plasma_col_id(has_plasma)
+        has_measurement = has_measurement == 1  # Converting from indices to boolean
+        #test_boolean_plasma(has_plasma)
+        
+        # Additional filtering based on mutation_status
+        if config.mutation_status == 'GRN':
+            mutation_filter = np.isin(csv_data[:, self.carrier_status_col_id], ['GRN.PreSx', 'GRN.Sx'])
+        elif config.mutation_status == 'MAPT':
+            mutation_filter = np.isin(csv_data[:, self.carrier_status_col_id], ['MAPT.PreSx', 'MAPT.Sx'])
+        elif config.mutation_status == 'C9':
+            mutation_filter = np.isin(csv_data[:, self.carrier_status_col_id], ['C9.PreSx', 'C9.Sx'])
+        else:  # 'CTL' or any other values
+            mutation_filter = np.ones_like(has_measurement, dtype=bool)
+        combined_filter = has_measurement & mutation_filter
+
         if config.y_val == 'nfl':
-            y_val, y_val_mask = self.load_nfl_values(csv_data, has_plasma)
+            y_val, y_val_mask = self.load_nfl_values(csv_data, combined_filter)
         elif config.y_val == 'carrier_status':
-            y_val, y_val_mask = self.load_carrier_status(csv_data, has_plasma)
+            y_val, y_val_mask = self.load_carrier_status(csv_data, combined_filter)
         else:
             "Invalid y_val. Must be 'nfl' or 'carrier_status'."
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        plasma_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config)
-        plasma_protein = csv_data[has_plasma, :][:, plasma_protein_col_indices][y_val_mask].astype(
+        top_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config, measurement_col_range)
+        top_proteins = csv_data[has_measurement, :][:, top_protein_col_indices][y_val_mask].astype(
             float
         )
         # test_plasma_protein(plasma_protein) TODO: remove?
-        features = plasma_protein
+        features = top_proteins
         labels = y_val
 
         train_features, test_features, train_labels, test_labels = train_test_split(
@@ -226,11 +252,11 @@ class FTDDataset(InMemoryDataset):
 
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.csv',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
-            calculate_adjacency_matrix(plasma_protein, save_to=adj_path)
+            calculate_adjacency_matrix(top_proteins, save_to=adj_path)
         print(f"Loading adjacency matrix from: {adj_path}...")
         adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
         # Threshold adjacency matrix
@@ -247,7 +273,7 @@ class FTDDataset(InMemoryDataset):
         plt.savefig(
             os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.jpg',
             )
         )
         plt.close()

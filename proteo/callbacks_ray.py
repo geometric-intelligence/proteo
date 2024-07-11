@@ -160,28 +160,22 @@ class CustomRayWandbCallback(Callback):
 
             if pl_module.config.task_type == "classification":
                 val_preds_sigmoid = torch.sigmoid(val_preds)
+                #Note this assumes binary classification
                 predicted_classes = (val_preds_sigmoid > 0.5).int()
                 val_accuracy = (predicted_classes == val_targets).float().mean().item()
-
-                # Compute confusion matrix
-                cm = confusion_matrix(val_targets.numpy(), predicted_classes.numpy())
-
-                # Convert confusion matrix to a pandas DataFrame
-                labels = sorted(set(val_targets.numpy().flatten()))
-                columns = [f"Predicted_{label}" for label in labels]
-                index = [f"Actual_{label}" for label in labels]
-                cm_df = pd.DataFrame(cm, columns=columns, index=index)
-
-                # Convert DataFrame to WandB Table
-                cm_table = wandb.Table(dataframe=cm_df)
-
+                # Convert tensors to numpy arrays and ensure they are integers
+                val_targets_np = val_targets.cpu().numpy().astype(int)
+                predicted_classes_np = predicted_classes.cpu().numpy().astype(int)
 
                 wandb.log(
                     {
                         "val_preds_sigmoid": wandb.Histogram(val_preds_sigmoid),
                         "val_accuracy": val_accuracy,
-                        "confusion_matrix": cm_table,
                         "epoch": pl_module.current_epoch,
+                        "conf_mat" : wandb.plot.confusion_matrix(probs=None,
+                        y_true=val_targets_np, preds=predicted_classes_np,
+                        class_names=['Control', 'Carrier'])
+
                     }
                 )
 

@@ -102,7 +102,7 @@ def train_func(train_loop_config):
             "adjacency": wandb.Image(
                 os.path.join(
                     train_dataset.processed_dir,
-                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.jpg",
+                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.jpg",
                 )
             ),
             "avg_node_degree": wandb.Table(columns=["avg_node_degree"], data=[[avg_node_degree]]),

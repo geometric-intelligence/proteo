@@ -109,9 +109,20 @@ class CustomWandbCallback(Callback):
             if pl_module.config.task_type == "classification":
                 # Assuming binary classification; for multi-class, adjust accordingly
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
+                # Convert tensors to numpy arrays and ensure they are integers
+                val_targets_np = val_targets.cpu().numpy().astype(int).flatten()
+                val_preds_binary_np = val_preds_binary.cpu().numpy().astype(int).flatten()
+                # Convert numpy arrays to lists
+                val_targets_list = val_targets_np.tolist()
+                predicted_classes_list = val_preds_binary_np.tolist()
+                print("val preds binary", val_preds_binary_np)
+                print("val targets", val_targets_np)
+                # Convert tensors to numpy arrays and ensure they are integers
+                #val_targets_np = val_targets.cpu().int()
+                #val_preds_binary_np = val_preds_binary.cpu()
 
                 # Compute confusion matrix
-                cm = confusion_matrix(val_targets.numpy(), val_preds_binary.numpy())
+                '''cm = confusion_matrix(val_targets.numpy(), val_preds_binary.numpy())
 
                 # Plot confusion matrix using seaborn
                 plt.figure(figsize=(10, 7))
@@ -123,14 +134,16 @@ class CustomWandbCallback(Callback):
                 plot_path = 'confusion_matrix.png'
                 plt.savefig(plot_path)
                 plt.close()
-                time.sleep(1)  # wait for the file to be saved
+                time.sleep(2)  # wait for the file to be saved'''
 
                 # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                         "val_accuracy": get_val_accuracy(val_preds, val_targets),
-                        "val_confusion_matrix": wandb.Image('confusion_matrix.png'),
+                        "conf_mat" : wandb.plot.confusion_matrix(probs=None,
+                        y_true=val_targets_np, preds=val_preds_binary_np,
+                        class_names=['Control', 'Carrier']),
                         "epoch": pl_module.current_epoch,
                     }
                 )

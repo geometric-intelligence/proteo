@@ -15,8 +15,9 @@ raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 # Y Value
 y_val: "carrier_status"
 # Plasma or CSF
-plasma_or_csf: "plasma"
+plasma_or_csf: "csf"
 # Can be "MAPT", "GRN", "C9" or "CTL"(which just splits by Carrier and Control differences)
+# If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
 mutation_status: "CTL"
 # How to weight the classes of the dataset
 #TODO: should not be hardcoded
@@ -66,8 +67,8 @@ gcn:
 
 
 # Training
-batch_size: 12 #for one off training
-epochs: 300
+batch_size: 20 #for one off training
+epochs: 400
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -79,7 +80,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
