@@ -110,11 +110,9 @@ class CustomWandbCallback(Callback):
                 # Assuming binary classification; for multi-class, adjust accordingly
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
                 # Convert tensors to numpy arrays and ensure they are integers
-                val_targets_np = val_targets.cpu().numpy().astype(int).flatten()
-                val_preds_binary_np = val_preds_binary.cpu().numpy().astype(int).flatten()
+                val_targets_np = val_targets.numpy().astype(int).flatten()
+                val_preds_binary_np = val_preds_binary.numpy().astype(int).flatten()
                 # Convert numpy arrays to lists
-                val_targets_list = val_targets_np.tolist()
-                predicted_classes_list = val_preds_binary_np.tolist()
                 print("val preds binary", val_preds_binary_np)
                 print("val targets", val_targets_np)
                 # Convert tensors to numpy arrays and ensure they are integers

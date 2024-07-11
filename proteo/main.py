@@ -106,7 +106,7 @@ def train_func(train_loop_config):
                 )
             ),
             "avg_node_degree": wandb.Table(columns=["avg_node_degree"], data=[[avg_node_degree]]),
-            "top_proteins": wandb.Table(columns=["Protein"], data=top_proteins_data),
+            "top_proteins": wandb.Table(columns=["Protein"], data=top_proteins_data), #note this is in order from most to least different
         }
     )
 

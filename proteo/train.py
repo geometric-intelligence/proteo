@@ -385,7 +385,7 @@ def main():
         ],
     )
     logger.log_text(key="avg_node_degree", columns=["avg_node_degree"], data=[[avg_node_degree]])
-    # Log top proteins
+    # Log top proteins, note this is in order from most to least different
     plasma_protein_names = read_protein_file(train_dataset.processed_dir, config)
     # Create a list of lists for logging
     top_proteins_data = [[protein] for protein in plasma_protein_names]

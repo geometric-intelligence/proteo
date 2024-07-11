@@ -164,8 +164,8 @@ class CustomRayWandbCallback(Callback):
                 predicted_classes = (val_preds_sigmoid > 0.5).int()
                 val_accuracy = (predicted_classes == val_targets).float().mean().item()
                 # Convert tensors to numpy arrays and ensure they are integers
-                val_targets_np = val_targets.cpu().numpy().astype(int)
-                predicted_classes_np = predicted_classes.cpu().numpy().astype(int)
+                val_targets_np = val_targets.numpy().astype(int).flatten()
+                predicted_classes_np = predicted_classes.numpy().astype(int).flatten()
 
                 wandb.log(
                     {

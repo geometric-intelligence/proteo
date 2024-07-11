@@ -15,7 +15,7 @@ raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
 # Y Value
 y_val: "carrier_status"
 # Plasma or CSF
-plasma_or_csf: "csf"
+plasma_or_csf: "plasma"
 # Can be "MAPT", "GRN", "C9" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
 mutation_status: "CTL"
