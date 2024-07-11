@@ -111,6 +111,7 @@ l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 num_nodes_choices: [10, 30, 150, 1000, 7000]
 adj_thresh_choices: [0.01, 0.05, 0.1, 0.5, 0.7, 0.9]
+mutation_status_choices: ['MAPT', 'GRN', 'C9', 'CTL']
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]

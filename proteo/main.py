@@ -266,6 +266,7 @@ def main():
         'weight_initializer': tune.sample_from(weight_initializer),
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
+        'mutation_status': tune.choice(config.mutation_status_choices),
     }
 
     scheduler = ASHAScheduler(

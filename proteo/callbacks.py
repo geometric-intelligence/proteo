@@ -9,6 +9,7 @@ import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
+import time
 
 
 class CustomWandbCallback(Callback):
@@ -122,6 +123,7 @@ class CustomWandbCallback(Callback):
                 plot_path = 'confusion_matrix.png'
                 plt.savefig(plot_path)
                 plt.close()
+                time.sleep(1)  # wait for the file to be saved
 
                 # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
@@ -132,7 +134,6 @@ class CustomWandbCallback(Callback):
                         "epoch": pl_module.current_epoch,
                     }
                 )
-        # print(f"\n clearing!")
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
 
