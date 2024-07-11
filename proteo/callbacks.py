@@ -108,11 +108,8 @@ class CustomWandbCallback(Callback):
             if pl_module.config.task_type == "classification":
                 # Assuming binary classification; for multi-class, adjust accordingly
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
-                # print("val_preds_binary", val_preds_binary)
-                # print("val_targets", val_targets)
 
                 # Compute confusion matrix
-                print("val_preds_binary", val_preds_binary.shape)
                 cm = confusion_matrix(val_targets.numpy(), val_preds_binary.numpy())
 
                 # Plot confusion matrix using seaborn

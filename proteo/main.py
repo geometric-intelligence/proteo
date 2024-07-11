@@ -84,6 +84,8 @@ def train_func(train_loop_config):
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
     avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
+    plasma_protein_names = proteo_train.read_protein_file(train_dataset.processed_dir, config)
+    top_proteins_data = [[protein] for protein in plasma_protein_names]
     pos_weight = torch.FloatTensor([config.num_controls / config.num_carriers])
 
     module = proteo_train.Proteo(
@@ -104,6 +106,7 @@ def train_func(train_loop_config):
                 )
             ),
             "avg_node_degree": wandb.Table(columns=["avg_node_degree"], data=[[avg_node_degree]]),
+            "top_proteins": wandb.Table(columns=["Protein"], data=top_proteins_data),
         }
     )
 

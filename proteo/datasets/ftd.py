@@ -180,7 +180,10 @@ class FTDDataset(InMemoryDataset):
 
         # Save the plasma_protein_names to a file
         plasma_protein_names = top_columns['Protein'].values
-        file_path = os.path.join(self.processed_dir, f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy')
+        file_path = os.path.join(
+            self.processed_dir,
+            f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy',
+        )
         np.save(file_path, plasma_protein_names)
 
         return top_columns['Column'].values
@@ -202,9 +205,7 @@ class FTDDataset(InMemoryDataset):
             "Invalid y_val. Must be 'nfl' or 'carrier_status'."
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        plasma_protein_col_indices = self.find_top_ks_values(
-            pre_array_csv_data, config
-        )
+        plasma_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config)
         plasma_protein = csv_data[has_plasma, :][:, plasma_protein_col_indices][y_val_mask].astype(
             float
         )
@@ -224,7 +225,8 @@ class FTDDataset(InMemoryDataset):
         print("--> Total features and labels:", features.shape, labels.shape)
 
         adj_path = os.path.join(
-            self.processed_dir, f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.csv'
+            self.processed_dir,
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):

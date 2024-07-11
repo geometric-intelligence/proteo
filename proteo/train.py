@@ -22,8 +22,8 @@ Here, pl_module.logger is Ray's dedicated logger.
 import gc
 import os
 from datetime import datetime
-import numpy as np
 
+import numpy as np
 import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
@@ -336,12 +336,17 @@ def get_wandb_logger(config):
         offline=config.wandb_offline,
     )
 
+
 def read_protein_file(processed_dir, config):
-    file_path = os.path.join(processed_dir, f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy')
+    file_path = os.path.join(
+        processed_dir,
+        f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}.npy',
+    )
     if os.path.exists(file_path):
         return np.load(file_path, allow_pickle=True)
     else:
         raise FileNotFoundError(f"The file {file_path} does not exist.")
+
 
 def main():
     """Training and evaluation script for experiments."""
