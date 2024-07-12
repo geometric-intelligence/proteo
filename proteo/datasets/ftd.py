@@ -68,6 +68,7 @@ class FTDDataset(InMemoryDataset):
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
         self.mutation_status_str = f'mutation_status_{config.mutation_status}'
         self.plasma_or_csf_str = f'{config.plasma_or_csf}'
+        self.sex_str = f'sex_{config.sex}'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -75,7 +76,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_{split}.pt',
         )
         self.load(path)
 
@@ -106,8 +107,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_test.pt",
         ]
 
     def create_graph_data(self, feature, label, adj_matrix):
@@ -147,14 +148,19 @@ class FTDDataset(InMemoryDataset):
         self.save(test_data_list, self.processed_paths[1])
 
     def find_top_ks_values(self, csv_data, config, measurement_col_range):
+        '''Find the top n_nodes most different proteins based on p-value from KS test between subgroup specified by config and control group.'''
         ks_stats = []
 
         # Direct comparison for mutation status
         mutation_status = config.mutation_status
+        sex = config.sex
 
-        if mutation_status in ["GRN", "MAPT", "C9orf72", "CTL"]:
-            condition1 = csv_data['Mutation'] == mutation_status
-            condition2 = csv_data['Mutation'] == "CTL"
+        if mutation_status in ["GRN", "MAPT", "C9orf72"]: #Compare mutation to control
+            condition1 = (csv_data['Mutation'] == mutation_status) & (csv_data['SEX_AT_BIRTH'] == sex)
+            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'] == sex)
+        elif mutation_status == "CTL": #Compare CTL to all other mutations
+            condition1 = csv_data['Mutation'].isin(["GRN", "MAPT", "C9orf72"]) & (csv_data['SEX_AT_BIRTH'] == sex)
+            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'] == sex)
         else:
             raise ValueError("Invalid mutation status specified.")
 
@@ -191,7 +197,7 @@ class FTDDataset(InMemoryDataset):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         pre_array_csv_data = pd.read_csv(csv_path)  # for KS scores
-        #pre_array_csv_data = self.remove_erroneous_columns(config, pre_array_csv_data)
+        # pre_array_csv_data = self.remove_erroneous_columns(config, pre_array_csv_data)
         csv_data = np.array(pre_array_csv_data)
         if config.plasma_or_csf == 'plasma':
             print("Using plasma data.")
@@ -220,8 +226,18 @@ class FTDDataset(InMemoryDataset):
         else:
             raise ValueError("Invalid mutation status specified.")
         print("Number of patients with mutation status:", np.sum(mutation_filter))
-        combined_filter = has_measurement & mutation_filter
-        print("Number of patients with measurements and mutation status:", np.sum(combined_filter))
+        # Additional filtering based on sex
+        if config.sex in ['M', 'F']:
+            sex_filter = csv_data[:, self.sex_col_id] == config.sex
+        elif config.sex == 'All':
+            sex_filter = np.ones_like(has_measurement, dtype=bool)
+        else:
+            raise ValueError("Invalid sex specified.")
+        combined_filter = has_measurement & mutation_filter & sex_filter
+        print(
+            "Number of patients with measurements, sex, and mutation status:",
+            np.sum(combined_filter),
+        )
 
         if config.y_val == 'nfl':
             y_val, y_val_mask = self.load_nfl_values(csv_data, combined_filter)
@@ -254,7 +270,7 @@ class FTDDataset(InMemoryDataset):
 
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.csv',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
@@ -275,7 +291,7 @@ class FTDDataset(InMemoryDataset):
         plt.savefig(
             os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.jpg',
             )
         )
         plt.close()
@@ -290,11 +306,11 @@ class FTDDataset(InMemoryDataset):
 
     def load_nfl_values(self, csv_data, x_values):
         nfl = csv_data[x_values, self.nfl_col_id].astype(float)
-        #test_nfl_mean(nfl)
+        # test_nfl_mean(nfl)
         nfl_mask = ~np.isnan(nfl)
         # Remove NaN values from nfl
         nfl = nfl[nfl_mask]
-        #test_nfl_mean_no_nan(nfl)
+        # test_nfl_mean_no_nan(nfl)
         nfl = log_transform(nfl)
         hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
         plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
@@ -313,7 +329,7 @@ class FTDDataset(InMemoryDataset):
                 "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
             )
         return carrier_status, carrier_mask
-    
+
     def remove_erroneous_columns(self, config, csv_data):
         """Remove columns that have all NaN values."""
         # Remove columns that have all NaN values
@@ -326,9 +342,6 @@ class FTDDataset(InMemoryDataset):
         # Remove the columns
         csv_data = csv_data.drop(columns=columns_to_remove)
         return csv_data
-
-
-
 
 
 def calculate_adjacency_matrix(plasma_protein, save_to):

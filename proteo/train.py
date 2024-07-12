@@ -266,7 +266,7 @@ def compute_avg_node_degree(dataset):
     return avg_node_degree
 
 
-def compute_pos_weight(config): #TODO: this doesn't take into account filtering out NA values
+def compute_pos_weight(config):  # TODO: this doesn't take into account filtering out NA values
     csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
     df = pd.read_csv(csv_path)
 
@@ -395,7 +395,7 @@ def main():
             os.path.join(train_dataset.processed_dir, "histogram.jpg"),
             os.path.join(
                 train_dataset.processed_dir,
-                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.jpg",
+                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.jpg",
             ),
         ],
     )

@@ -20,7 +20,8 @@ plasma_or_csf: "csf"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
 mutation_status: "C9orf72"
-# How to weight the classes of the dataset
+# 'M', 'F', 'All'
+sex: 'M'
 
 # WandB
 project: "proteo"
