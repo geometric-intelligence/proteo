@@ -63,6 +63,7 @@ class FTDDataset(InMemoryDataset):
         self.nfl_col_id = 8
         self.carrier_status_col_id = 4
         self.mutation_status_col_id = 1
+        self.sex_col_id = 3
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'

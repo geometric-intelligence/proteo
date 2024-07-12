@@ -274,6 +274,7 @@ def main():
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
         'mutation_status': tune.choice(config.mutation_status_choices),
+        'sex': tune.choice(config.sex_choices),
     }
 
     scheduler = ASHAScheduler(
