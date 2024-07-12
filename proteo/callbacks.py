@@ -1,5 +1,6 @@
 import io
 import math
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,7 +10,6 @@ import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
-import time
 
 
 class CustomWandbCallback(Callback):
@@ -118,9 +118,12 @@ class CustomWandbCallback(Callback):
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                         "val_accuracy": get_val_accuracy(val_preds, val_targets),
-                        "conf_mat" : wandb.plot.confusion_matrix(probs=None,
-                        y_true=val_targets_np, preds=val_preds_binary_np,
-                        class_names=['Control', 'Carrier']),
+                        "conf_mat": wandb.plot.confusion_matrix(
+                            probs=None,
+                            y_true=val_targets_np,
+                            preds=val_preds_binary_np,
+                            class_names=['Control', 'Carrier'],
+                        ),
                         "epoch": pl_module.current_epoch,
                     }
                 )

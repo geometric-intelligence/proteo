@@ -105,8 +105,15 @@ def train_func(train_loop_config):
                     f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.jpg",
                 )
             ),
-            "avg_node_degree": wandb.Table(columns=["avg_node_degree"], data=[[avg_node_degree]]),
-            "top_proteins": wandb.Table(columns=["Protein"], data=top_proteins_data), #note this is in order from most to least different
+            "top_proteins": wandb.Table(
+                columns=["Protein"], data=top_proteins_data
+            ),  # note this is in order from most to least different
+            "parameters": wandb.Table(
+                columns=["Medium", "Mutation", "Target", "Avg Node Degree"],
+                data=[
+                    [config.plasma_or_csf, config.mutation_status, config.y_val, avg_node_degree]
+                ],
+            ),
         }
     )
 

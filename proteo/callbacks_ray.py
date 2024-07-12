@@ -160,7 +160,7 @@ class CustomRayWandbCallback(Callback):
 
             if pl_module.config.task_type == "classification":
                 val_preds_sigmoid = torch.sigmoid(val_preds)
-                #Note this assumes binary classification
+                # Note this assumes binary classification
                 predicted_classes = (val_preds_sigmoid > 0.5).int()
                 val_accuracy = (predicted_classes == val_targets).float().mean().item()
                 # Convert tensors to numpy arrays and ensure they are integers
@@ -172,10 +172,12 @@ class CustomRayWandbCallback(Callback):
                         "val_preds_sigmoid": wandb.Histogram(val_preds_sigmoid),
                         "val_accuracy": val_accuracy,
                         "epoch": pl_module.current_epoch,
-                        "conf_mat" : wandb.plot.confusion_matrix(probs=None,
-                        y_true=val_targets_np, preds=predicted_classes_np,
-                        class_names=['Control', 'Carrier'])
-
+                        "conf_mat": wandb.plot.confusion_matrix(
+                            probs=None,
+                            y_true=val_targets_np,
+                            preds=predicted_classes_np,
+                            class_names=['Control', 'Carrier'],
+                        ),
                     }
                 )
 

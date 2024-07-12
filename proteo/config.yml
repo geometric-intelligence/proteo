@@ -12,13 +12,14 @@ ray_results_dir: "outputs/ray_results"
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
-# Y Value
-y_val: "carrier_status"
+error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
+# Y Value ("carrier_status", "nfl")
+y_val: "nfl"
 # Plasma or CSF
 plasma_or_csf: "csf"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
-mutation_status: "MAPT"
+mutation_status: "C9orf72"
 # How to weight the classes of the dataset
 
 # WandB
@@ -29,11 +30,11 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 30  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
-adj_thresh: 0.01  #0.08 
+num_nodes: 7288  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+adj_thresh: 0.5  #0.08 
+# Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
-task_type: classification
 # Note: nb of edges depends on adj_thresh as: 
 # n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
@@ -41,6 +42,7 @@ task_type: classification
 model: gat-v4
 dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
+task_type: mse_regression
 
 gat-v4:
   hidden_channels: [16, 64]

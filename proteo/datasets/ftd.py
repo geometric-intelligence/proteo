@@ -151,7 +151,7 @@ class FTDDataset(InMemoryDataset):
 
         # Direct comparison for mutation status
         mutation_status = config.mutation_status
-        
+
         if mutation_status in ["GRN", "MAPT", "C9orf72", "CTL"]:
             condition1 = csv_data['Mutation'] == mutation_status
             condition2 = csv_data['Mutation'] == "CTL"
@@ -191,6 +191,7 @@ class FTDDataset(InMemoryDataset):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         pre_array_csv_data = pd.read_csv(csv_path)  # for KS scores
+        #pre_array_csv_data = self.remove_erroneous_columns(config, pre_array_csv_data)
         csv_data = np.array(pre_array_csv_data)
         if config.plasma_or_csf == 'plasma':
             print("Using plasma data.")
@@ -204,17 +205,19 @@ class FTDDataset(InMemoryDataset):
             raise ValueError("Invalid plasma_or_csf. Must be 'plasma' or 'csf'.")
         # Get the indices of the rows where has_measurement is True
         has_measurement = csv_data[:, has_measurement_col_id].astype(int)
-        #test_has_plasma_col_id(has_plasma)
+        # test_has_plasma_col_id(has_plasma)
         has_measurement = has_measurement == 1  # Converting from indices to boolean
         print("Number of patients with measurements:", np.sum(has_measurement))
-        #test_boolean_plasma(has_plasma)
+        # test_boolean_plasma(has_plasma)
 
         # Additional filtering based on mutation_status, always take mutation status and control
         if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
-            mutation_filter = np.isin(csv_data[:, self.mutation_status_col_id], (config.mutation_status, 'CTL'))
+            mutation_filter = np.isin(
+                csv_data[:, self.mutation_status_col_id], (config.mutation_status, 'CTL')
+            )
         elif config.mutation_status == 'CTL':
             mutation_filter = np.ones_like(has_measurement, dtype=bool)
-        else: 
+        else:
             raise ValueError("Invalid mutation status specified.")
         print("Number of patients with mutation status:", np.sum(mutation_filter))
         combined_filter = has_measurement & mutation_filter
@@ -228,7 +231,9 @@ class FTDDataset(InMemoryDataset):
             "Invalid y_val. Must be 'nfl' or 'carrier_status'."
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        top_protein_col_indices = self.find_top_ks_values(pre_array_csv_data, config, measurement_col_range)
+        top_protein_col_indices = self.find_top_ks_values(
+            pre_array_csv_data, config, measurement_col_range
+        )
         top_proteins = csv_data[combined_filter, :][:, top_protein_col_indices][y_val_mask].astype(
             float
         )
@@ -285,11 +290,11 @@ class FTDDataset(InMemoryDataset):
 
     def load_nfl_values(self, csv_data, x_values):
         nfl = csv_data[x_values, self.nfl_col_id].astype(float)
-        test_nfl_mean(nfl)
+        #test_nfl_mean(nfl)
         nfl_mask = ~np.isnan(nfl)
         # Remove NaN values from nfl
         nfl = nfl[nfl_mask]
-        test_nfl_mean_no_nan(nfl)
+        #test_nfl_mean_no_nan(nfl)
         nfl = log_transform(nfl)
         hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
         plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
@@ -308,6 +313,22 @@ class FTDDataset(InMemoryDataset):
                 "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
             )
         return carrier_status, carrier_mask
+    
+    def remove_erroneous_columns(self, config, csv_data):
+        """Remove columns that have all NaN values."""
+        # Remove columns that have all NaN values
+        csv_path = os.path.join(self.raw_dir, config.error_protein_file_name)
+        error_proteins_df = pd.read_excel(csv_path)
+        # Extract column names under "Plasma" and "CSF"
+        plasma_columns = error_proteins_df['Plasma'].dropna().tolist()
+        csf_columns = error_proteins_df['CSF'].dropna().tolist()
+        columns_to_remove = list(set(plasma_columns + csf_columns))
+        # Remove the columns
+        csv_data = csv_data.drop(columns=columns_to_remove)
+        return csv_data
+
+
+
 
 
 def calculate_adjacency_matrix(plasma_protein, save_to):
