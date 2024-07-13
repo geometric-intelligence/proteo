@@ -11,7 +11,7 @@ ray_results_dir: "outputs/ray_results"
 
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
-raw_file_name: "ALLFTD_dataset_for_nina_louisa.csv"
+raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier_status", "nfl")
 y_val: "nfl"

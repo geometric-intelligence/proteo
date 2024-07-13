@@ -197,8 +197,8 @@ class FTDDataset(InMemoryDataset):
     def load_csv_data(self, config):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
-        csv_data = pd.read_csv(csv_path)  # for KS scores
-        # csv_data = self.remove_erroneous_columns(config, csv_data)
+        csv_data = pd.read_csv(csv_path)
+        csv_data = self.remove_erroneous_columns(config, csv_data)
         if config.plasma_or_csf == 'plasma':
             print("Using plasma data.")
             has_measurement_col = self.has_plasma_col
@@ -329,8 +329,7 @@ class FTDDataset(InMemoryDataset):
         return carrier_status, carrier_mask.values
 
     def remove_erroneous_columns(self, config, csv_data):
-        """Remove columns that have all NaN values."""
-        # Remove columns that have all NaN values
+        """Remove columns that have bimodal distributions."""
         csv_path = os.path.join(self.raw_dir, config.error_protein_file_name)
         error_proteins_df = pd.read_excel(csv_path)
         # Extract column names under "Plasma" and "CSF"
