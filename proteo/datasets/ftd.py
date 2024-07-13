@@ -56,14 +56,14 @@ class FTDDataset(InMemoryDataset):
         self.split = split
         assert split in ["train", "test"]
         self.config = config
-        self.has_plasma_col_id = 9
-        self.plasma_protein_col_range = (10, 7299)
-        self.has_csf_col_id = 7299
-        self.csf_protein_col_range = (7300, 14588)
-        self.nfl_col_id = 8
-        self.carrier_status_col_id = 4
-        self.mutation_status_col_id = 1
-        self.sex_col_id = 3
+        self.has_plasma_col = 'HasPlasma?'
+        self.plasma_protein_col_end = '|PLASMA'
+        self.has_csf_col = 'HasCSF?'
+        self.csf_protein_col_end = '|CSF'
+        self.nfl_col = 'NFL3_MEAN'
+        self.carrier_status_col = 'Carrier.Status'
+        self.mutation_status_col = 'Mutation'
+        self.sex_col = 'SEX_AT_BIRTH'
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
@@ -148,7 +148,7 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
-    def find_top_ks_values(self, csv_data, config, measurement_col_range):
+    def find_top_ks_values(self, csv_data, config, measurement_col_end):
         '''Find the top n_nodes most different proteins based on p-value from KS test between subgroup specified by config and control group.'''
         ks_stats = []
 
@@ -165,9 +165,9 @@ class FTDDataset(InMemoryDataset):
         else:
             raise ValueError("Invalid mutation status specified.")
 
-        for i in range(measurement_col_range[0], measurement_col_range[1]):
-            protein_column = csv_data.columns[i]
-
+        # Filter columns that end with '|PLASMA'
+        plasma_columns = [col for col in csv_data.columns if col.endswith(measurement_col_end)]
+        for protein_column in plasma_columns:
             mutation_data = csv_data[condition1][protein_column]
             other_data = csv_data[condition2][protein_column]
 
@@ -177,10 +177,10 @@ class FTDDataset(InMemoryDataset):
             other_data = other_data[np.isfinite(other_data)]
 
             ks_statistic, ks_p_value = ks_2samp(mutation_data, other_data)
-            ks_stats.append((protein_column, i, ks_statistic, ks_p_value))
+            ks_stats.append((protein_column, ks_statistic, ks_p_value))
 
         ks_stats_df = pd.DataFrame(
-            ks_stats, columns=['Protein', 'Column', 'KS_Statistic', 'P Value']
+            ks_stats, columns=['Protein', 'KS_Statistic', 'P Value']
         )
         top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(config.num_nodes)
 
@@ -192,52 +192,49 @@ class FTDDataset(InMemoryDataset):
         )
         np.save(file_path, plasma_protein_names)
 
-        return top_columns['Column'].values
+        return top_columns['Protein'].tolist()
 
     def load_csv_data(self, config):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
-        pre_array_csv_data = pd.read_csv(csv_path)  # for KS scores
-        # pre_array_csv_data = self.remove_erroneous_columns(config, pre_array_csv_data)
-        csv_data = np.array(pre_array_csv_data)
+        csv_data = pd.read_csv(csv_path)  # for KS scores
+        # csv_data = self.remove_erroneous_columns(config, csv_data)
         if config.plasma_or_csf == 'plasma':
             print("Using plasma data.")
-            has_measurement_col_id = self.has_plasma_col_id
-            measurement_col_range = self.plasma_protein_col_range
+            has_measurement_col = self.has_plasma_col
+            measurement_col_end = self.plasma_protein_col_end
         elif config.plasma_or_csf == 'csf':
             print("Using CSF data.")
-            has_measurement_col_id = self.has_csf_col_id
-            measurement_col_range = self.csf_protein_col_range
+            has_measurement_col = self.has_csf_col
+            measurement_col_end = self.csf_protein_col_end
         else:
             raise ValueError("Invalid plasma_or_csf. Must be 'plasma' or 'csf'.")
         # Get the indices of the rows where has_measurement is True
-        has_measurement = csv_data[:, has_measurement_col_id].astype(int)
+        has_measurement = csv_data[has_measurement_col].astype(int) == 1
+        print("Number of patients with measurements:", has_measurement.sum())
         # test_has_plasma_col_id(has_plasma)
-        has_measurement = has_measurement == 1  # Converting from indices to boolean
-        print("Number of patients with measurements:", np.sum(has_measurement))
         # test_boolean_plasma(has_plasma)
 
         # Additional filtering based on mutation_status, always take mutation status and control
         if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
-            mutation_filter = np.isin(
-                csv_data[:, self.mutation_status_col_id], (config.mutation_status, 'CTL')
-            )
+            mutation_filter = csv_data[self.mutation_status_col].isin([config.mutation_status, 'CTL'])
         elif config.mutation_status == 'CTL':
-            mutation_filter = np.ones_like(has_measurement, dtype=bool)
+            mutation_filter = pd.Series([True] * len(csv_data))
         else:
             raise ValueError("Invalid mutation status specified.")
-        print("Number of patients with mutation status:", np.sum(mutation_filter))
+        print("Number of patients with mutation status + control:", mutation_filter.sum())
         # Additional filtering based on sex
         if config.sex in ['M', 'F']:
-            sex_filter = csv_data[:, self.sex_col_id] == config.sex
+            sex_filter = csv_data[self.sex_col] == config.sex
         elif config.sex == 'All':
-            sex_filter = np.ones_like(has_measurement, dtype=bool)
+            sex_filter = pd.Series([True] * len(csv_data))
         else:
             raise ValueError("Invalid sex specified.")
+        print("Number of patients with sex:", sex_filter.sum())
         combined_filter = has_measurement & mutation_filter & sex_filter
         print(
             "Number of patients with measurements, sex, and mutation status:",
-            np.sum(combined_filter),
+            combined_filter.sum(),
         )
 
         if config.y_val == 'nfl':
@@ -246,17 +243,17 @@ class FTDDataset(InMemoryDataset):
             y_val, y_val_mask = self.load_carrier_status(csv_data, combined_filter)
         else:
             "Invalid y_val. Must be 'nfl' or 'carrier_status'."
+        
+        top_protein_columns = self.find_top_ks_values(
+            csv_data, config, measurement_col_end
+        )
+        top_proteins = csv_data.loc[combined_filter, top_protein_columns].dropna().astype(float)
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
-        top_protein_col_indices = self.find_top_ks_values(
-            pre_array_csv_data, config, measurement_col_range
-        )
-        top_proteins = csv_data[combined_filter, :][:, top_protein_col_indices][y_val_mask].astype(
-            float
-        )
-        # test_plasma_protein(plasma_protein) TODO: remove?
-        features = top_proteins
-        labels = y_val
+        top_proteins = top_proteins[y_val_mask]
+
+        features = np.array(top_proteins)
+        labels = np.array(y_val)
 
         train_features, test_features, train_labels, test_labels = train_test_split(
             features, labels, test_size=0.20, random_state=42
@@ -306,7 +303,7 @@ class FTDDataset(InMemoryDataset):
         )
 
     def load_nfl_values(self, csv_data, x_values):
-        nfl = csv_data[x_values, self.nfl_col_id].astype(float)
+        nfl = csv_data.loc[x_values, self.nfl_col].astype(float)
         # test_nfl_mean(nfl)
         nfl_mask = ~np.isnan(nfl)
         # Remove NaN values from nfl
@@ -315,11 +312,11 @@ class FTDDataset(InMemoryDataset):
         nfl = log_transform(nfl)
         hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
         plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
-        return nfl, nfl_mask
+        return nfl.values, nfl_mask.values
 
     def load_carrier_status(self, csv_data, x_values):
-        carrier_status = csv_data[x_values, self.carrier_status_col_id].astype(str)
-        carrier_mask = ~pd.isna(carrier_status)
+        carrier_status = csv_data.loc[x_values, self.carrier_status_col].astype(str)
+        carrier_mask = ~carrier_status.isna()
         carrier_status = carrier_status[carrier_mask]
         carrier_status = np.where(
             carrier_status == 'Carrier', 1, np.where(carrier_status == 'CTL', 0, None)
@@ -329,7 +326,7 @@ class FTDDataset(InMemoryDataset):
             raise ValueError(
                 "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
             )
-        return carrier_status, carrier_mask
+        return carrier_status, carrier_mask.values
 
     def remove_erroneous_columns(self, config, csv_data):
         """Remove columns that have all NaN values."""

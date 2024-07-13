@@ -19,7 +19,7 @@ y_val: "nfl"
 plasma_or_csf: "csf"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
-mutation_status: "GRN"
+mutation_status: "MAPT"
 # 'M', 'F', 'All'
 sex: 'F'
 
@@ -31,7 +31,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 150  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+num_nodes: 151  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
 adj_thresh: 0.1  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
