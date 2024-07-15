@@ -33,9 +33,18 @@ class FTDDataset(InMemoryDataset):
     with the global score regularly used in clinical and research settings
     to stage dementia severity. Higher is worse.
     - 8: NFL3_MEAN *(float):* plasma NfL concentrations
+    - 9 : ef.unadj.intercept: Executive function unadjusted intercept
+    - 10 : ef.unadj.slope: Executive function unadjusted slope
+    - 11: ef.adj.intercept: Executive function adjusted intercept
+    - 12: ef.adj.slope: Executive function adjusted slope
+    - 13: mem.unadj.intercept: Memory unadjusted intercept
+    - 14: mem.unadj.slope: Memory unadjusted slope
+    - 15: mem.adj.intercept: Memory adjusted intercept
+    - 16: mem.adj.slope: Memory adjusted slope
+    - 17: disease.age: Disease age
 
     - 9: HasPlasma? *(int)*: 1, 0 (519 Yes)
-    - 10 - 7298: Proteins *(float)*:
+    - 19 - 7307: Proteins *(float)*:
 
     Protein variables are annotated as
       Protein Symbol | UniProt ID^Sequence ID| Matrix (CSF or PLASMA).
@@ -44,9 +53,9 @@ class FTDDataset(InMemoryDataset):
       ABL2|P42684^SL010488@seq.3342.76|PLASMA ,
       ABL2|P42684^SL010488@seq.5261.13|PLASMA
 
-    - 7299: HasCSF? *(int)*: 1, 0 (254 Yes)
-    - 7300 - 14588: Proteins *(float)*:
-    - 14589 - 15212: Clinical Data - maybe not necessary for right now.
+    - 7308: HasCSF? *(int)*: 1, 0 (254 Yes)
+    - 7309 - 14597: Proteins *(float)*:
+    - 14598 - 15221: Clinical Data - maybe not necessary for right now.
 
     """
 
@@ -62,6 +71,9 @@ class FTDDataset(InMemoryDataset):
         self.csf_protein_col_end = '|CSF'
         self.nfl_col = 'NFL3_MEAN'
         self.carrier_status_col = 'Carrier.Status'
+        self.disease_age_col = 'disease.age'
+        self.executive_function_unadj_slope_col = 'ef.unadj.slope'
+        self.memory_unadj_slope_col = 'mem.unadj.slope'
         self.mutation_status_col = 'Mutation'
         self.sex_col = 'SEX_AT_BIRTH'
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
@@ -156,11 +168,19 @@ class FTDDataset(InMemoryDataset):
         mutation_status = config.mutation_status
         sex = config.sex
 
-        if mutation_status in ["GRN", "MAPT", "C9orf72"]: #Compare mutation to control
-            condition1 = (csv_data['Mutation'] == mutation_status) & (csv_data['SEX_AT_BIRTH'] == sex)
+        if mutation_status in [
+            "GRN",
+            "MAPT",
+            "C9orf72",
+        ]:  # Compare mutation to control (within correct sex)
+            condition1 = (csv_data['Mutation'] == mutation_status) & (
+                csv_data['SEX_AT_BIRTH'] == sex
+            )
             condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'] == sex)
-        elif mutation_status == "CTL": #Compare CTL to all other mutations
-            condition1 = csv_data['Mutation'].isin(["GRN", "MAPT", "C9orf72"]) & (csv_data['SEX_AT_BIRTH'] == sex)
+        elif mutation_status == "CTL":  # Compare CTL to all other mutations (within correct sex)
+            condition1 = csv_data['Mutation'].isin(["GRN", "MAPT", "C9orf72"]) & (
+                csv_data['SEX_AT_BIRTH'] == sex
+            )
             condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'] == sex)
         else:
             raise ValueError("Invalid mutation status specified.")
@@ -179,9 +199,7 @@ class FTDDataset(InMemoryDataset):
             ks_statistic, ks_p_value = ks_2samp(mutation_data, other_data)
             ks_stats.append((protein_column, ks_statistic, ks_p_value))
 
-        ks_stats_df = pd.DataFrame(
-            ks_stats, columns=['Protein', 'KS_Statistic', 'P Value']
-        )
+        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
         top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(config.num_nodes)
 
         # Save the plasma_protein_names to a file
@@ -217,7 +235,9 @@ class FTDDataset(InMemoryDataset):
 
         # Additional filtering based on mutation_status, always take mutation status and control
         if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
-            mutation_filter = csv_data[self.mutation_status_col].isin([config.mutation_status, 'CTL'])
+            mutation_filter = csv_data[self.mutation_status_col].isin(
+                [config.mutation_status, 'CTL']
+            )
         elif config.mutation_status == 'CTL':
             mutation_filter = pd.Series([True] * len(csv_data))
         else:
@@ -236,17 +256,30 @@ class FTDDataset(InMemoryDataset):
             "Number of patients with measurements, sex, and mutation status:",
             combined_filter.sum(),
         )
-
-        if config.y_val == 'nfl':
-            y_val, y_val_mask = self.load_nfl_values(csv_data, combined_filter)
+        y_values = {
+            'nfl': self.nfl_col,
+            'disease_age': self.disease_age_col,
+            'executive_function': self.executive_function_unadj_slope_col,
+            'memory': self.memory_unadj_slope_col,
+            'clinical_dementia_rating': 'FTLDCDR_SBL',
+            'carrier_status': self.carrier_status_col,
+        }
+        if config.y_val in [
+            'nfl',
+            "disease_age",
+            "executive_function",
+            "memory",
+            "clinical_dementia_rating",
+        ]:
+            y_val, y_val_mask = self.load_continuous_values(
+                csv_data, combined_filter, y_values[config.y_val]
+            )
         elif config.y_val == 'carrier_status':
             y_val, y_val_mask = self.load_carrier_status(csv_data, combined_filter)
         else:
-            "Invalid y_val. Must be 'nfl' or 'carrier_status'."
-        
-        top_protein_columns = self.find_top_ks_values(
-            csv_data, config, measurement_col_end
-        )
+            "Invalid y_val. Must be 'nfl','disease_age','executive_function','memory','clinical_dementia_rating' or 'carrier_status'."
+
+        top_protein_columns = self.find_top_ks_values(csv_data, config, measurement_col_end)
         top_proteins = csv_data.loc[combined_filter, top_protein_columns].dropna().astype(float)
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
@@ -302,17 +335,21 @@ class FTDDataset(InMemoryDataset):
             adj_matrix,
         )
 
-    def load_nfl_values(self, csv_data, x_values):
-        nfl = csv_data.loc[x_values, self.nfl_col].astype(float)
-        # test_nfl_mean(nfl)
-        nfl_mask = ~np.isnan(nfl)
-        # Remove NaN values from nfl
-        nfl = nfl[nfl_mask]
+    def load_continuous_values(self, csv_data, x_values, y_val_col):
+        y_values = csv_data.loc[x_values, y_val_col].astype(float)
+        y_values_mask = ~np.isnan(y_values)
+        # Remove NaN values from chosen y_val column
+        y_values = y_values[y_values_mask]
+        print(y_values)
         # test_nfl_mean_no_nan(nfl)
-        nfl = log_transform(nfl)
-        hist_path = os.path.join(self.processed_dir, 'histogram.jpg')
-        plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
-        return nfl.values, nfl_mask.values
+        y_values = log_transform(y_values)
+        print("After log transform", y_values)
+        hist_path = os.path.join(
+            self.processed_dir,
+            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation_status}_histogram.jpg',
+        )
+        plot_histogram(pd.DataFrame(y_values), self.config.y_val, save_to=hist_path)
+        return y_values.values, y_values_mask.values
 
     def load_carrier_status(self, csv_data, x_values):
         carrier_status = csv_data.loc[x_values, self.carrier_status_col].astype(str)
@@ -356,25 +393,25 @@ def calculate_adjacency_matrix(plasma_protein, save_to):
     adjacency_df.to_csv(save_to, header=None, index=False)
 
 
-def plot_histogram(data, save_to):
+def plot_histogram(data, x_label, save_to):
     plt.hist(data, bins=30, alpha=0.5)
-    plt.xlabel('NFL3_MEAN')
+    plt.xlabel(x_label)
     plt.ylabel('Frequency')
-    plt.title('Histogram of NFL3_MEAN')
+    plt.title(f'Histogram of {x_label}')
     plt.savefig(save_to, format='jpg')
 
 
 def log_transform(data):
     # Log transformation
+    # Add minimum value to all to avoid log of negative number
+    data = data + abs(min(data)) + 1
     log_data = np.log(data)
-
     mean = np.mean(log_data)
     std = np.std(log_data)
     standardized_log_data = (log_data - mean) / std
     return standardized_log_data
 
-
-def reverse_log_transform(standardized_log_data):
+def reverse_log_transform(standardized_log_data, min_val):
     # De-standardize the data
     mean = np.mean(standardized_log_data)
     std = np.std(standardized_log_data)
@@ -382,6 +419,8 @@ def reverse_log_transform(standardized_log_data):
 
     # Reverse the log transformation by applying the exponential function
     original_data = np.exp(log_data)
+    original_data = original_data - abs(min_val) - 1
+    
 
     return original_data
 

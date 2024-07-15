@@ -392,7 +392,10 @@ def main():
     logger.log_image(
         key="dataset_statistics",
         images=[
-            os.path.join(train_dataset.processed_dir, "histogram.jpg"),
+            os.path.join(
+                train_dataset.processed_dir,
+                f'{config.y_val}_{config.sex}_{config.mutation_status}_histogram.jpg',
+            ),
             os.path.join(
                 train_dataset.processed_dir,
                 f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.jpg",
@@ -406,8 +409,8 @@ def main():
     logger.log_text(key="top_proteins", columns=["Protein"], data=top_proteins_data)
     logger.log_text(
         key="Parameters",
-        columns=["Medium", "Mutation", "Target", "Avg Node Degree"],
-        data=[[config.plasma_or_csf, config.mutation_status, config.y_val, avg_node_degree]],
+        columns=["Medium", "Mutation", "Target", "Sex",  "Avg Node Degree"],
+        data=[[config.plasma_or_csf, config.mutation_status, config.y_val, config.sex, avg_node_degree]],
     )
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(

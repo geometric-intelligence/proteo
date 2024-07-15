@@ -98,7 +98,12 @@ def train_func(train_loop_config):
 
     wandb.log(
         {
-            "histogram": wandb.Image(os.path.join(train_dataset.processed_dir, "histogram.jpg")),
+            "histogram": wandb.Image(
+                os.path.join(
+                    train_dataset.processed_dir,
+                    f'{config.y_val}_{config.sex}_{config.mutation_status}_histogram.jpg',
+                )
+            ),
             "adjacency": wandb.Image(
                 os.path.join(
                     train_dataset.processed_dir,
@@ -109,9 +114,9 @@ def train_func(train_loop_config):
                 columns=["Protein"], data=top_proteins_data
             ),  # note this is in order from most to least different
             "parameters": wandb.Table(
-                columns=["Medium", "Mutation", "Target", "Avg Node Degree"],
+                columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
                 data=[
-                    [config.plasma_or_csf, config.mutation_status, config.y_val, avg_node_degree]
+                    [config.plasma_or_csf, config.mutation_status, config.y_val, config.sex, avg_node_degree]
                 ],
             ),
         }
@@ -275,6 +280,8 @@ def main():
         'adj_thresh': tune.choice(config.adj_thresh_choices),
         'mutation_status': tune.choice(config.mutation_status_choices),
         'sex': tune.choice(config.sex_choices),
+        'plasma_or_csf': tune.choice(config.plasma_or_csf_choices),
+        'y_val': tune.choice(config.y_val_choices),
     }
 
     scheduler = ASHAScheduler(
