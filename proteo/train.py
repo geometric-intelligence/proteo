@@ -409,8 +409,16 @@ def main():
     logger.log_text(key="top_proteins", columns=["Protein"], data=top_proteins_data)
     logger.log_text(
         key="Parameters",
-        columns=["Medium", "Mutation", "Target", "Sex",  "Avg Node Degree"],
-        data=[[config.plasma_or_csf, config.mutation_status, config.y_val, config.sex, avg_node_degree]],
+        columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
+        data=[
+            [
+                config.plasma_or_csf,
+                config.mutation_status,
+                config.y_val,
+                config.sex,
+                avg_node_degree,
+            ]
+        ],
     )
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(

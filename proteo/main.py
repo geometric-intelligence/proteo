@@ -116,7 +116,13 @@ def train_func(train_loop_config):
             "parameters": wandb.Table(
                 columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
                 data=[
-                    [config.plasma_or_csf, config.mutation_status, config.y_val, config.sex, avg_node_degree]
+                    [
+                        config.plasma_or_csf,
+                        config.mutation_status,
+                        config.y_val,
+                        config.sex,
+                        avg_node_degree,
+                    ]
                 ],
             ),
         }

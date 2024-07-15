@@ -74,6 +74,7 @@ class FTDDataset(InMemoryDataset):
         self.disease_age_col = 'disease.age'
         self.executive_function_unadj_slope_col = 'ef.unadj.slope'
         self.memory_unadj_slope_col = 'mem.unadj.slope'
+        self.clinical_dementia_rating_col = 'FTLDCDR_SB'
         self.mutation_status_col = 'Mutation'
         self.sex_col = 'SEX_AT_BIRTH'
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
@@ -261,7 +262,7 @@ class FTDDataset(InMemoryDataset):
             'disease_age': self.disease_age_col,
             'executive_function': self.executive_function_unadj_slope_col,
             'memory': self.memory_unadj_slope_col,
-            'clinical_dementia_rating': 'FTLDCDR_SBL',
+            'clinical_dementia_rating': self.clinical_dementia_rating_col,
             'carrier_status': self.carrier_status_col,
         }
         if config.y_val in [
@@ -340,10 +341,9 @@ class FTDDataset(InMemoryDataset):
         y_values_mask = ~np.isnan(y_values)
         # Remove NaN values from chosen y_val column
         y_values = y_values[y_values_mask]
-        print(y_values)
         # test_nfl_mean_no_nan(nfl)
-        y_values = log_transform(y_values)
-        print("After log transform", y_values)
+        if self.config.y_val == 'nfl':
+            y_values = log_transform(y_values)
         hist_path = os.path.join(
             self.processed_dir,
             f'{self.config.y_val}_{self.config.sex}_{self.config.mutation_status}_histogram.jpg',
@@ -403,15 +403,14 @@ def plot_histogram(data, x_label, save_to):
 
 def log_transform(data):
     # Log transformation
-    # Add minimum value to all to avoid log of negative number
-    data = data + abs(min(data)) + 1
     log_data = np.log(data)
     mean = np.mean(log_data)
     std = np.std(log_data)
     standardized_log_data = (log_data - mean) / std
     return standardized_log_data
 
-def reverse_log_transform(standardized_log_data, min_val):
+
+def reverse_log_transform(standardized_log_data):
     # De-standardize the data
     mean = np.mean(standardized_log_data)
     std = np.std(standardized_log_data)
@@ -419,8 +418,6 @@ def reverse_log_transform(standardized_log_data, min_val):
 
     # Reverse the log transformation by applying the exponential function
     original_data = np.exp(log_data)
-    original_data = original_data - abs(min_val) - 1
-    
 
     return original_data
 
