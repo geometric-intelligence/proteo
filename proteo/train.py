@@ -40,6 +40,7 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     StepLR,
 )
+from focal_loss.focal_loss import FocalLoss
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
@@ -60,12 +61,13 @@ class Proteo(pl.LightningModule):
     """
 
     LOSS_MAP = {
-        "classification": torch.nn.BCEWithLogitsLoss,  # "binary cross-entropy loss with logits"
+        "binary_classification": torch.nn.BCEWithLogitsLoss,  # "binary cross-entropy loss with logits"
+        "multiclass_classification": FocalLoss,
         "l1_regression": torch.nn.L1Loss,
         "mse_regression": torch.nn.MSELoss,
     }
 
-    def __init__(self, config: Config, in_channels, out_channels, avg_node_degree, pos_weight):
+    def __init__(self, config: Config, in_channels, out_channels, avg_node_degree, pos_weight, focal_loss_weight):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
         self.save_hyperparameters()
@@ -78,6 +80,7 @@ class Proteo(pl.LightningModule):
         self.train_targets = []
         self.val_targets = []
         self.pos_weight = pos_weight
+        self.focal_loss_weight = focal_loss_weight
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -94,7 +97,6 @@ class Proteo(pl.LightningModule):
                 fc_act=self.config_model.fc_act,
                 num_nodes=self.config.num_nodes,
                 weight_initializer=self.config_model.weight_initializer,
-                task_type=self.config.task_type,
             )
         elif config.model == 'gat':
             self.model = GAT(
@@ -169,15 +171,21 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        if self.config.task_type == "classification":
+        if self.config.y_val == "carrier_status":
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
-            loss_fn = self.LOSS_MAP[self.config.task_type](
+            loss_fn = self.LOSS_MAP["binary_classification"](
                 pos_weight=self.pos_weight, reduction="mean"
             )
+        elif self.config.y_val == 'clinical_dementia_rating_global':
+            device = pred.device
+            self.focal_loss_weight = self.focal_loss_weight.to(device)
+            loss_fn = self.LOSS_MAP["multiclass_classification"](
+                weights=self.focal_loss_weight, gamma=2, reduction="mean"
+            )
         else:
-            loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
+            loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
         loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
@@ -210,15 +218,23 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        if self.config.task_type == "classification":
+        if self.config.y_val == "carrier_status":
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
-            loss_fn = self.LOSS_MAP[self.config.task_type](
+            loss_fn = self.LOSS_MAP["binary_classification"](
                 pos_weight=self.pos_weight, reduction="mean"
             )
+        elif self.config.y_val == 'clinical_dementia_rating_global':
+            device = pred.device
+            self.focal_loss_weight = self.focal_loss_weight.to(device)
+            loss_fn = self.LOSS_MAP["multiclass_classification"](
+                weights=self.focal_loss_weight, gamma=2, reduction="mean"
+            )
+            #TODO: is this correct here
+            pred = torch.softmax(pred, dim=1)
         else:
-            loss_fn = self.LOSS_MAP[self.config.task_type](reduction="mean")
+            loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
         loss = loss_fn(pred, target)
         return loss
 
@@ -276,6 +292,44 @@ def compute_pos_weight(config):  # TODO: this doesn't take into account filterin
     # Count the occurrences of config.mutation_status in the 'Mutation' column
     mutation_status_count = df['Mutation'].value_counts().get(config.mutation_status, 0)
     return torch.FloatTensor([control_count / mutation_status_count])
+
+def compute_focal_loss_weight(config):
+    #TODO - not the best because this code is copied from ftd.py, but weight needs to be recomputed for each set
+    # Get cdr global values for specific subset
+    csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
+    df = pd.read_csv(csv_path)
+    if config.plasma_or_csf == 'plasma':
+        has_measurement_col = 'HasPlasma?'
+    elif config.plasma_or_csf == 'csf':
+        has_measurement_col = 'HasCSF?'
+    # Get the indices of the rows where has_measurement is True
+    has_measurement = df[has_measurement_col].astype(int) == 1
+
+    # Additional filtering based on mutation_status, always take mutation status and control
+    if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
+        mutation_filter = df['Mutation'].isin(
+            [config.mutation_status, 'CTL']
+        )
+    elif config.mutation_status == 'CTL':
+        mutation_filter = pd.Series([True] * len(df))
+    # Additional filtering based on sex
+    if config.sex in ['M', 'F']:
+        sex_filter = df['SEX_AT_BIRTH'] == config.sex
+    elif config.sex == 'All':
+        sex_filter = pd.Series([True] * len(df))
+    combined_filter = has_measurement & mutation_filter & sex_filter
+    cdrglob_values = df.loc[combined_filter, 'CDRGLOB'].astype(float)
+    # Compute the weight for the focal loss
+    specific_values = [0, 0.5, 1, 2, 3]
+    frequencies = []
+    for value in specific_values:
+        count = (cdrglob_values == value).sum()
+        frequencies.append(count)
+    # Calculate weights inversely proportional to the frequencies
+    frequencies = torch.tensor(frequencies, dtype=torch.float32)
+    weights = 1.0 / frequencies 
+    return weights
+
 
 
 def construct_datasets(config):
@@ -376,8 +430,11 @@ def main():
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
     pos_weight = compute_pos_weight(config)
-    if config.task_type == "classification":
+    focal_loss_weight = compute_focal_loss_weight(config)
+    if config.y_val == "carrier_status":
         print(f"pos_weight used for loss function: {pos_weight}")
+    elif config.y_val == 'clinical_dementia_rating_global':
+        print(f"focal_loss_weight used for loss function: {focal_loss_weight}")
 
     module = Proteo(
         config,
@@ -385,6 +442,7 @@ def main():
         out_channels=train_dataset.label_dim,  # 1 dim of result,
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
+        focal_loss_weight=focal_loss_weight,
     )
 
     logger = get_wandb_logger(config)

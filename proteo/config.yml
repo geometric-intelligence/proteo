@@ -13,13 +13,13 @@ ray_results_dir: "outputs/ray_results"
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
-# Y Value ("carrier_status", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating")
-y_val: "disease_age"
+# Y Value ("carrier_status", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global")
+y_val: "clinical_dementia_rating_global"
 # Plasma or CSF
-plasma_or_csf: "csf"
+plasma_or_csf: "plasma"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
-mutation_status: "MAPT"
+mutation_status: "CTL"
 # 'M', 'F', 'All'
 sex: 'All'
 
@@ -43,7 +43,6 @@ wgcna_mergeCutHeight: 0.25
 model: gat-v4
 dropout: 0.2  # dropout of the gconvs
 act: tanh  # act of the gconvs
-task_type: mse_regression
 
 gat-v4:
   hidden_channels: [16, 64]
@@ -115,7 +114,7 @@ adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
 mutation_status_choices: ['MAPT', 'GRN', 'C9orf72', 'CTL']
 sex_choices: ['M', 'F', 'All']
 plasma_or_csf_choices: ['plasma', 'csf']
-y_val_choices: ['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl']
+y_val_choices: ['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl', "clinical_dementia_rating_global"]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]

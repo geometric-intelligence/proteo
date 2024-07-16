@@ -121,7 +121,7 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.task_type == "classification":
+        if pl_module.config.y_val == "carrier_status":
             wandb.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
@@ -158,7 +158,7 @@ class CustomRayWandbCallback(Callback):
                 }
             )
 
-            if pl_module.config.task_type == "classification":
+            if pl_module.config.y_val == "carrier_status":
                 val_preds_sigmoid = torch.sigmoid(val_preds)
                 # Note this assumes binary classification
                 predicted_classes = (val_preds_sigmoid > 0.5).int()

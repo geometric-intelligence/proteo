@@ -75,6 +75,7 @@ class FTDDataset(InMemoryDataset):
         self.executive_function_unadj_slope_col = 'ef.unadj.slope'
         self.memory_unadj_slope_col = 'mem.unadj.slope'
         self.clinical_dementia_rating_col = 'FTLDCDR_SB'
+        self.clinical_dementia_rating_global_col = 'CDRGLOB'
         self.mutation_status_col = 'Mutation'
         self.sex_col = 'SEX_AT_BIRTH'
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
@@ -263,6 +264,7 @@ class FTDDataset(InMemoryDataset):
             'executive_function': self.executive_function_unadj_slope_col,
             'memory': self.memory_unadj_slope_col,
             'clinical_dementia_rating': self.clinical_dementia_rating_col,
+            'clinical_dementia_rating_global': self.clinical_dementia_rating_global_col,
             'carrier_status': self.carrier_status_col,
         }
         if config.y_val in [
@@ -271,6 +273,7 @@ class FTDDataset(InMemoryDataset):
             "executive_function",
             "memory",
             "clinical_dementia_rating",
+            "clinical_dementia_rating_global",
         ]:
             y_val, y_val_mask = self.load_continuous_values(
                 csv_data, combined_filter, y_values[config.y_val]

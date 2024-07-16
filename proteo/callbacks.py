@@ -75,7 +75,7 @@ class CustomWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.task_type == "classification":
+        if pl_module.config.y_val == "carrier_status":
             pl_module.logger.experiment.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
@@ -106,7 +106,7 @@ class CustomWandbCallback(Callback):
                 }
             )
 
-            if pl_module.config.task_type == "classification":
+            if pl_module.config.y_val == "carrier_status":
                 # Assuming binary classification; for multi-class, adjust accordingly
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
                 # Convert tensors to numpy arrays and ensure they are integers
