@@ -14,7 +14,7 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier_status", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global")
-y_val: "clinical_dementia_rating_global"
+y_val: "carrier_status"
 # Plasma or CSF
 plasma_or_csf: "plasma"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
@@ -31,7 +31,7 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 151  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+num_nodes: 150  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
 adj_thresh: 0.1  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
@@ -66,7 +66,7 @@ gcn:
 
 
 # Training
-batch_size: 30 #for one off training
+batch_size: 10 #for one off training
 epochs: 300
 num_workers: 16
 sync_batchnorm: false
@@ -79,7 +79,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
@@ -94,7 +94,7 @@ num_samples: 300
 grace_period: 30  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
-checkpoint_every_n_epochs: 5  # Nb of iterations between checkpoints. If 0: no checkpointing.
+checkpoint_every_n_epochs: 50  # Nb of iterations between checkpoints. If 0: no checkpointing.
 # Nb of trainings run in parallel is the maximum amount 
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
 cpu_per_worker: 16
@@ -114,7 +114,7 @@ adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
 mutation_status_choices: ['MAPT', 'GRN', 'C9orf72', 'CTL']
 sex_choices: ['M', 'F', 'All']
 plasma_or_csf_choices: ['plasma', 'csf']
-y_val_choices: ['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl', "clinical_dementia_rating_global"]
+y_val_choices: ['carrier_status'] #['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]

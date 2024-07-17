@@ -10,6 +10,7 @@ import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
+import pandas as pd
 
 
 class CustomWandbCallback(Callback):
@@ -65,6 +66,8 @@ class CustomWandbCallback(Callback):
             Lightning's module for training.
         """
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
+        if pl_module.config.y_val == "clinical_dementia_rating_global":
+            pl_module.train_targets = reshape_targets(pl_module.train_targets)
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         pl_module.logger.experiment.log(
@@ -79,6 +82,13 @@ class CustomWandbCallback(Callback):
             pl_module.logger.experiment.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "epoch": pl_module.current_epoch,
+                }
+            )
+        elif pl_module.config.y_val == "clinical_dementia_rating_global":
+            pl_module.logger.experiment.log(
+                {
+                    "train_preds_softmax": wandb.Histogram(torch.nn.Softmax(dim=-1)(train_preds)),
                     "epoch": pl_module.current_epoch,
                 }
             )
@@ -97,6 +107,8 @@ class CustomWandbCallback(Callback):
         """
         if not trainer.sanity_checking:
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
+            if pl_module.config.y_val == "clinical_dementia_rating_global":
+                pl_module.val_targets = reshape_targets(pl_module.val_targets)
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             pl_module.logger.experiment.log(
                 {
@@ -112,21 +124,19 @@ class CustomWandbCallback(Callback):
                 # Convert tensors to numpy arrays and ensure they are integers
                 val_targets_np = val_targets.numpy().astype(int).flatten()
                 val_preds_binary_np = val_preds_binary.numpy().astype(int).flatten()
-
+                conf_matrix = confusion_matrix(val_targets_np, val_preds_binary_np)
+                conf_matrix_df = pd.DataFrame(conf_matrix, index=[f'True_{i}' for i in range(conf_matrix.shape[0])], columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])])
                 # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
                         "val_accuracy": get_val_accuracy(val_preds, val_targets),
-                        "conf_mat": wandb.plot.confusion_matrix(
-                            probs=None,
-                            y_true=val_targets_np,
-                            preds=val_preds_binary_np,
-                            class_names=['Control', 'Carrier'],
-                        ),
                         "epoch": pl_module.current_epoch,
+                        "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
                     }
                 )
+            elif pl_module.config.y_val == "clinical_dementia_rating_global":
+                print("val preds", val_preds)
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
 
@@ -156,3 +166,8 @@ def get_val_accuracy(preds, targets):
     correct = (preds == targets).sum().item()
     total = targets.numel()
     return correct / total
+
+def reshape_targets(val_targets):
+    '''When using multiclass classification, the targets need to be reshaped'''
+    reshaped_targets = [tensor.view(-1, 1) for tensor in val_targets]
+    return reshaped_targets

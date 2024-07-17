@@ -87,6 +87,7 @@ def train_func(train_loop_config):
     plasma_protein_names = proteo_train.read_protein_file(train_dataset.processed_dir, config)
     top_proteins_data = [[protein] for protein in plasma_protein_names]
     pos_weight = proteo_train.compute_pos_weight(config)
+    focal_loss_weight = proteo_train.compute_focal_loss_weight(config)
 
     module = proteo_train.Proteo(
         config,
@@ -94,6 +95,7 @@ def train_func(train_loop_config):
         out_channels=train_dataset.label_dim,  # 1 dim of result
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
+        focal_loss_weight=focal_loss_weight,
     )
 
     wandb.log(

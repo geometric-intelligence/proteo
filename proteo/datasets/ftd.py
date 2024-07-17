@@ -84,10 +84,16 @@ class FTDDataset(InMemoryDataset):
         self.mutation_status_str = f'mutation_status_{config.mutation_status}'
         self.plasma_or_csf_str = f'{config.plasma_or_csf}'
         self.sex_str = f'sex_{config.sex}'
+        self.hist_path_str = (
+            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation_status}_histogram.jpg'
+        )
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
-        self.label_dim = 1  # NfL is a scalar, ie, dim 1
+        if self.config.y_val == "clinical_dementia_rating_global":
+            self.label_dim = 5  # multiclass classification
+        else:
+            self.label_dim = 1  # NfL is a scalar, ie, dim 1, binary classification or regression
 
         path = os.path.join(
             self.processed_dir,
@@ -273,11 +279,12 @@ class FTDDataset(InMemoryDataset):
             "executive_function",
             "memory",
             "clinical_dementia_rating",
-            "clinical_dementia_rating_global",
         ]:
             y_val, y_val_mask = self.load_continuous_values(
                 csv_data, combined_filter, y_values[config.y_val]
             )
+        elif config.y_val == 'clinical_dementia_rating_global':
+            y_val, y_val_mask = self.load_clinical_dementia_rating_global(csv_data, combined_filter)
         elif config.y_val == 'carrier_status':
             y_val, y_val_mask = self.load_carrier_status(csv_data, combined_filter)
         else:
@@ -349,10 +356,25 @@ class FTDDataset(InMemoryDataset):
             y_values = log_transform(y_values)
         hist_path = os.path.join(
             self.processed_dir,
-            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation_status}_histogram.jpg',
+            self.hist_path_str,
         )
         plot_histogram(pd.DataFrame(y_values), self.config.y_val, save_to=hist_path)
         return y_values.values, y_values_mask.values
+
+    def load_clinical_dementia_rating_global(self, csv_data, x_values):
+        '''integer class label encode cdr global values.'''
+        classes = [0, 0.5, 1, 2, 3]
+        y_values = csv_data.loc[x_values, self.clinical_dementia_rating_global_col].astype(float)
+        y_values_mask = ~np.isnan(y_values)
+        y_values = y_values[y_values_mask]
+        hist_path = os.path.join(
+            self.processed_dir,
+            self.hist_path_str,
+        )
+        plot_histogram(pd.DataFrame(y_values), self.config.y_val, save_to=hist_path)
+        class_to_index = {cls: idx for idx, cls in enumerate(classes)}
+        index_targets = torch.tensor([class_to_index[cls] for cls in y_values])
+        return index_targets, y_values_mask.values
 
     def load_carrier_status(self, csv_data, x_values):
         carrier_status = csv_data.loc[x_values, self.carrier_status_col].astype(str)
@@ -366,6 +388,11 @@ class FTDDataset(InMemoryDataset):
             raise ValueError(
                 "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
             )
+        hist_path = os.path.join(
+            self.processed_dir,
+            self.hist_path_str,
+        )
+        plot_histogram(pd.DataFrame(carrier_status), self.config.y_val, save_to=hist_path)
         return carrier_status, carrier_mask.values
 
     def remove_erroneous_columns(self, config, csv_data):

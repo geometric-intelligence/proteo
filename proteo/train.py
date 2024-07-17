@@ -29,6 +29,7 @@ import pytorch_lightning as pl
 import pytorch_lightning.loggers as pl_loggers
 import torch
 from config_utils import CONFIG_FILE, Config, read_config_from_file
+from focal_loss.focal_loss import FocalLoss
 from models.gat_v4 import GATv4
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
@@ -40,7 +41,6 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     StepLR,
 )
-from focal_loss.focal_loss import FocalLoss
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
@@ -67,7 +67,15 @@ class Proteo(pl.LightningModule):
         "mse_regression": torch.nn.MSELoss,
     }
 
-    def __init__(self, config: Config, in_channels, out_channels, avg_node_degree, pos_weight, focal_loss_weight):
+    def __init__(
+        self,
+        config: Config,
+        in_channels,
+        out_channels,
+        avg_node_degree,
+        pos_weight,
+        focal_loss_weight,
+    ):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
         self.save_hyperparameters()
@@ -164,7 +172,10 @@ class Proteo(pl.LightningModule):
             print("train: pred has nan")
             print(f"?batch.x has nan: {torch.isnan(batch.x).any()}")
             raise ValueError
-        target = batch.y.view(pred.shape)
+        if self.config.y_val != 'clinical_dementia_rating_global':
+            target = batch.y.view(pred.shape)
+        else:
+            target = batch.y
         # Store predictions
         self.train_preds.append(pred.clone().detach().cpu())
         self.train_targets.append(target.clone().detach().cpu())
@@ -184,6 +195,10 @@ class Proteo(pl.LightningModule):
             loss_fn = self.LOSS_MAP["multiclass_classification"](
                 weights=self.focal_loss_weight, gamma=2, reduction="mean"
             )
+            # Convert targets to ints for the loss function
+            target = target.long()
+            # Convert to probabilites before taking loss
+            pred = torch.nn.Softmax(dim=-1)(pred)
         else:
             loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
         loss = loss_fn(pred, target)
@@ -210,8 +225,11 @@ class Proteo(pl.LightningModule):
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
         pred = self.forward(batch)
-        # Pred is shape [batch_size,1] and targets is shape [batch_size]
-        target = batch.y.view(pred.shape)
+        # Pred is shape [batch_size,1] and targets is shape [batch_size], only reshape if not doing multiclass classification
+        if self.config.y_val != 'clinical_dementia_rating_global':
+            target = batch.y.view(pred.shape)
+        else:
+            target = batch.y
         # Store predictions
         self.val_preds.append(pred.clone())
         self.val_targets.append(target.clone())
@@ -231,8 +249,10 @@ class Proteo(pl.LightningModule):
             loss_fn = self.LOSS_MAP["multiclass_classification"](
                 weights=self.focal_loss_weight, gamma=2, reduction="mean"
             )
-            #TODO: is this correct here
-            pred = torch.softmax(pred, dim=1)
+            # Convert targets to ints for the loss function
+            target = target.long()
+            # Convert to probabilites before taking loss 
+            pred = torch.nn.Softmax(dim=-1)(pred)
         else:
             loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
         loss = loss_fn(pred, target)
@@ -293,8 +313,9 @@ def compute_pos_weight(config):  # TODO: this doesn't take into account filterin
     mutation_status_count = df['Mutation'].value_counts().get(config.mutation_status, 0)
     return torch.FloatTensor([control_count / mutation_status_count])
 
+
 def compute_focal_loss_weight(config):
-    #TODO - not the best because this code is copied from ftd.py, but weight needs to be recomputed for each set
+    # TODO - not the best because this code is copied from ftd.py, but weight needs to be recomputed for each set
     # Get cdr global values for specific subset
     csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
     df = pd.read_csv(csv_path)
@@ -307,9 +328,7 @@ def compute_focal_loss_weight(config):
 
     # Additional filtering based on mutation_status, always take mutation status and control
     if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
-        mutation_filter = df['Mutation'].isin(
-            [config.mutation_status, 'CTL']
-        )
+        mutation_filter = df['Mutation'].isin([config.mutation_status, 'CTL'])
     elif config.mutation_status == 'CTL':
         mutation_filter = pd.Series([True] * len(df))
     # Additional filtering based on sex
@@ -327,9 +346,8 @@ def compute_focal_loss_weight(config):
         frequencies.append(count)
     # Calculate weights inversely proportional to the frequencies
     frequencies = torch.tensor(frequencies, dtype=torch.float32)
-    weights = 1.0 / frequencies 
+    weights = 1.0 / frequencies
     return weights
-
 
 
 def construct_datasets(config):
