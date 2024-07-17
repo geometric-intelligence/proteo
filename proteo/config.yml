@@ -14,7 +14,7 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier_status", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global")
-y_val: "carrier_status"
+y_val: "clinical_dementia_rating_global"
 # Plasma or CSF
 plasma_or_csf: "plasma"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
@@ -66,7 +66,7 @@ gcn:
 
 
 # Training
-batch_size: 10 #for one off training
+batch_size: 5 #for one off training
 epochs: 300
 num_workers: 16
 sync_batchnorm: false
@@ -79,7 +79,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 

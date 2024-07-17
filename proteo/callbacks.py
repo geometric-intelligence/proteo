@@ -11,6 +11,7 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
 import pandas as pd
+import torch.nn.functional as F
 
 
 class CustomWandbCallback(Callback):
@@ -88,7 +89,7 @@ class CustomWandbCallback(Callback):
         elif pl_module.config.y_val == "clinical_dementia_rating_global":
             pl_module.logger.experiment.log(
                 {
-                    "train_preds_softmax": wandb.Histogram(torch.nn.Softmax(dim=-1)(train_preds)),
+                    "train_preds_softmax": wandb.Histogram(F.softmax(train_preds, dim=1)),
                     "epoch": pl_module.current_epoch,
                 }
             )
@@ -130,13 +131,25 @@ class CustomWandbCallback(Callback):
                 pl_module.logger.experiment.log(
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
-                        "val_accuracy": get_val_accuracy(val_preds, val_targets),
+                        "val_accuracy": get_val_accuracy(val_preds_binary, val_targets),
                         "epoch": pl_module.current_epoch,
                         "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
                     }
                 )
             elif pl_module.config.y_val == "clinical_dementia_rating_global":
-                print("val preds", val_preds)
+                softmax_preds = F.softmax(val_preds, dim=1)
+                class_preds = torch.argmax(softmax_preds, dim=1)
+                conf_matrix = confusion_matrix(val_targets, class_preds)
+                conf_matrix_df = pd.DataFrame(conf_matrix, index=[f'True_{i}' for i in range(conf_matrix.shape[0])], columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])])
+                pl_module.logger.experiment.log(
+                    {
+                        "val_preds_softmax": wandb.Histogram(softmax_preds),
+                        "val_preds_class": wandb.Histogram(class_preds),
+                        "val_accuracy": get_val_accuracy(class_preds, val_targets),
+                        "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
+                        "epoch": pl_module.current_epoch,
+                    }
+                )
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
 
@@ -161,8 +174,6 @@ def progress_bar():
 
 
 def get_val_accuracy(preds, targets):
-    preds = torch.sigmoid(preds)
-    preds = (preds > 0.5).float()
     correct = (preds == targets).sum().item()
     total = targets.numel()
     return correct / total
