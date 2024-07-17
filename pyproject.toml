@@ -44,6 +44,8 @@ openpyxl = "^3.1.5"
 PyWGCNA = "^2.0"
 captum = "^0.7.0"
 ray = {extras = ["tune"], version = "^2.24.0"}
+focal-loss-torch = "^0.1.2"
+
 
 [[tool.poetry.source]]
 name = "torch-gpu"

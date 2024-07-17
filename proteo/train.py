@@ -301,22 +301,8 @@ def compute_avg_node_degree(dataset):
     avg_node_degree = num_edges / num_nodes
     return avg_node_degree
 
-
-def compute_pos_weight(config):  # TODO: this doesn't take into account filtering out NA values
-    csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
-    df = pd.read_csv(csv_path)
-
-    # Count the occurrences of 'CTL' in the 'Mutation' column
-    control_count = df['Mutation'].value_counts().get('CTL', 0)
-
-    # Count the occurrences of config.mutation_status in the 'Mutation' column
-    mutation_status_count = df['Mutation'].value_counts().get(config.mutation_status, 0)
-    return torch.FloatTensor([control_count / mutation_status_count])
-
-
-def compute_focal_loss_weight(config):
-    # TODO - not the best because this code is copied from ftd.py, but weight needs to be recomputed for each set
-    # Get cdr global values for specific subset
+def get_complete_filter(config):
+    '''Function that computes the filter for the dataset based on the config.'''
     csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
     df = pd.read_csv(csv_path)
     if config.plasma_or_csf == 'plasma':
@@ -337,6 +323,28 @@ def compute_focal_loss_weight(config):
     elif config.sex == 'All':
         sex_filter = pd.Series([True] * len(df))
     combined_filter = has_measurement & mutation_filter & sex_filter
+    return df, combined_filter
+
+def compute_pos_weight(config):  # TODO: this doesn't take into account filtering out NA values and filtering by sex
+    """Function that computes the positive weight (ratio of ctl to carriers) for the binary cross-entropy loss function."""
+    df, combined_filter = get_complete_filter(config)
+    carrier_status = df.loc[combined_filter, 'Mutation']
+
+    # Count the occurrences of 'CTL' in the 'Mutation' column
+    control_count = carrier_status.value_counts().get('CTL', 0)
+    if config.mutation_status == 'CTL': #Count all other mutations if CTL
+        mutation_status_count = carrier_status.value_counts()[['GRN', 'MAPT', 'C9orf72']].sum()
+    else: #Count specific mutation otherwise
+    # Count the occurrences of config.mutation_status in the 'Mutation' column
+        mutation_status_count = carrier_status.value_counts().get(config.mutation_status, 0)
+    return torch.FloatTensor([control_count / mutation_status_count])
+
+
+def compute_focal_loss_weight(config):
+    '''Function that computes the weights (prevalence of) classes in the shape [1, num_classes] to be used in the focal loss function.'''
+    # TODO - not the best because this code is copied from ftd.py, but weight needs to be recomputed for each set
+    # Get cdr global values for specific subset
+    df, combined_filter = get_complete_filter(config)
     cdrglob_values = df.loc[combined_filter, 'CDRGLOB'].astype(float)
     # Compute the weight for the focal loss
     specific_values = [0, 0.5, 1, 2, 3]

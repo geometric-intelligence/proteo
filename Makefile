@@ -25,6 +25,14 @@ clean:
 rmtmp:
 	sudo rm -r /tmp && sudo mkdir /tmp && sudo chmod -R 777 /tmp
 
+.PHONY: rmprocessed
+rmprocessed:
+	rm -rf data/processed/*
+
+.PHONT: rmcheckpoints
+rmcheckpoints:
+	rm -rf outputs/checkpoints/*
+
 .PHONY: conda-osx-64.lock
 conda-osx-64.lock:
 	CONDA_SUBDIR=osx-64 conda-lock -f conda.yaml -p osx-64
