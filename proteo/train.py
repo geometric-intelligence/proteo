@@ -87,6 +87,9 @@ class Proteo(pl.LightningModule):
         self.val_preds = []
         self.train_targets = []
         self.val_targets = []
+        self.x0 = []
+        self.x1 = []
+        self.x2 = []
         self.pos_weight = pos_weight
         self.focal_loss_weight = focal_loss_weight
 
@@ -141,7 +144,11 @@ class Proteo(pl.LightningModule):
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
         if self.config.model == "gat-v4":
-            return self.model(batch.x, batch.edge_index, batch)
+            pred, aux = self.model(batch.x, batch.edge_index, batch)
+            self.x0.append(aux[0])  # check which format is best here.
+            self.x1.append(aux[1])
+            self.x2.append(aux[2])
+            return pred
         if self.config.model == 'gat':
             # This returns a pred value for each node in the big graph
             pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)

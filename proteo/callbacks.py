@@ -71,11 +71,18 @@ class CustomWandbCallback(Callback):
             pl_module.train_targets = reshape_targets(pl_module.train_targets)
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
+        # Log the first graph ([0, :]) of x0, x1, and x2
+        x0 = torch.vstack(pl_module.x0).detach().cpu()[0, :]
+        x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
+        x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
         pl_module.logger.experiment.log(
             {
                 "train_preds_logits": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
-                "parameters": wandb.Histogram(params),
+                "parameters (weights + biases)": wandb.Histogram(params),
+                "x0": wandb.Histogram(x0),
+                "x1": wandb.Histogram(x1),
+                "x2": wandb.Histogram(x2),
                 "epoch": pl_module.current_epoch,
             }
         )
@@ -95,6 +102,9 @@ class CustomWandbCallback(Callback):
             )
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
+        pl_module.x0.clear()
+        pl_module.x1.clear()
+        pl_module.x2.clear()
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """Save val predictions and targets as histograms.
@@ -111,6 +121,7 @@ class CustomWandbCallback(Callback):
             if pl_module.config.y_val == "clinical_dementia_rating_global":
                 pl_module.val_targets = reshape_targets(pl_module.val_targets)
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
+
             pl_module.logger.experiment.log(
                 {
                     "val_preds_logits": wandb.Histogram(val_preds),
@@ -118,6 +129,7 @@ class CustomWandbCallback(Callback):
                     "epoch": pl_module.current_epoch,
                 }
             )
+
 
             if pl_module.config.y_val == "carrier_status":
                 # Assuming binary classification; for multi-class, adjust accordingly

@@ -112,13 +112,20 @@ class CustomRayWandbCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         train_loss = pl_module.trainer.callback_metrics["train_loss"]
         train_RMSE = math.sqrt(train_loss)
+        # Log the first graph ([0, :]) of x0, x1, and x2
+        x0 = torch.vstack(pl_module.x0).detach().cpu()[0, :]
+        x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
+        x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
         wandb.log(
             {
                 "train_loss": train_loss,
                 "train_RMSE": train_RMSE,
                 "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
-                "parameters": wandb.Histogram(params),
+                "parameters (weights+biases)": wandb.Histogram(params),
+                "x0": wandb.Histogram(x0),
+                "x1": wandb.Histogram(x1),
+                "x2": wandb.Histogram(x2),
                 "epoch": pl_module.current_epoch,
             }
         )
@@ -132,6 +139,9 @@ class CustomRayWandbCallback(Callback):
 
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
+        pl_module.x0.clear()
+        pl_module.x1.clear()
+        pl_module.x2.clear()
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """Save val predictions and targets as histograms and log confusion matrix.

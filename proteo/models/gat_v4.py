@@ -270,4 +270,6 @@ class GATv4(nn.Module):
         # Pass through fully connected layers
         pred = self.encoder(multiscale_features)
 
-        return pred
+        aux = [x0, x1, x2]
+
+        return pred, aux
