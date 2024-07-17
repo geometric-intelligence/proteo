@@ -325,10 +325,7 @@ def get_complete_filter(config):
     elif config.mutation_status == 'CTL':
         mutation_filter = pd.Series([True] * len(df))
     # Additional filtering based on sex
-    if config.sex in ['M', 'F']:
-        sex_filter = df['SEX_AT_BIRTH'] == config.sex
-    elif config.sex == 'All':
-        sex_filter = pd.Series([True] * len(df))
+    sex_filter = df['SEX_AT_BIRTH'].isin(config.sex)
     combined_filter = has_measurement & mutation_filter & sex_filter
     return df, combined_filter
 
@@ -517,7 +514,7 @@ def main():
         dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
         filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
         mode='min',
-        every_n_epochs=config.checkpoint_every_n_epochs,
+        every_n_epochs=config.checkpoint_every_n_epochs_train,
     )
     lr_callback = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
     trainer_callbacks = [

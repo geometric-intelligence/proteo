@@ -83,7 +83,7 @@ class FTDDataset(InMemoryDataset):
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
         self.mutation_status_str = f'mutation_status_{config.mutation_status}'
         self.plasma_or_csf_str = f'{config.plasma_or_csf}'
-        self.sex_str = f'sex_{config.sex}'
+        self.sex_str = f'sex_{",".join(config.sex)}'
         self.hist_path_str = (
             f'{self.config.y_val}_{self.config.sex}_{self.config.mutation_status}_histogram.jpg'
         )
@@ -99,6 +99,7 @@ class FTDDataset(InMemoryDataset):
             self.processed_dir,
             f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_{split}.pt',
         )
+        print("Loading data from:", path)
         self.load(path)
 
     @property
@@ -182,14 +183,14 @@ class FTDDataset(InMemoryDataset):
             "C9orf72",
         ]:  # Compare mutation to control (within correct sex)
             condition1 = (csv_data['Mutation'] == mutation_status) & (
-                csv_data['SEX_AT_BIRTH'] == sex
+                csv_data['SEX_AT_BIRTH'].isin(sex)
             )
-            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'] == sex)
+            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'].isin(sex))
         elif mutation_status == "CTL":  # Compare CTL to all other mutations (within correct sex)
             condition1 = csv_data['Mutation'].isin(["GRN", "MAPT", "C9orf72"]) & (
-                csv_data['SEX_AT_BIRTH'] == sex
+                csv_data['SEX_AT_BIRTH'].isin(sex)
             )
-            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'] == sex)
+            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'].isin(sex))
         else:
             raise ValueError("Invalid mutation status specified.")
 
@@ -252,10 +253,8 @@ class FTDDataset(InMemoryDataset):
             raise ValueError("Invalid mutation status specified.")
         print("Number of patients with mutation status + control:", mutation_filter.sum())
         # Additional filtering based on sex
-        if config.sex in ['M', 'F']:
-            sex_filter = csv_data[self.sex_col] == config.sex
-        elif config.sex == 'All':
-            sex_filter = pd.Series([True] * len(csv_data))
+        if (config.sex == ['M'] or config.sex == ['F'] or config.sex == ['M', 'F']):
+            sex_filter = csv_data[self.sex_col].isin(config.sex)
         else:
             raise ValueError("Invalid sex specified.")
         print("Number of patients with sex:", sex_filter.sum())

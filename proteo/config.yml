@@ -14,14 +14,14 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier_status", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global")
-y_val: "clinical_dementia_rating_global"
+y_val: "carrier_status"
 # Plasma or CSF
 plasma_or_csf: "plasma"
 # Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
 # If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
-mutation_status: "CTL"
-# 'M', 'F', 'All'
-sex: 'All'
+mutation_status: "GRN"
+# ['M'], ['F'],['M', 'F'] 
+sex: ['M', 'F'] 
 
 # WandB
 project: "proteo"
@@ -31,8 +31,8 @@ wandb_offline: false
 log_every_n_steps: 5
 
 # Dataset
-num_nodes: 30  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
-adj_thresh: 0.1  #0.08 
+num_nodes: 150  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+adj_thresh: 0.01  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
@@ -66,8 +66,8 @@ gcn:
 
 
 # Training
-batch_size: 5 #for one off training
-epochs: 300
+batch_size: 30 #for one off training
+epochs: 200
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -94,7 +94,8 @@ num_samples: 300
 grace_period: 30  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
-checkpoint_every_n_epochs: 50  # Nb of iterations between checkpoints. If 0: no checkpointing.
+checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for one off training so should be one to save absolute min val_loss checkpoint
+checkpoint_every_n_epochs: 50  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for hyperparameter search so should be 50 to save memory.
 # Nb of trainings run in parallel is the maximum amount 
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
 cpu_per_worker: 16

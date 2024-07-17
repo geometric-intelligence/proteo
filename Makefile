@@ -29,9 +29,9 @@ rmtmp:
 rmprocessed:
 	rm -rf data/processed/*
 
-.PHONT: rmcheckpoints
+.PHONT: rmoutputs
 rmcheckpoints:
-	rm -rf outputs/checkpoints/*
+	rm -rf outputs/*
 
 .PHONY: conda-osx-64.lock
 conda-osx-64.lock:
