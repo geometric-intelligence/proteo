@@ -189,7 +189,7 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        if self.config.y_val == "carrier_status":
+        if self.config.y_val == "carrier":
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
@@ -243,7 +243,7 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        if self.config.y_val == "carrier_status":
+        if self.config.y_val == "carrier":
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
@@ -258,7 +258,7 @@ class Proteo(pl.LightningModule):
             )
             # Convert targets to ints for the loss function
             target = target.long()
-            # Convert to probabilites before taking loss 
+            # Convert to probabilites before taking loss
             pred = torch.nn.Softmax(dim=-1)(pred)
         else:
             loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
@@ -308,40 +308,44 @@ def compute_avg_node_degree(dataset):
     avg_node_degree = num_edges / num_nodes
     return avg_node_degree
 
+
 def get_complete_filter(config):
     '''Function that computes the filter for the dataset based on the config.'''
     csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
     df = pd.read_csv(csv_path)
-    if config.plasma_or_csf == 'plasma':
+    if config.modality == 'plasma':
         has_measurement_col = 'HasPlasma?'
-    elif config.plasma_or_csf == 'csf':
+    elif config.modality == 'csf':
         has_measurement_col = 'HasCSF?'
     # Get the indices of the rows where has_measurement is True
     has_measurement = df[has_measurement_col].astype(int) == 1
 
-    # Additional filtering based on mutation_status, always take mutation status and control
-    if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
-        mutation_filter = df['Mutation'].isin([config.mutation_status, 'CTL'])
-    elif config.mutation_status == 'CTL':
+    # Additional filtering based on mutation, always take mutation status and control
+    if config.mutation in ['GRN', 'MAPT', 'C9orf72']:
+        mutation_filter = df['Mutation'].isin([config.mutation, 'CTL'])
+    elif config.mutation == 'CTL':
         mutation_filter = pd.Series([True] * len(df))
     # Additional filtering based on sex
     sex_filter = df['SEX_AT_BIRTH'].isin(config.sex)
     combined_filter = has_measurement & mutation_filter & sex_filter
     return df, combined_filter
 
-def compute_pos_weight(config):  # TODO: this doesn't take into account filtering out NA values and filtering by sex
+
+def compute_pos_weight(
+    config,
+):  # TODO: this doesn't take into account filtering out NA values and filtering by sex
     """Function that computes the positive weight (ratio of ctl to carriers) for the binary cross-entropy loss function."""
     df, combined_filter = get_complete_filter(config)
-    carrier_status = df.loc[combined_filter, 'Mutation']
+    carrier = df.loc[combined_filter, 'Mutation']
 
     # Count the occurrences of 'CTL' in the 'Mutation' column
-    control_count = carrier_status.value_counts().get('CTL', 0)
-    if config.mutation_status == 'CTL': #Count all other mutations if CTL
-        mutation_status_count = carrier_status.value_counts()[['GRN', 'MAPT', 'C9orf72']].sum()
-    else: #Count specific mutation otherwise
-    # Count the occurrences of config.mutation_status in the 'Mutation' column
-        mutation_status_count = carrier_status.value_counts().get(config.mutation_status, 0)
-    return torch.FloatTensor([control_count / mutation_status_count])
+    control_count = carrier.value_counts().get('CTL', 0)
+    if config.mutation == 'CTL':  # Count all other mutations if CTL
+        mutation_count = carrier.value_counts()[['GRN', 'MAPT', 'C9orf72']].sum()
+    else:  # Count specific mutation otherwise
+        # Count the occurrences of config.mutation in the 'Mutation' column
+        mutation_count = carrier.value_counts().get(config.mutation, 0)
+    return torch.FloatTensor([control_count / mutation_count])
 
 
 def compute_focal_loss_weight(config):
@@ -437,7 +441,7 @@ def get_wandb_logger(config):
 def read_protein_file(processed_dir, config):
     file_path = os.path.join(
         processed_dir,
-        f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.npy',
+        f'top_proteins_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}.npy',
     )
     if os.path.exists(file_path):
         return np.load(file_path, allow_pickle=True)
@@ -461,7 +465,7 @@ def main():
     avg_node_degree = compute_avg_node_degree(test_dataset)
     pos_weight = compute_pos_weight(config)
     focal_loss_weight = compute_focal_loss_weight(config)
-    if config.y_val == "carrier_status":
+    if config.y_val == "carrier":
         print(f"pos_weight used for loss function: {pos_weight}")
     elif config.y_val == 'clinical_dementia_rating_global':
         print(f"focal_loss_weight used for loss function: {focal_loss_weight}")
@@ -482,11 +486,11 @@ def main():
         images=[
             os.path.join(
                 train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation_status}_histogram.jpg',
+                f'{config.y_val}_{config.sex}_{config.mutation}_histogram.jpg',
             ),
             os.path.join(
                 train_dataset.processed_dir,
-                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.jpg",
+                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg",
             ),
         ],
     )
@@ -500,8 +504,8 @@ def main():
         columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
         data=[
             [
-                config.plasma_or_csf,
-                config.mutation_status,
+                config.modality,
+                config.mutation,
                 config.y_val,
                 config.sex,
                 avg_node_degree,

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import torch
+import torch.nn.functional as F
 import wandb
 from callbacks import get_val_accuracy
 from pytorch_lightning.callbacks import Callback
@@ -13,7 +14,6 @@ from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
 from sklearn.metrics import confusion_matrix
-import torch.nn.functional as F
 
 
 class CustomRayCheckpointCallback(Callback):
@@ -129,7 +129,7 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val == "carrier_status":
+        if pl_module.config.y_val == "carrier":
             wandb.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
@@ -169,7 +169,7 @@ class CustomRayWandbCallback(Callback):
                 }
             )
 
-            if pl_module.config.y_val == "carrier_status":
+            if pl_module.config.y_val == "carrier":
                 val_preds_sigmoid = torch.sigmoid(val_preds)
                 # Note this assumes binary classification
                 predicted_classes = (val_preds_sigmoid > 0.5).int()
@@ -196,7 +196,11 @@ class CustomRayWandbCallback(Callback):
                 class_preds = torch.argmax(softmax_preds, dim=1)
                 val_accuracy = (class_preds == val_targets).float().mean().item()
                 conf_matrix = confusion_matrix(val_targets, class_preds)
-                conf_matrix_df = pd.DataFrame(conf_matrix, index=[f'True_{i}' for i in range(conf_matrix.shape[0])], columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])])
+                conf_matrix_df = pd.DataFrame(
+                    conf_matrix,
+                    index=[f'True_{i}' for i in range(conf_matrix.shape[0])],
+                    columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])],
+                )
                 wandb.log(
                     {
                         "val_preds_softmax": wandb.Histogram(softmax_preds),
@@ -206,8 +210,6 @@ class CustomRayWandbCallback(Callback):
                         "epoch": pl_module.current_epoch,
                     }
                 )
-
-
 
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()

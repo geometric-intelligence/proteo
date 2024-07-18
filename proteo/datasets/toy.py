@@ -199,19 +199,19 @@ class ToyDataset(InMemoryDataset):
         plot_histogram(pd.DataFrame(nfl), save_to=hist_path)
         return nfl, nfl_mask
 
-    def load_carrier_status(self, csv_data, x_values):
-        carrier_status = csv_data[x_values, self.carrier_status_col_id].astype(str)
-        carrier_mask = ~pd.isna(carrier_status)
-        carrier_status = carrier_status[carrier_mask]
-        carrier_status = np.where(
-            carrier_status == 'Carrier', 1, np.where(carrier_status == 'CTL', 0, None)
-        ).astype(float)
+    def load_carrier(self, csv_data, x_values):
+        carrier = csv_data[x_values, self.carrier_col_id].astype(str)
+        carrier_mask = ~pd.isna(carrier)
+        carrier = carrier[carrier_mask]
+        carrier = np.where(carrier == 'Carrier', 1, np.where(carrier == 'CTL', 0, None)).astype(
+            float
+        )
         # Check for any None values, which indicate an unrecognized status
-        if None in carrier_status:
+        if None in carrier:
             raise ValueError(
                 "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
             )
-        return carrier_status, carrier_mask
+        return carrier, carrier_mask
 
 
 def calculate_adjacency_matrix(plasma_protein, save_to):

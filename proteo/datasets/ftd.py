@@ -10,6 +10,29 @@ from scipy.stats import chi2_contingency, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
 
+LABEL_DIM_MAP = {
+    "clinical_dementia_rating_global": 5,
+    "clinical_dementia_rating_binary": 1,  # binary classification CDR=0 versus CDR>0
+    "clinical_dementia_rating": 1,
+    "carrier": 1,
+    "disease_age": 1,
+    "executive_function": 1,
+    "memory": 1,
+    "nfl": 1,
+}
+
+MUTATIONS = ["MAPT", "C9orf72", "GRN"]
+SEXES = [["M"], ["F"], ["M", "F"]]
+MODALITIES = ["plasma", "csf"]
+
+CONTINOUS_Y_VALS = [
+    "nfl",
+    "disease_age",
+    "executive_function",
+    "memory",
+    "clinical_dementia_rating",
+]
+
 
 class FTDDataset(InMemoryDataset):
     """This is dataset used in FTD.
@@ -59,45 +82,57 @@ class FTDDataset(InMemoryDataset):
 
     """
 
+    # These variables are class variables, ie, "constants" for this dataset
+    HAS_MODALITY_COL = {
+        "plasma": "HasPlasma?",
+        "csf": "HasCSF?",
+    }
+    MODALITY_COL_END = {
+        "plasma": "|PLASMA",
+        "csf": "|CSF",
+    }
+    Y_VAL_COL_MAP = {
+        'nfl': "NFL3_MEAN",
+        'disease_age': "disease.age",
+        'executive_function': "ef.unadj.slope",
+        'memory': "mem.unadj.slope",
+        'clinical_dementia_rating': "FTLDCDR_SB",
+        'clinical_dementia_rating_global': "CDRGLOB",
+        'carrier': "Carrier.Status",
+    }
+
+    mutation_col = "Mutation"
+    sex_col = "SEX_AT_BIRTH"
+
     def __init__(self, root, split, config):
         self.name = 'ftd'
         self.root = root
         self.split = split
         assert split in ["train", "test"]
+
+        assert config.mutation in MUTATIONS or config.mutation == 'CTL'
+        assert config.sex in SEXES
+        assert config.modality in MODALITIES
+        assert config.y_val in LABEL_DIM_MAP
+
         self.config = config
-        self.has_plasma_col = 'HasPlasma?'
-        self.plasma_protein_col_end = '|PLASMA'
-        self.has_csf_col = 'HasCSF?'
-        self.csf_protein_col_end = '|CSF'
-        self.nfl_col = 'NFL3_MEAN'
-        self.carrier_status_col = 'Carrier.Status'
-        self.disease_age_col = 'disease.age'
-        self.executive_function_unadj_slope_col = 'ef.unadj.slope'
-        self.memory_unadj_slope_col = 'mem.unadj.slope'
-        self.clinical_dementia_rating_col = 'FTLDCDR_SB'
-        self.clinical_dementia_rating_global_col = 'CDRGLOB'
-        self.mutation_status_col = 'Mutation'
-        self.sex_col = 'SEX_AT_BIRTH'
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
-        self.mutation_status_str = f'mutation_status_{config.mutation_status}'
-        self.plasma_or_csf_str = f'{config.plasma_or_csf}'
+        self.mutation_str = f'mutation_{config.mutation}'
+        self.modality_str = f'{config.modality}'
         self.sex_str = f'sex_{",".join(config.sex)}'
         self.hist_path_str = (
-            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation_status}_histogram.jpg'
+            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_histogram.jpg'
         )
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
-        if self.config.y_val == "clinical_dementia_rating_global":
-            self.label_dim = 5  # multiclass classification
-        else:
-            self.label_dim = 1  # NfL is a scalar, ie, dim 1, binary classification or regression
+        self.label_dim = LABEL_DIM_MAP[self.config.y_val]
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_{split}.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -129,8 +164,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_status_str}_{self.plasma_or_csf_str}_{self.sex_str}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_test.pt",
         ]
 
     def create_graph_data(self, feature, label, adj_matrix):
@@ -169,36 +204,26 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
-    def find_top_ks_values(self, csv_data, config, measurement_col_end):
+    def find_top_ks_values(self, csv_data, config, modality_col_end):
         '''Find the top n_nodes most different proteins based on p-value from KS test between subgroup specified by config and control group.'''
         ks_stats = []
 
         # Direct comparison for mutation status
-        mutation_status = config.mutation_status
+        mutation = config.mutation
         sex = config.sex
 
-        if mutation_status in [
-            "GRN",
-            "MAPT",
-            "C9orf72",
-        ]:  # Compare mutation to control (within correct sex)
-            condition1 = (csv_data['Mutation'] == mutation_status) & (
-                csv_data['SEX_AT_BIRTH'].isin(sex)
-            )
-            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'].isin(sex))
-        elif mutation_status == "CTL":  # Compare CTL to all other mutations (within correct sex)
-            condition1 = csv_data['Mutation'].isin(["GRN", "MAPT", "C9orf72"]) & (
-                csv_data['SEX_AT_BIRTH'].isin(sex)
-            )
-            condition2 = (csv_data['Mutation'] == "CTL") & (csv_data['SEX_AT_BIRTH'].isin(sex))
-        else:
-            raise ValueError("Invalid mutation status specified.")
+        condition_sex = csv_data[self.sex_col].isin(sex)
+        condition_ctl_sex = (csv_data['Mutation'] == "CTL") & condition_sex
+        if mutation in MUTATIONS:  # Compare mutation to control (within correct sex)
+            condition_mutation_sex = (csv_data['Mutation'] == mutation) & condition_sex
+        if mutation == "CTL":  # Compare CTL to all other mutations (within correct sex)
+            condition_mutation_sex = csv_data['Mutation'].isin(MUTATIONS) & condition_sex
 
-        # Filter columns that end with '|PLASMA'
-        plasma_columns = [col for col in csv_data.columns if col.endswith(measurement_col_end)]
-        for protein_column in plasma_columns:
-            mutation_data = csv_data[condition1][protein_column]
-            other_data = csv_data[condition2][protein_column]
+        # Filter columns that end with '|PLASMA' or '|CSF'
+        modality_columns = [col for col in csv_data.columns if col.endswith(modality_col_end)]
+        for protein_column in modality_columns:
+            mutation_data = csv_data[condition_mutation_sex][protein_column]
+            other_data = csv_data[condition_ctl_sex][protein_column]
 
             mutation_data = mutation_data.dropna()
             other_data = other_data.dropna()
@@ -215,7 +240,7 @@ class FTDDataset(InMemoryDataset):
         plasma_protein_names = top_columns['Protein'].values
         file_path = os.path.join(
             self.processed_dir,
-            f'top_proteins_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}.npy',
+            f'top_proteins_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}.npy',
         )
         np.save(file_path, plasma_protein_names)
 
@@ -226,70 +251,44 @@ class FTDDataset(InMemoryDataset):
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
         csv_data = self.remove_erroneous_columns(config, csv_data)
-        if config.plasma_or_csf == 'plasma':
-            print("Using plasma data.")
-            has_measurement_col = self.has_plasma_col
-            measurement_col_end = self.plasma_protein_col_end
-        elif config.plasma_or_csf == 'csf':
-            print("Using CSF data.")
-            has_measurement_col = self.has_csf_col
-            measurement_col_end = self.csf_protein_col_end
-        else:
-            raise ValueError("Invalid plasma_or_csf. Must be 'plasma' or 'csf'.")
+        print(f"Using {config.modality} data.")
+        has_measurement_col = self.HAS_MODALITY_COL[config.modality]
+        modality_col_end = self.MODALITY_COL_END[config.modality]
+
         # Get the indices of the rows where has_measurement is True
-        has_measurement = csv_data[has_measurement_col].astype(int) == 1
+        has_measurement = csv_data[has_measurement_col]
         print("Number of patients with measurements:", has_measurement.sum())
+
         # test_has_plasma_col_id(has_plasma)
         # test_boolean_plasma(has_plasma)
 
-        # Additional filtering based on mutation_status, always take mutation status and control
-        if config.mutation_status in ['GRN', 'MAPT', 'C9orf72']:
-            mutation_filter = csv_data[self.mutation_status_col].isin(
-                [config.mutation_status, 'CTL']
-            )
-        elif config.mutation_status == 'CTL':
+        # Additional filtering based on mutation, always take mutation status and control
+        if config.mutation in MUTATIONS:
+            mutation_filter = csv_data[self.mutation_col].isin([config.mutation, 'CTL'])
+        if config.mutation == 'CTL':
             mutation_filter = pd.Series([True] * len(csv_data))
-        else:
-            raise ValueError("Invalid mutation status specified.")
+
         print("Number of patients with mutation status + control:", mutation_filter.sum())
         # Additional filtering based on sex
-        if (config.sex == ['M'] or config.sex == ['F'] or config.sex == ['M', 'F']):
-            sex_filter = csv_data[self.sex_col].isin(config.sex)
-        else:
-            raise ValueError("Invalid sex specified.")
+        sex_filter = csv_data[self.sex_col].isin(config.sex)
+
         print("Number of patients with sex:", sex_filter.sum())
         combined_filter = has_measurement & mutation_filter & sex_filter
         print(
             "Number of patients with measurements, sex, and mutation status:",
             combined_filter.sum(),
         )
-        y_values = {
-            'nfl': self.nfl_col,
-            'disease_age': self.disease_age_col,
-            'executive_function': self.executive_function_unadj_slope_col,
-            'memory': self.memory_unadj_slope_col,
-            'clinical_dementia_rating': self.clinical_dementia_rating_col,
-            'clinical_dementia_rating_global': self.clinical_dementia_rating_global_col,
-            'carrier_status': self.carrier_status_col,
-        }
-        if config.y_val in [
-            'nfl',
-            "disease_age",
-            "executive_function",
-            "memory",
-            "clinical_dementia_rating",
-        ]:
-            y_val, y_val_mask = self.load_continuous_values(
-                csv_data, combined_filter, y_values[config.y_val]
-            )
-        elif config.y_val == 'clinical_dementia_rating_global':
-            y_val, y_val_mask = self.load_clinical_dementia_rating_global(csv_data, combined_filter)
-        elif config.y_val == 'carrier_status':
-            y_val, y_val_mask = self.load_carrier_status(csv_data, combined_filter)
-        else:
-            "Invalid y_val. Must be 'nfl','disease_age','executive_function','memory','clinical_dementia_rating' or 'carrier_status'."
 
-        top_protein_columns = self.find_top_ks_values(csv_data, config, measurement_col_end)
+        if config.y_val in CONTINOUS_Y_VALS:
+            y_val, y_val_mask = self.load_continuous_values(
+                csv_data, combined_filter, self.Y_VAL_COL_MAP[config.y_val]
+            )
+        if config.y_val == 'clinical_dementia_rating_global':
+            y_val, y_val_mask = self.load_clinical_dementia_rating_global(csv_data, combined_filter)
+        if config.y_val == 'carrier':
+            y_val, y_val_mask = self.load_carrier(csv_data, combined_filter)
+
+        top_protein_columns = self.find_top_ks_values(csv_data, config, modality_col_end)
         top_proteins = csv_data.loc[combined_filter, top_protein_columns].dropna().astype(float)
         # Extract and convert the plasma_protein values for rows
         # where has_plasma is True and nfl is not NaN.
@@ -311,7 +310,7 @@ class FTDDataset(InMemoryDataset):
 
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.csv',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
@@ -332,7 +331,7 @@ class FTDDataset(InMemoryDataset):
         plt.savefig(
             os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg',
             )
         )
         plt.close()
@@ -363,7 +362,8 @@ class FTDDataset(InMemoryDataset):
     def load_clinical_dementia_rating_global(self, csv_data, x_values):
         '''integer class label encode cdr global values.'''
         classes = [0, 0.5, 1, 2, 3]
-        y_values = csv_data.loc[x_values, self.clinical_dementia_rating_global_col].astype(float)
+        clinical_dementia_rating_global_col = self.Y_VAL_COL_MAP["clinical_dementia_rating_global"]
+        y_values = csv_data.loc[x_values, clinical_dementia_rating_global_col].astype(float)
         y_values_mask = ~np.isnan(y_values)
         y_values = y_values[y_values_mask]
         hist_path = os.path.join(
@@ -375,15 +375,16 @@ class FTDDataset(InMemoryDataset):
         index_targets = torch.tensor([class_to_index[cls] for cls in y_values])
         return index_targets, y_values_mask.values
 
-    def load_carrier_status(self, csv_data, x_values):
-        carrier_status = csv_data.loc[x_values, self.carrier_status_col].astype(str)
-        carrier_mask = ~carrier_status.isna()
-        carrier_status = carrier_status[carrier_mask]
-        carrier_status = np.where(
-            carrier_status == 'Carrier', 1, np.where(carrier_status == 'CTL', 0, None)
-        ).astype(float)
+    def load_carrier(self, csv_data, x_values):
+        carrier_col = self.Y_VAL_COL_MAP["carrier"]
+        carrier = csv_data.loc[x_values, carrier_col].astype(str)
+        carrier_mask = ~carrier.isna()
+        carrier = carrier[carrier_mask]
+        carrier = np.where(carrier == 'Carrier', 1, np.where(carrier == 'CTL', 0, None)).astype(
+            float
+        )
         # Check for any None values, which indicate an unrecognized status
-        if None in carrier_status:
+        if None in carrier:
             raise ValueError(
                 "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
             )
@@ -391,17 +392,17 @@ class FTDDataset(InMemoryDataset):
             self.processed_dir,
             self.hist_path_str,
         )
-        plot_histogram(pd.DataFrame(carrier_status), self.config.y_val, save_to=hist_path)
-        return carrier_status, carrier_mask.values
+        plot_histogram(pd.DataFrame(carrier), self.config.y_val, save_to=hist_path)
+        return carrier, carrier_mask.values
 
     def remove_erroneous_columns(self, config, csv_data):
         """Remove columns that have bimodal distributions."""
         csv_path = os.path.join(self.raw_dir, config.error_protein_file_name)
         error_proteins_df = pd.read_excel(csv_path)
         # Extract column names under "Plasma" and "CSF"
-        plasma_columns = error_proteins_df['Plasma'].dropna().tolist()
+        modality_columns = error_proteins_df['Plasma'].dropna().tolist()
         csf_columns = error_proteins_df['CSF'].dropna().tolist()
-        columns_to_remove = list(set(plasma_columns + csf_columns))
+        columns_to_remove = list(set(modality_columns + csf_columns))
         # Remove the columns
         csv_data = csv_data.drop(columns=columns_to_remove)
         return csv_data
