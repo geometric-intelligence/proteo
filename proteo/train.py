@@ -314,13 +314,12 @@ def get_complete_filter(config):
     # TODO: This logic is already implemented in ftd.py: is it necessary?
     csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
     df = pd.read_csv(csv_path)
-    has_measurement_col = HAS_MODALITY_COL[config.modality]
-    # Get the indices of the rows where has_measurement is True
-    has_measurement = df[has_measurement_col]  # .astype(int) == 1
+    # Get the indices of the rows where has_modality is True
+    has_modality = df[HAS_MODALITY_COL[config.modality]]
 
     # Additional filtering based on sex
     sex_filter = df['SEX_AT_BIRTH'].isin(config.sex)
-    combined_filter = has_measurement & sex_filter
+    combined_filter = has_modality & sex_filter
 
     # Additional filtering based on mutation, always take mutation status and control
     if config.mutation in MUTATIONS:

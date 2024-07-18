@@ -251,12 +251,10 @@ class FTDDataset(InMemoryDataset):
         csv_data = pd.read_csv(csv_path)
         csv_data = self.remove_erroneous_columns(config, csv_data)
         print(f"Using {config.modality} data.")
-        has_measurement_col = HAS_MODALITY_COL[config.modality]
-        modality_col_end = MODALITY_COL_END[config.modality]
 
-        # Get the indices of the rows where has_measurement is True
-        has_measurement = csv_data[has_measurement_col]
-        print("Number of patients with measurements:", has_measurement.sum())
+        # Get the indices of the rows where has_modality is True
+        has_modality = csv_data[HAS_MODALITY_COL[config.modality]]
+        print("Number of patients with measurements:", has_modality.sum())
 
         # test_has_plasma_col_id(has_plasma)
         # test_boolean_plasma(has_plasma)
@@ -272,7 +270,7 @@ class FTDDataset(InMemoryDataset):
         sex_filter = csv_data[self.sex_col].isin(config.sex)
 
         print("Number of patients with sex:", sex_filter.sum())
-        combined_filter = has_measurement & mutation_filter & sex_filter
+        combined_filter = has_modality & mutation_filter & sex_filter
         print(
             "Number of patients with measurements, sex, and mutation status:",
             combined_filter.sum(),
@@ -287,6 +285,7 @@ class FTDDataset(InMemoryDataset):
         if config.y_val == 'carrier':
             y_val, y_val_mask = self.load_carrier(csv_data, combined_filter)
 
+        modality_col_end = MODALITY_COL_END[config.modality]
         top_protein_columns = self.find_top_ks_values(csv_data, config, modality_col_end)
         top_proteins = csv_data.loc[combined_filter, top_protein_columns].dropna().astype(float)
         # Extract and convert the plasma_protein values for rows
