@@ -33,6 +33,27 @@ CONTINOUS_Y_VALS = [
     "clinical_dementia_rating",
 ]
 
+HAS_MODALITY_COL = {
+    "plasma": "HasPlasma?",
+    "csf": "HasCSF?",
+}
+MODALITY_COL_END = {
+    "plasma": "|PLASMA",
+    "csf": "|CSF",
+}
+Y_VAL_COL_MAP = {
+    'nfl': "NFL3_MEAN",
+    'disease_age': "disease.age",
+    'executive_function': "ef.unadj.slope",
+    'memory': "mem.unadj.slope",
+    'clinical_dementia_rating': "FTLDCDR_SB",
+    'clinical_dementia_rating_global': "CDRGLOB",
+    'carrier': "Carrier.Status",
+}
+
+mutation_col = "Mutation"
+sex_col = "SEX_AT_BIRTH"
+
 
 class FTDDataset(InMemoryDataset):
     """This is dataset used in FTD.
@@ -81,28 +102,6 @@ class FTDDataset(InMemoryDataset):
     - 14598 - 15221: Clinical Data - maybe not necessary for right now.
 
     """
-
-    # These variables are class variables, ie, "constants" for this dataset
-    HAS_MODALITY_COL = {
-        "plasma": "HasPlasma?",
-        "csf": "HasCSF?",
-    }
-    MODALITY_COL_END = {
-        "plasma": "|PLASMA",
-        "csf": "|CSF",
-    }
-    Y_VAL_COL_MAP = {
-        'nfl': "NFL3_MEAN",
-        'disease_age': "disease.age",
-        'executive_function': "ef.unadj.slope",
-        'memory': "mem.unadj.slope",
-        'clinical_dementia_rating': "FTLDCDR_SB",
-        'clinical_dementia_rating_global': "CDRGLOB",
-        'carrier': "Carrier.Status",
-    }
-
-    mutation_col = "Mutation"
-    sex_col = "SEX_AT_BIRTH"
 
     def __init__(self, root, split, config):
         self.name = 'ftd'
@@ -252,8 +251,8 @@ class FTDDataset(InMemoryDataset):
         csv_data = pd.read_csv(csv_path)
         csv_data = self.remove_erroneous_columns(config, csv_data)
         print(f"Using {config.modality} data.")
-        has_measurement_col = self.HAS_MODALITY_COL[config.modality]
-        modality_col_end = self.MODALITY_COL_END[config.modality]
+        has_measurement_col = HAS_MODALITY_COL[config.modality]
+        modality_col_end = MODALITY_COL_END[config.modality]
 
         # Get the indices of the rows where has_measurement is True
         has_measurement = csv_data[has_measurement_col]
@@ -281,7 +280,7 @@ class FTDDataset(InMemoryDataset):
 
         if config.y_val in CONTINOUS_Y_VALS:
             y_val, y_val_mask = self.load_continuous_values(
-                csv_data, combined_filter, self.Y_VAL_COL_MAP[config.y_val]
+                csv_data, combined_filter, Y_VAL_COL_MAP[config.y_val]
             )
         if config.y_val == 'clinical_dementia_rating_global':
             y_val, y_val_mask = self.load_clinical_dementia_rating_global(csv_data, combined_filter)
@@ -362,7 +361,7 @@ class FTDDataset(InMemoryDataset):
     def load_clinical_dementia_rating_global(self, csv_data, x_values):
         '''integer class label encode cdr global values.'''
         classes = [0, 0.5, 1, 2, 3]
-        clinical_dementia_rating_global_col = self.Y_VAL_COL_MAP["clinical_dementia_rating_global"]
+        clinical_dementia_rating_global_col = Y_VAL_COL_MAP["clinical_dementia_rating_global"]
         y_values = csv_data.loc[x_values, clinical_dementia_rating_global_col].astype(float)
         y_values_mask = ~np.isnan(y_values)
         y_values = y_values[y_values_mask]
@@ -376,7 +375,7 @@ class FTDDataset(InMemoryDataset):
         return index_targets, y_values_mask.values
 
     def load_carrier(self, csv_data, x_values):
-        carrier_col = self.Y_VAL_COL_MAP["carrier"]
+        carrier_col = Y_VAL_COL_MAP["carrier"]
         carrier = csv_data.loc[x_values, carrier_col].astype(str)
         carrier_mask = ~carrier.isna()
         carrier = carrier[carrier_mask]

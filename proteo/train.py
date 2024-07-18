@@ -45,7 +45,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
 import proteo.callbacks as proteo_callbacks
-from proteo.datasets.ftd import FTDDataset
+from proteo.datasets.ftd import HAS_MODALITY_COL, MUTATIONS, FTDDataset
 
 
 class Proteo(pl.LightningModule):
@@ -311,23 +311,21 @@ def compute_avg_node_degree(dataset):
 
 def get_complete_filter(config):
     '''Function that computes the filter for the dataset based on the config.'''
+    # TODO: This logic is already implemented in ftd.py: is it necessary?
     csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
     df = pd.read_csv(csv_path)
-    if config.modality == 'plasma':
-        has_measurement_col = 'HasPlasma?'
-    elif config.modality == 'csf':
-        has_measurement_col = 'HasCSF?'
+    has_measurement_col = HAS_MODALITY_COL[config.modality]
     # Get the indices of the rows where has_measurement is True
-    has_measurement = df[has_measurement_col].astype(int) == 1
+    has_measurement = df[has_measurement_col]  # .astype(int) == 1
 
-    # Additional filtering based on mutation, always take mutation status and control
-    if config.mutation in ['GRN', 'MAPT', 'C9orf72']:
-        mutation_filter = df['Mutation'].isin([config.mutation, 'CTL'])
-    elif config.mutation == 'CTL':
-        mutation_filter = pd.Series([True] * len(df))
     # Additional filtering based on sex
     sex_filter = df['SEX_AT_BIRTH'].isin(config.sex)
-    combined_filter = has_measurement & mutation_filter & sex_filter
+    combined_filter = has_measurement & sex_filter
+
+    # Additional filtering based on mutation, always take mutation status and control
+    if config.mutation in MUTATIONS:
+        mutation_filter = df['Mutation'].isin([config.mutation, 'CTL'])
+        combined_filter = combined_filter & mutation_filter
     return df, combined_filter
 
 
@@ -341,7 +339,7 @@ def compute_pos_weight(
     # Count the occurrences of 'CTL' in the 'Mutation' column
     control_count = carrier.value_counts().get('CTL', 0)
     if config.mutation == 'CTL':  # Count all other mutations if CTL
-        mutation_count = carrier.value_counts()[['GRN', 'MAPT', 'C9orf72']].sum()
+        mutation_count = carrier.value_counts()[MUTATIONS].sum()
     else:  # Count specific mutation otherwise
         # Count the occurrences of config.mutation in the 'Mutation' column
         mutation_count = carrier.value_counts().get(config.mutation, 0)
