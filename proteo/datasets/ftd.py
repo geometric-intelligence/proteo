@@ -203,6 +203,8 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
+    def find_top_proteins(self, csv_data, config, modality_col_end):
+
     def find_top_ks_values(self, csv_data, config, modality_col_end):
         '''Find the top n_nodes most different proteins based on p-value from KS test between subgroup specified by config and control group.'''
         ks_stats = []
@@ -211,7 +213,7 @@ class FTDDataset(InMemoryDataset):
         mutation = config.mutation
         sex = config.sex
 
-        condition_sex = csv_data[self.sex_col].isin(sex)
+        condition_sex = csv_data[sex_col].isin(sex)
         condition_ctl_sex = (csv_data['Mutation'] == "CTL") & condition_sex
         if mutation in MUTATIONS:  # Compare mutation to control (within correct sex)
             condition_mutation_sex = (csv_data['Mutation'] == mutation) & condition_sex
@@ -261,13 +263,13 @@ class FTDDataset(InMemoryDataset):
 
         # Additional filtering based on mutation, always take mutation status and control
         if config.mutation in MUTATIONS:
-            mutation_filter = csv_data[self.mutation_col].isin([config.mutation, 'CTL'])
+            mutation_filter = csv_data[mutation_col].isin([config.mutation, 'CTL'])
         if config.mutation == 'CTL':
             mutation_filter = pd.Series([True] * len(csv_data))
 
         print("Number of patients with mutation status + control:", mutation_filter.sum())
         # Additional filtering based on sex
-        sex_filter = csv_data[self.sex_col].isin(config.sex)
+        sex_filter = csv_data[sex_col].isin(config.sex)
 
         print("Number of patients with sex:", sex_filter.sum())
         combined_filter = has_modality & mutation_filter & sex_filter

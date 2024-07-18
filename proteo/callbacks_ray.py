@@ -112,10 +112,12 @@ class CustomRayWandbCallback(Callback):
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
         train_loss = pl_module.trainer.callback_metrics["train_loss"]
         train_RMSE = math.sqrt(train_loss)
-        # Log the first graph ([0, :]) of x0, x1, and x2
+        # Log the first graph ([0, :]) of x0, x1, and x2 to see if oversmoothing is happening, aka if all features across 1 person are the same
         x0 = torch.vstack(pl_module.x0).detach().cpu()[0, :]
         x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
         x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
+        multiscale = torch.vstack(pl_module.multiscale).detach().cpu()
+        multiscale = torch.norm(multiscale, dim=1).detach().cpu() #Average the features across the 3 layers per person to get one value per person
         wandb.log(
             {
                 "train_loss": train_loss,
@@ -126,6 +128,7 @@ class CustomRayWandbCallback(Callback):
                 "x0": wandb.Histogram(x0),
                 "x1": wandb.Histogram(x1),
                 "x2": wandb.Histogram(x2),
+                "multiscale norm for all people": wandb.Histogram(multiscale),
                 "epoch": pl_module.current_epoch,
             }
         )

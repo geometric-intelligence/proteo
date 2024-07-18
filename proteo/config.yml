@@ -1,5 +1,5 @@
 # Files
-root_dir: "/home/nmiolane/code/proteo"
+root_dir: "/home/lcornelis/code/proteo"
 ray_tmp_dir: "/tmp" #"/home/lcornelis/code/proteo/outputs/ray"  
 # Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"

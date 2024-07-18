@@ -71,18 +71,21 @@ class CustomWandbCallback(Callback):
             pl_module.train_targets = reshape_targets(pl_module.train_targets)
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
-        # Log the first graph ([0, :]) of x0, x1, and x2
+        # Log the first graph ([0, :]) of x0, x1, and x2 to see if oversmoothing is happening, aka if all features across 1 person are the same
         x0 = torch.vstack(pl_module.x0).detach().cpu()[0, :]
         x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
         x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
+        multiscale = torch.vstack(pl_module.multiscale).detach().cpu()
+        multiscale = torch.norm(multiscale, dim=1).detach().cpu() #Average the features across the 3 layers per person to get one value per person
         pl_module.logger.experiment.log(
             {
                 "train_preds_logits": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
                 "parameters (weights + biases)": wandb.Histogram(params),
-                "x0": wandb.Histogram(x0),
-                "x1": wandb.Histogram(x1),
-                "x2": wandb.Histogram(x2),
+                "x0 oversmoothing 1 person": wandb.Histogram(x0),
+                "x1 oversmoothing 1 person": wandb.Histogram(x1),
+                "x2 oversmoothing 1 person": wandb.Histogram(x2),
+                "multiscale norm for all people": wandb.Histogram(multiscale),
                 "epoch": pl_module.current_epoch,
             }
         )
@@ -105,6 +108,7 @@ class CustomWandbCallback(Callback):
         pl_module.x0.clear()
         pl_module.x1.clear()
         pl_module.x2.clear()
+        pl_module.multiscale.clear()
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """Save val predictions and targets as histograms.

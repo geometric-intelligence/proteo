@@ -90,6 +90,7 @@ class Proteo(pl.LightningModule):
         self.x0 = []
         self.x1 = []
         self.x2 = []
+        self.multiscale = []
         self.pos_weight = pos_weight
         self.focal_loss_weight = focal_loss_weight
 
@@ -148,6 +149,7 @@ class Proteo(pl.LightningModule):
             self.x0.append(aux[0])  # check which format is best here.
             self.x1.append(aux[1])
             self.x2.append(aux[2])
+            self.multiscale.append(aux[3])
             return pred
         if self.config.model == 'gat':
             # This returns a pred value for each node in the big graph

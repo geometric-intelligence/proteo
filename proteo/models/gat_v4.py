@@ -257,11 +257,11 @@ class GATv4(nn.Module):
 
         # Apply layer normalization to each individual graph to have mean 0, std 1
         if self.use_layer_norm:
-            x0 = self.layer_norm(x0)
-            x1 = self.layer_norm(x1)
-            x2 = self.layer_norm(x2)
+            x0 = self.layer_norm(x0) # [bs, nodes]
+            x1 = self.layer_norm(x1) # [bs, nodes]
+            x2 = self.layer_norm(x2) # [bs, nodes]
 
-        # Concatenate multiscale features
+        # Concatenate multiscale features - results in [bs, 3*nodes]
         multiscale_features = {'layer1': x0, 'layer2': x1, 'layer3': x2}
         multiscale_features = torch.cat(
             [multiscale_features[layer] for layer in self.which_layer], dim=1
@@ -269,7 +269,6 @@ class GATv4(nn.Module):
 
         # Pass through fully connected layers
         pred = self.encoder(multiscale_features)
-
-        aux = [x0, x1, x2]
+        aux = [x0, x1, x2, multiscale_features]
 
         return pred, aux
