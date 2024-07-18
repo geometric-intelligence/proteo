@@ -4,14 +4,14 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 import torch
+import torch.nn.functional as F
 import wandb
 from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
-import pandas as pd
-import torch.nn.functional as F
 
 
 class CustomWandbCallback(Callback):
@@ -86,7 +86,7 @@ class CustomWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val == "carrier_status":
+        if pl_module.config.y_val == "carrier":
             pl_module.logger.experiment.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
@@ -130,15 +130,18 @@ class CustomWandbCallback(Callback):
                 }
             )
 
-
-            if pl_module.config.y_val == "carrier_status":
+            if pl_module.config.y_val == "carrier":
                 # Assuming binary classification; for multi-class, adjust accordingly
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
                 # Convert tensors to numpy arrays and ensure they are integers
                 val_targets_np = val_targets.numpy().astype(int).flatten()
                 val_preds_binary_np = val_preds_binary.numpy().astype(int).flatten()
                 conf_matrix = confusion_matrix(val_targets_np, val_preds_binary_np)
-                conf_matrix_df = pd.DataFrame(conf_matrix, index=[f'True_{i}' for i in range(conf_matrix.shape[0])], columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])])
+                conf_matrix_df = pd.DataFrame(
+                    conf_matrix,
+                    index=[f'True_{i}' for i in range(conf_matrix.shape[0])],
+                    columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])],
+                )
                 # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
                     {
@@ -152,7 +155,11 @@ class CustomWandbCallback(Callback):
                 softmax_preds = F.softmax(val_preds, dim=1)
                 class_preds = torch.argmax(softmax_preds, dim=1)
                 conf_matrix = confusion_matrix(val_targets, class_preds)
-                conf_matrix_df = pd.DataFrame(conf_matrix, index=[f'True_{i}' for i in range(conf_matrix.shape[0])], columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])])
+                conf_matrix_df = pd.DataFrame(
+                    conf_matrix,
+                    index=[f'True_{i}' for i in range(conf_matrix.shape[0])],
+                    columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])],
+                )
                 pl_module.logger.experiment.log(
                     {
                         "val_preds_softmax": wandb.Histogram(softmax_preds),
@@ -189,6 +196,7 @@ def get_val_accuracy(preds, targets):
     correct = (preds == targets).sum().item()
     total = targets.numel()
     return correct / total
+
 
 def reshape_targets(val_targets):
     '''When using multiclass classification, the targets need to be reshaped'''

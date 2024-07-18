@@ -103,13 +103,13 @@ def train_func(train_loop_config):
             "histogram": wandb.Image(
                 os.path.join(
                     train_dataset.processed_dir,
-                    f'{config.y_val}_{config.sex}_{config.mutation_status}_histogram.jpg',
+                    f'{config.y_val}_{config.sex}_{config.mutation}_histogram.jpg',
                 )
             ),
             "adjacency": wandb.Image(
                 os.path.join(
                     train_dataset.processed_dir,
-                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_status_{config.mutation_status}_{config.plasma_or_csf}_sex_{config.sex}.jpg",
+                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg",
                 )
             ),
             "top_proteins": wandb.Table(
@@ -119,8 +119,8 @@ def train_func(train_loop_config):
                 columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
                 data=[
                     [
-                        config.plasma_or_csf,
-                        config.mutation_status,
+                        config.modality,
+                        config.mutation,
                         config.y_val,
                         config.sex,
                         avg_node_degree,
@@ -286,9 +286,9 @@ def main():
         'weight_initializer': tune.sample_from(weight_initializer),
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
-        'mutation_status': tune.choice(config.mutation_status_choices),
+        'mutation': tune.choice(config.mutation_choices),
         'sex': tune.choice(config.sex_choices),
-        'plasma_or_csf': tune.choice(config.plasma_or_csf_choices),
+        'modality': tune.choice(config.modality_choices),
         'y_val': tune.choice(config.y_val_choices),
     }
 
