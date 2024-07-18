@@ -538,6 +538,7 @@ def main():
         log_every_n_steps=config.log_every_n_steps,
         precision=config.precision,
         num_sanity_val_steps=1,
+        deterministic=True,
     )
 
     # Code that only runs on the rank 0 GPU, in multi-GPUs setup
