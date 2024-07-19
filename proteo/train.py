@@ -45,7 +45,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
 import proteo.callbacks as proteo_callbacks
-from proteo.datasets.ftd import HAS_MODALITY_COL, MUTATIONS, BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, FTDDataset
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, FTDDataset
 
 
 class Proteo(pl.LightningModule):
@@ -311,35 +311,18 @@ def compute_avg_node_degree(dataset):
     return avg_node_degree
 
 
-def get_complete_filter(config):
-    '''Function that computes the filter for the dataset based on the config.'''
-    # TODO: This logic is already implemented in ftd.py: is it necessary?
-    csv_path = os.path.join(config.root_dir, config.data_dir, "raw", config.raw_file_name)
-    df = pd.read_csv(csv_path)
-    # Get the indices of the rows where has_modality is True
-    has_modality = df[HAS_MODALITY_COL[config.modality]]
-
-    # Additional filtering based on sex
-    sex_filter = df['SEX_AT_BIRTH'].isin(config.sex)
-    combined_filter = has_modality & sex_filter
-
-    # Additional filtering based on mutation, always take mutation status and control
-    if config.mutation in MUTATIONS:
-        mutation_filter = df['Mutation'].isin([config.mutation, 'CTL'])
-        combined_filter = combined_filter & mutation_filter
-    return df, combined_filter
-
-
 def compute_pos_weight(
     test_dataset, train_dataset
 ): 
     """Function that computes the positive weight (ratio of ctl to carriers) for the binary cross-entropy loss function."""
     test_y_values = test_dataset.y
     train_y_values = train_dataset.y
-    test_carrier_count = test_y_values.count(1)
-    train_carrier_count = train_y_values.count(1)
-    test_ctl_count = test_y_values.count(0)
-    train_ctl_count = train_y_values.count(0)
+    print("type of test_y_values", type(test_y_values))
+    print("type of train_y_values", type(train_y_values))
+    test_carrier_count = torch.sum(test_y_values == 1).item()
+    train_carrier_count = torch.sum(train_y_values == 1).item()
+    test_ctl_count = torch.sum(test_y_values == 0).item()
+    train_ctl_count = torch.sum(train_y_values == 0).item()
     return torch.FloatTensor([(train_ctl_count + test_ctl_count) / (train_carrier_count+test_carrier_count)])
 
 
@@ -347,23 +330,10 @@ def compute_focal_loss_weight(config, test_dataset, train_dataset):
     '''Function that computes the weights (prevalence of) classes in the shape [1, num_classes] to be used in the focal loss function.'''
     test_y_values = test_dataset.y
     train_y_values = train_dataset.y
-    complete_y_values = test_y_values.extend(train_y_values)
+    complete_y_values = torch.cat((test_y_values, train_y_values))
     frequencies = []
     for key, value in MULTICLASS_Y_VALS_MAP[config.y_val].items():
-        count = complete_y_values.count(value)
-        frequencies.append(count)
-    # Calculate weights inversely proportional to the frequencies
-    frequencies = torch.tensor(frequencies, dtype=torch.float32)
-    weights = 1.0 / frequencies
-    return weights
-
-    df, combined_filter = get_complete_filter(config)
-    cdrglob_values = df.loc[combined_filter, 'CDRGLOB'].astype(float)
-    # Compute the weight for the focal loss
-    specific_values = [0, 0.5, 1, 2, 3]
-    frequencies = []
-    for value in specific_values:
-        count = (cdrglob_values == value).sum()
+        count = torch.sum(complete_y_values == value).item()
         frequencies.append(count)
     # Calculate weights inversely proportional to the frequencies
     frequencies = torch.tensor(frequencies, dtype=torch.float32)

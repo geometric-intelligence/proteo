@@ -21,8 +21,6 @@ LABEL_DIM_MAP = {
     "memory": 1,
     "nfl": 1,
 }
-
-MUTATIONS = ["MAPT", "C9orf72", "GRN"]
 SEXES = [["M"], ["F"], ["M", "F"]]
 MODALITIES = ["plasma", "csf"]
 
@@ -113,7 +111,6 @@ class FTDDataset(InMemoryDataset):
         self.split = split
         assert split in ["train", "test"]
 
-        assert config.mutation in MUTATIONS or config.mutation == 'CTL'
         assert config.sex in SEXES
         assert config.modality in MODALITIES
         assert config.y_val in LABEL_DIM_MAP
@@ -241,6 +238,8 @@ class FTDDataset(InMemoryDataset):
     def get_top_columns_binary_classification(self, filtered_data, modality_cols, y_val):
         '''For binary classification, use the KS test to find the most different proteins between the two groups.'''
         # Compare the group with y=1 to the group with y=0
+        # Convert to pandas Series to align with filtered_data
+        y_val = pd.Series(y_val, index=filtered_data.index)
         group_1 = filtered_data[y_val == 1]
         group_0 = filtered_data[y_val == 0]
         ks_stats = []
@@ -268,7 +267,7 @@ class FTDDataset(InMemoryDataset):
     #-----------------------------FUNCTIONS TO GET LABELS---------------------------------#
     def load_y_vals(self, filtered_data):
         '''Find the y_val values based on the config.'''
-        y_vals = filtered_data[Y_VAL_COL_MAP[self.config.y_val]].astype(float)
+        y_vals = filtered_data[Y_VAL_COL_MAP[self.config.y_val]]
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
 
