@@ -45,7 +45,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
 import proteo.callbacks as proteo_callbacks
-from proteo.datasets.ftd import HAS_MODALITY_COL, MUTATIONS, FTDDataset
+from proteo.datasets.ftd import HAS_MODALITY_COL, MUTATIONS, BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, FTDDataset
 
 
 class Proteo(pl.LightningModule):
@@ -331,26 +331,32 @@ def get_complete_filter(config):
 
 
 def compute_pos_weight(
-    config,
-):  # TODO: this doesn't take into account filtering out NA values and filtering by sex
+    test_dataset, train_dataset
+): 
     """Function that computes the positive weight (ratio of ctl to carriers) for the binary cross-entropy loss function."""
-    df, combined_filter = get_complete_filter(config)
-    carrier = df.loc[combined_filter, 'Mutation']
-
-    # Count the occurrences of 'CTL' in the 'Mutation' column
-    control_count = carrier.value_counts().get('CTL', 0)
-    if config.mutation == 'CTL':  # Count all other mutations if CTL
-        mutation_count = carrier.value_counts()[MUTATIONS].sum()
-    else:  # Count specific mutation otherwise
-        # Count the occurrences of config.mutation in the 'Mutation' column
-        mutation_count = carrier.value_counts().get(config.mutation, 0)
-    return torch.FloatTensor([control_count / mutation_count])
+    test_y_values = test_dataset.y
+    train_y_values = train_dataset.y
+    test_carrier_count = test_y_values.count(1)
+    train_carrier_count = train_y_values.count(1)
+    test_ctl_count = test_y_values.count(0)
+    train_ctl_count = train_y_values.count(0)
+    return torch.FloatTensor([(train_ctl_count + test_ctl_count) / (train_carrier_count+test_carrier_count)])
 
 
-def compute_focal_loss_weight(config):
+def compute_focal_loss_weight(config, test_dataset, train_dataset):
     '''Function that computes the weights (prevalence of) classes in the shape [1, num_classes] to be used in the focal loss function.'''
-    # TODO - not the best because this code is copied from ftd.py, but weight needs to be recomputed for each set
-    # Get cdr global values for specific subset
+    test_y_values = test_dataset.y
+    train_y_values = train_dataset.y
+    complete_y_values = test_y_values.extend(train_y_values)
+    frequencies = []
+    for key, value in MULTICLASS_Y_VALS_MAP[config.y_val].items():
+        count = complete_y_values.count(value)
+        frequencies.append(count)
+    # Calculate weights inversely proportional to the frequencies
+    frequencies = torch.tensor(frequencies, dtype=torch.float32)
+    weights = 1.0 / frequencies
+    return weights
+
     df, combined_filter = get_complete_filter(config)
     cdrglob_values = df.loc[combined_filter, 'CDRGLOB'].astype(float)
     # Compute the weight for the focal loss
@@ -462,11 +468,13 @@ def main():
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
-    pos_weight = compute_pos_weight(config)
-    focal_loss_weight = compute_focal_loss_weight(config)
-    if config.y_val == "carrier":
+    pos_weight = 1.0 # default value
+    focal_loss_weight = [1.0] # default value
+    if config.y_val in BINARY_Y_VALS_MAP:
+        pos_weight = compute_pos_weight(test_dataset, train_dataset)
         print(f"pos_weight used for loss function: {pos_weight}")
-    elif config.y_val == 'clinical_dementia_rating_global':
+    elif config.y_val in MULTICLASS_Y_VALS_MAP:
+        focal_loss_weight = compute_focal_loss_weight(config, test_dataset, train_dataset)
         print(f"focal_loss_weight used for loss function: {focal_loss_weight}")
 
     module = Proteo(
