@@ -217,22 +217,24 @@ class FTDDataset(InMemoryDataset):
 
         # Case where y_val = "carrier", "clinical_dementia_rating_global_binary", ks test - binary
         if self.config.y_val in BINARY_Y_VALS_MAP:
-            top_columns = self.get_top_columns_binary_classification(filtered_data, modality_cols, y_val)
+            top_columns, metric = self.get_top_columns_binary_classification(filtered_data, modality_cols, y_val)
         # Case where y_val = "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", regression
         elif self.config.y_val in CONTINOUS_Y_VALS:
-            top_columns = self.get_top_columns_regression(filtered_data, modality_cols)
+            top_columns, metric = self.get_top_columns_regression(filtered_data, modality_cols)
         # Case where y_val = "clinical_dementia_rating_global", multiclass 
         elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
             raise NotImplementedError("Functionality not defined")
 
 
         # Save the plasma_protein_names to a file for wandb
-        plasma_protein_names = top_columns['Protein'].values
+        protein_names = top_columns['Protein'].values
         file_path = os.path.join(
             self.processed_dir,
             f'top_proteins_num_nodes_{self.config.num_nodes}_mutation_{self.config.mutation}_{self.config.modality}.npy',
         )
-        np.save(file_path, plasma_protein_names)
+        # Combine into a structured array
+        structured_array = np.rec.array((protein_names, metric), dtype=[('Protein', 'U50'), ('Metric', 'f8')])    
+        np.save(file_path, structured_array)
 
         return top_columns['Protein'].tolist()
 
@@ -249,7 +251,7 @@ class FTDDataset(InMemoryDataset):
             ks_stats.append((protein_column, ks_statistic, ks_p_value))
         ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
         top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(self.config.num_nodes)
-        return top_columns
+        return top_columns, top_columns['P Value'].values
 
     def get_top_columns_regression(self, filtered_data, modality_cols, y_val):
         '''Find the top n proteins with the highest correlation to y_val using Kendall's tau.'''
@@ -261,7 +263,7 @@ class FTDDataset(InMemoryDataset):
         correlations_df = pd.DataFrame(correlations, columns=['Protein', 'Kendall_Tau', 'P Value'])
         correlations_df['Abs_Tau'] = correlations_df['Kendall_Tau'].abs() #take absolute value
         top_columns = correlations_df.sort_values(by='Abs_Tau', ascending=False).head(self.config.num_nodes)
-        return top_columns
+        return top_columns, top_columns['Kendall_Tau'].values
 
     #-----------------------------FUNCTIONS TO GET LABELS---------------------------------#
     def load_y_vals(self, filtered_data):
@@ -283,7 +285,6 @@ class FTDDataset(InMemoryDataset):
         )
         plot_histogram(pd.DataFrame(y_vals), self.config.y_val, save_to=hist_path)
         return y_vals, y_vals_mask
-
 
     def load_binary_y_values(self, y_vals):
         '''Load the binary y_val values using dictionary that maps values to keys.'''

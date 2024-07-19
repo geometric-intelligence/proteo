@@ -494,10 +494,12 @@ def main():
         ],
     )
     # Log top proteins, note this is in order from most to least different
-    plasma_protein_names = read_protein_file(train_dataset.processed_dir, config)
+    protein_file_data = read_protein_file(train_dataset.processed_dir, config)
+    protein_names = protein_file_data['Protein']
+    metrics = protein_file_data['Metric']
     # Create a list of lists for logging
-    top_proteins_data = [[protein] for protein in plasma_protein_names]
-    logger.log_text(key="top_proteins", columns=["Protein"], data=top_proteins_data)
+    top_proteins_data = [[protein, metric] for protein, metric in zip(protein_names, metrics)]
+    logger.log_text(key="top_proteins", columns=["Protein", "Metric"], data=top_proteins_data)
     logger.log_text(
         key="Parameters",
         columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
