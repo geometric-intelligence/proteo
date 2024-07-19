@@ -13,13 +13,12 @@ ray_results_dir: "outputs/ray_results"
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
-# Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global")
+# Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_global_binary")
 y_val: "carrier"
 # Plasma or CSF
 modality: "plasma"
-# Can be "MAPT", "GRN", "C9orf72" or "CTL"(which just splits by Carrier and Control differences)
-# If you select anything but "CTL", analysis will be run comparing the selected mutation to the controls
-mutation: "GRN"
+# List of all the mutations you want included in the dataset
+mutation: ["GRN", "CTL"]
 # ['M'], ['F'],['M', 'F'] 
 sex: ['M', 'F'] 
 

@@ -9,6 +9,7 @@ import torch
 from scipy.stats import chi2_contingency, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
+from scipy.stats import kendalltau
 
 LABEL_DIM_MAP = {
     "clinical_dementia_rating_global": 5,
@@ -32,6 +33,8 @@ CONTINOUS_Y_VALS = [
     "memory",
     "clinical_dementia_rating",
 ]
+BINARY_Y_VALS_MAP = {"clinical_dementia_rating_global_binary":{0:0, 0.5:1, 1:1, 2:1, 3:1}, "carrier":{"CTL":0, "Carrier":1}}
+MULTICLASS_Y_VALS_MAP = {"clinical_dementia_rating_global": {0:0, 0.5:1, 1:2, 2:3, 3:4}}
 
 HAS_MODALITY_COL = {
     "plasma": "HasPlasma?",
@@ -48,6 +51,7 @@ Y_VAL_COL_MAP = {
     'memory': "mem.unadj.slope",
     'clinical_dementia_rating': "FTLDCDR_SB",
     'clinical_dementia_rating_global': "CDRGLOB",
+    'clinical_dementia_rating_global_binary': "CDRGLOB",
     'carrier': "Carrier.Status",
 }
 
@@ -113,12 +117,14 @@ class FTDDataset(InMemoryDataset):
         assert config.sex in SEXES
         assert config.modality in MODALITIES
         assert config.y_val in LABEL_DIM_MAP
+        if config.y_val == 'carrier':
+            assert len(config.mutation) > 1 and "CTL" in config.mutation
 
         self.config = config
         self.adj_str = f'adj_thresh_{config.adj_thresh}'
         self.y_val_str = f'y_val_{config.y_val}'
         self.num_nodes_str = f'num_nodes_{config.num_nodes}'
-        self.mutation_str = f'mutation_{config.mutation}'
+        self.mutation_str = f'mutation_{",".join(config.mutation)}'
         self.modality_str = f'{config.modality}'
         self.sex_str = f'sex_{",".join(config.sex)}'
         self.hist_path_str = (
@@ -203,100 +209,124 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
-    def find_top_proteins(self, csv_data, config, modality_col_end):
+    #-----------------------------FUNCTIONS TO GET FEATURES---------------------------------#
+    def find_top_proteins(self, filtered_data, y_val):
 
-    def find_top_ks_values(self, csv_data, config, modality_col_end):
-        '''Find the top n_nodes most different proteins based on p-value from KS test between subgroup specified by config and control group.'''
-        ks_stats = []
+        # Get the column names of the correct proteins (plasma or csf)
+        modality_cols = [col for col in filtered_data.columns if col.endswith(MODALITY_COL_END[self.config.modality])]
 
-        # Direct comparison for mutation status
-        mutation = config.mutation
-        sex = config.sex
+        # Case where y_val = "carrier", "clinical_dementia_rating_global_binary", ks test - binary
+        if self.config.y_val in BINARY_Y_VALS_MAP:
+            top_columns = self.get_top_columns_binary_classification(filtered_data, modality_cols, y_val)
+        # Case where y_val = "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", regression
+        elif self.config.y_val in CONTINOUS_Y_VALS:
+            top_columns = self.get_top_columns_regression(filtered_data, modality_cols)
+        # Case where y_val = "clinical_dementia_rating_global", multiclass 
+        elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
+            raise NotImplementedError("Functionality not defined")
 
-        condition_sex = csv_data[sex_col].isin(sex)
-        condition_ctl_sex = (csv_data['Mutation'] == "CTL") & condition_sex
-        if mutation in MUTATIONS:  # Compare mutation to control (within correct sex)
-            condition_mutation_sex = (csv_data['Mutation'] == mutation) & condition_sex
-        if mutation == "CTL":  # Compare CTL to all other mutations (within correct sex)
-            condition_mutation_sex = csv_data['Mutation'].isin(MUTATIONS) & condition_sex
 
-        # Filter columns that end with '|PLASMA' or '|CSF'
-        modality_columns = [col for col in csv_data.columns if col.endswith(modality_col_end)]
-        for protein_column in modality_columns:
-            mutation_data = csv_data[condition_mutation_sex][protein_column]
-            other_data = csv_data[condition_ctl_sex][protein_column]
-
-            mutation_data = mutation_data.dropna()
-            other_data = other_data.dropna()
-            mutation_data = mutation_data[np.isfinite(mutation_data)]
-            other_data = other_data[np.isfinite(other_data)]
-
-            ks_statistic, ks_p_value = ks_2samp(mutation_data, other_data)
-            ks_stats.append((protein_column, ks_statistic, ks_p_value))
-
-        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
-        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(config.num_nodes)
-
-        # Save the plasma_protein_names to a file
+        # Save the plasma_protein_names to a file for wandb
         plasma_protein_names = top_columns['Protein'].values
         file_path = os.path.join(
             self.processed_dir,
-            f'top_proteins_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}.npy',
+            f'top_proteins_num_nodes_{self.config.num_nodes}_mutation_{self.config.mutation}_{self.config.modality}.npy',
         )
         np.save(file_path, plasma_protein_names)
 
         return top_columns['Protein'].tolist()
 
+    def get_top_columns_binary_classification(self, filtered_data, modality_cols, y_val):
+        '''For binary classification, use the KS test to find the most different proteins between the two groups.'''
+        # Compare the group with y=1 to the group with y=0
+        group_1 = filtered_data[y_val == 1]
+        group_0 = filtered_data[y_val == 0]
+        ks_stats = []
+        for protein_column in modality_cols:
+            data1 = group_1[protein_column]
+            data0 = group_0[protein_column]
+            ks_statistic, ks_p_value = ks_2samp(data1, data0)
+            ks_stats.append((protein_column, ks_statistic, ks_p_value))
+        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
+        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(self.config.num_nodes)
+        return top_columns
+
+    def get_top_columns_regression(self, filtered_data, modality_cols, y_val):
+        '''Find the top n proteins with the highest correlation to y_val using Kendall's tau.'''
+        correlations = []
+        # Compute Kendall's tau correlation for each protein column with y_val
+        for protein_column in modality_cols:
+            tau, p_value = kendalltau(filtered_data[protein_column], y_val)
+            correlations.append((protein_column, tau, p_value))
+        correlations_df = pd.DataFrame(correlations, columns=['Protein', 'Kendall_Tau', 'P Value'])
+        correlations_df['Abs_Tau'] = correlations_df['Kendall_Tau'].abs() #take absolute value
+        top_columns = correlations_df.sort_values(by='Abs_Tau', ascending=False).head(self.config.num_nodes)
+        return top_columns
+
+    #-----------------------------FUNCTIONS TO GET LABELS---------------------------------#
+    def load_y_vals(self, filtered_data):
+        '''Find the y_val values based on the config.'''
+        y_vals = filtered_data[Y_VAL_COL_MAP[self.config.y_val]].astype(float)
+        y_vals_mask = ~y_vals.isna()
+        y_vals = y_vals[y_vals_mask]
+
+        if self.config.y_val in BINARY_Y_VALS_MAP:
+            y_vals = self.load_binary_y_values(y_vals)
+        if self.config.y_val in MULTICLASS_Y_VALS_MAP:
+            y_vals= self.load_multiclass_y_values(filtered_data)
+        # Remove NaN values from y_vals and return filter to remove rows where y_val is NaN
+
+        # Plot histogram of y_vals
+        hist_path = os.path.join(
+            self.processed_dir,
+            self.hist_path_str,
+        )
+        plot_histogram(pd.DataFrame(y_vals), self.config.y_val, save_to=hist_path)
+        return y_vals, y_vals_mask
+
+
+    def load_binary_y_values(self, y_vals):
+        '''Load the binary y_val values using dictionary that maps values to keys.'''
+        mapping_dict = BINARY_Y_VALS_MAP[self.config.y_val]
+        mapped_values = [mapping_dict[value] for value in y_vals]
+        return mapped_values
+    
+    def load_multiclass_y_values(self, y_vals):
+        '''Load multiclass y_values and encode as index targets for focal loss'''
+        mapping_dict = MULTICLASS_Y_VALS_MAP[self.config.y_val]
+        mapped_values = [mapping_dict[value] for value in y_vals]
+        return mapped_values
+
+
     def load_csv_data(self, config):
+        '''Load the csv data features and labels'''
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
+        # Remove bimodal columns 
         csv_data = self.remove_erroneous_columns(config, csv_data)
-        print(f"Using {config.modality} data.")
+        # Get the correct subset of proteins based on the mutation, if they have the correct modality measurements, and sex
+        condition_sex = csv_data[sex_col].isin(self.config.sex)
+        condition_modality = csv_data[HAS_MODALITY_COL[self.config.modality]]
+        condition_mutation = csv_data[mutation_col].isin(self.config.mutation)
+        sex_mutation_modality_filter = condition_sex & condition_mutation & condition_modality
+        print("Number of patients with measurements:", condition_modality.sum())
+        print(f"Number of patients with mutation status in {self.config.mutation}:", condition_mutation.sum())
+        print(f"Number of patients with sex in {self.config.sex}", sex_mutation_modality_filter.sum())
+        filtered_data = csv_data[sex_mutation_modality_filter] #Select rows that meet all conditions
 
-        # Get the indices of the rows where has_modality is True
-        has_modality = csv_data[HAS_MODALITY_COL[config.modality]]
-        print("Number of patients with measurements:", has_modality.sum())
 
-        # test_has_plasma_col_id(has_plasma)
-        # test_boolean_plasma(has_plasma)
+        # Extract the y_val values
+        y_vals, y_val_mask = self.load_y_vals(filtered_data)
+        filtered_data = filtered_data[y_val_mask] #Remove rows where y_val is NaN
+        # Extract the top proteins (features)
+        top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
+        top_proteins = filtered_data[top_protein_columns]
 
-        # Additional filtering based on mutation, always take mutation status and control
-        if config.mutation in MUTATIONS:
-            mutation_filter = csv_data[mutation_col].isin([config.mutation, 'CTL'])
-        if config.mutation == 'CTL':
-            mutation_filter = pd.Series([True] * len(csv_data))
-
-        print("Number of patients with mutation status + control:", mutation_filter.sum())
-        # Additional filtering based on sex
-        sex_filter = csv_data[sex_col].isin(config.sex)
-
-        print("Number of patients with sex:", sex_filter.sum())
-        combined_filter = has_modality & mutation_filter & sex_filter
-        print(
-            "Number of patients with measurements, sex, and mutation status:",
-            combined_filter.sum(),
-        )
-
-        if config.y_val in CONTINOUS_Y_VALS:
-            y_val, y_val_mask = self.load_continuous_values(
-                csv_data, combined_filter, Y_VAL_COL_MAP[config.y_val]
-            )
-        if config.y_val == 'clinical_dementia_rating_global':
-            y_val, y_val_mask = self.load_clinical_dementia_rating_global(csv_data, combined_filter)
-        if config.y_val == 'carrier':
-            y_val, y_val_mask = self.load_carrier(csv_data, combined_filter)
-
-        modality_col_end = MODALITY_COL_END[config.modality]
-        top_protein_columns = self.find_top_ks_values(csv_data, config, modality_col_end)
-        top_proteins = csv_data.loc[combined_filter, top_protein_columns].dropna().astype(float)
-        # Extract and convert the plasma_protein values for rows
-        # where has_plasma is True and nfl is not NaN.
-        top_proteins = top_proteins[y_val_mask]
 
         features = np.array(top_proteins)
-        labels = np.array(y_val)
-
+        labels = np.array(y_vals)
+        # ============================DONT TOUCH============================
         train_features, test_features, train_labels, test_labels = train_test_split(
             features, labels, test_size=0.20, random_state=42
         )
@@ -344,56 +374,6 @@ class FTDDataset(InMemoryDataset):
             adj_matrix,
         )
 
-    def load_continuous_values(self, csv_data, x_values, y_val_col):
-        y_values = csv_data.loc[x_values, y_val_col].astype(float)
-        y_values_mask = ~np.isnan(y_values)
-        # Remove NaN values from chosen y_val column
-        y_values = y_values[y_values_mask]
-        # test_nfl_mean_no_nan(nfl)
-        if self.config.y_val == 'nfl':
-            y_values = log_transform(y_values)
-        hist_path = os.path.join(
-            self.processed_dir,
-            self.hist_path_str,
-        )
-        plot_histogram(pd.DataFrame(y_values), self.config.y_val, save_to=hist_path)
-        return y_values.values, y_values_mask.values
-
-    def load_clinical_dementia_rating_global(self, csv_data, x_values):
-        '''integer class label encode cdr global values.'''
-        classes = [0, 0.5, 1, 2, 3]
-        clinical_dementia_rating_global_col = Y_VAL_COL_MAP["clinical_dementia_rating_global"]
-        y_values = csv_data.loc[x_values, clinical_dementia_rating_global_col].astype(float)
-        y_values_mask = ~np.isnan(y_values)
-        y_values = y_values[y_values_mask]
-        hist_path = os.path.join(
-            self.processed_dir,
-            self.hist_path_str,
-        )
-        plot_histogram(pd.DataFrame(y_values), self.config.y_val, save_to=hist_path)
-        class_to_index = {cls: idx for idx, cls in enumerate(classes)}
-        index_targets = torch.tensor([class_to_index[cls] for cls in y_values])
-        return index_targets, y_values_mask.values
-
-    def load_carrier(self, csv_data, x_values):
-        carrier_col = Y_VAL_COL_MAP["carrier"]
-        carrier = csv_data.loc[x_values, carrier_col].astype(str)
-        carrier_mask = ~carrier.isna()
-        carrier = carrier[carrier_mask]
-        carrier = np.where(carrier == 'Carrier', 1, np.where(carrier == 'CTL', 0, None)).astype(
-            float
-        )
-        # Check for any None values, which indicate an unrecognized status
-        if None in carrier:
-            raise ValueError(
-                "Encountered an unrecognized carrier status. Only 'Carrier' and 'CTL' are allowed."
-            )
-        hist_path = os.path.join(
-            self.processed_dir,
-            self.hist_path_str,
-        )
-        plot_histogram(pd.DataFrame(carrier), self.config.y_val, save_to=hist_path)
-        return carrier, carrier_mask.values
 
     def remove_erroneous_columns(self, config, csv_data):
         """Remove columns that have bimodal distributions."""
