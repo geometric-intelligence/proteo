@@ -13,12 +13,12 @@ ray_results_dir: "outputs/ray_results"
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
-# Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_global_binary")
-y_val: "carrier"
+# Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
+y_val: "disease_age"
 # Plasma or CSF
 modality: "plasma"
 # List of all the mutations you want included in the dataset
-mutation: ["GRN", "CTL"]
+mutation: ["GRN"]
 # ['M'], ['F'],['M', 'F'] 
 sex: ['M', 'F'] 
 
@@ -78,7 +78,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 43
 
@@ -111,10 +111,10 @@ l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 num_nodes_choices: [10, 30, 150, 1000, 7000]
 adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
-mutation_choices: ['MAPT', 'GRN', 'C9orf72', 'CTL']
+mutation_choices: [['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: ['M', 'F', 'All']
 modality_choices: ['plasma', 'csf']
-y_val_choices: ['carrier'] #['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
+y_val_choices: ['nfl'] #['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]

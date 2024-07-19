@@ -38,9 +38,9 @@ from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
 
 import proteo.callbacks_ray as proteo_callbacks_ray
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
 
 MAX_SEED = 65535
 
@@ -85,18 +85,19 @@ def train_func(train_loop_config):
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
     avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
-    pos_weight = 1.0 # default value
-    focal_loss_weight = [1.0] # default value
+    pos_weight = 1.0  # default value
+    focal_loss_weight = [1.0]  # default value
     if config.y_val in BINARY_Y_VALS_MAP:
         pos_weight = proteo_train.compute_pos_weight(test_dataset, train_dataset)
     elif config.y_val in MULTICLASS_Y_VALS_MAP:
-        focal_loss_weight = proteo_train.compute_focal_loss_weight(config, test_dataset, train_dataset)
+        focal_loss_weight = proteo_train.compute_focal_loss_weight(
+            config, test_dataset, train_dataset
+        )
     # For wandb logging top proteins
     protein_file_data = proteo_train.read_protein_file(train_dataset.processed_dir, config)
     protein_names = protein_file_data['Protein']
     metrics = protein_file_data['Metric']
     top_proteins_data = [[protein, metric] for protein, metric in zip(protein_names, metrics)]
-
 
     module = proteo_train.Proteo(
         config,

@@ -15,6 +15,8 @@ from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
 from sklearn.metrics import confusion_matrix
 
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
+
 
 class CustomRayCheckpointCallback(Callback):
     """Callback that reports checkpoints to Ray on train epoch end.
@@ -117,7 +119,9 @@ class CustomRayWandbCallback(Callback):
         x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
         x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
         multiscale = torch.vstack(pl_module.multiscale).detach().cpu()
-        multiscale = torch.norm(multiscale, dim=1).detach().cpu() #Average the features across the 3 layers per person to get one value per person
+        multiscale = (
+            torch.norm(multiscale, dim=1).detach().cpu()
+        )  # Average the features across the 3 layers per person to get one value per person
         wandb.log(
             {
                 "train_loss": train_loss,
@@ -132,7 +136,7 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val == "carrier":
+        if pl_module.config.y_val in BINARY_Y_VALS_MAP:
             wandb.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
@@ -172,7 +176,7 @@ class CustomRayWandbCallback(Callback):
                 }
             )
 
-            if pl_module.config.y_val == "carrier":
+            if pl_module.config.y_val in BINARY_Y_VALS_MAP:
                 val_preds_sigmoid = torch.sigmoid(val_preds)
                 # Note this assumes binary classification
                 predicted_classes = (val_preds_sigmoid > 0.5).int()
@@ -194,7 +198,7 @@ class CustomRayWandbCallback(Callback):
                         ),
                     }
                 )
-            elif pl_module.config.y_val == "clinical_dementia_rating_global":
+            elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
                 softmax_preds = F.softmax(val_preds, dim=1)
                 class_preds = torch.argmax(softmax_preds, dim=1)
                 val_accuracy = (class_preds == val_targets).float().mean().item()

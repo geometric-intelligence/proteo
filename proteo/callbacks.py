@@ -13,6 +13,8 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
 
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
+
 
 class CustomWandbCallback(Callback):
     """Custom callback for logging to Wandb.
@@ -76,7 +78,9 @@ class CustomWandbCallback(Callback):
         x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
         x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
         multiscale = torch.vstack(pl_module.multiscale).detach().cpu()
-        multiscale = torch.norm(multiscale, dim=1).detach().cpu() #Average the features across the 3 layers per person to get one value per person
+        multiscale = (
+            torch.norm(multiscale, dim=1).detach().cpu()
+        )  # Average the features across the 3 layers per person to get one value per person
         pl_module.logger.experiment.log(
             {
                 "train_preds_logits": wandb.Histogram(train_preds),
@@ -89,14 +93,14 @@ class CustomWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val == "carrier":
+        if pl_module.config.y_val in BINARY_Y_VALS_MAP:
             pl_module.logger.experiment.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
                     "epoch": pl_module.current_epoch,
                 }
             )
-        elif pl_module.config.y_val == "clinical_dementia_rating_global":
+        elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
             pl_module.logger.experiment.log(
                 {
                     "train_preds_softmax": wandb.Histogram(F.softmax(train_preds, dim=1)),
@@ -134,7 +138,7 @@ class CustomWandbCallback(Callback):
                 }
             )
 
-            if pl_module.config.y_val == "carrier":
+            if pl_module.config.y_val in BINARY_Y_VALS_MAP:
                 # Assuming binary classification; for multi-class, adjust accordingly
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
                 # Convert tensors to numpy arrays and ensure they are integers
@@ -155,7 +159,7 @@ class CustomWandbCallback(Callback):
                         "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
                     }
                 )
-            elif pl_module.config.y_val == "clinical_dementia_rating_global":
+            elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
                 softmax_preds = F.softmax(val_preds, dim=1)
                 class_preds = torch.argmax(softmax_preds, dim=1)
                 conf_matrix = confusion_matrix(val_targets, class_preds)

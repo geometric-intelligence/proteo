@@ -257,9 +257,9 @@ class GATv4(nn.Module):
 
         # Apply layer normalization to each individual graph to have mean 0, std 1
         if self.use_layer_norm:
-            x0 = self.layer_norm(x0) # [bs, nodes]
-            x1 = self.layer_norm(x1) # [bs, nodes]
-            x2 = self.layer_norm(x2) # [bs, nodes]
+            x0 = self.layer_norm(x0)  # [bs, nodes]
+            x1 = self.layer_norm(x1)  # [bs, nodes]
+            x2 = self.layer_norm(x2)  # [bs, nodes]
 
         # Concatenate multiscale features - results in [bs, 3*nodes]
         multiscale_features = {'layer1': x0, 'layer2': x1, 'layer3': x2}

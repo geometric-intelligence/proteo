@@ -191,14 +191,14 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        if self.config.y_val == "carrier":
+        if self.config.y_val in BINARY_Y_VALS_MAP:
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
             loss_fn = self.LOSS_MAP["binary_classification"](
                 pos_weight=self.pos_weight, reduction="mean"
             )
-        elif self.config.y_val == 'clinical_dementia_rating_global':
+        elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
             device = pred.device
             self.focal_loss_weight = self.focal_loss_weight.to(device)
             loss_fn = self.LOSS_MAP["multiclass_classification"](
@@ -245,14 +245,14 @@ class Proteo(pl.LightningModule):
 
         # Reduction = "mean" averages over all samples in the batch,
         # providing a single average per batch.
-        if self.config.y_val == "carrier":
+        if self.config.y_val in BINARY_Y_VALS_MAP:
             # pos_weight is used to weight the positive class in the loss function
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
             loss_fn = self.LOSS_MAP["binary_classification"](
                 pos_weight=self.pos_weight, reduction="mean"
             )
-        elif self.config.y_val == 'clinical_dementia_rating_global':
+        elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
             device = pred.device
             self.focal_loss_weight = self.focal_loss_weight.to(device)
             loss_fn = self.LOSS_MAP["multiclass_classification"](
@@ -311,19 +311,17 @@ def compute_avg_node_degree(dataset):
     return avg_node_degree
 
 
-def compute_pos_weight(
-    test_dataset, train_dataset
-): 
+def compute_pos_weight(test_dataset, train_dataset):
     """Function that computes the positive weight (ratio of ctl to carriers) for the binary cross-entropy loss function."""
     test_y_values = test_dataset.y
     train_y_values = train_dataset.y
-    print("type of test_y_values", type(test_y_values))
-    print("type of train_y_values", type(train_y_values))
     test_carrier_count = torch.sum(test_y_values == 1).item()
     train_carrier_count = torch.sum(train_y_values == 1).item()
     test_ctl_count = torch.sum(test_y_values == 0).item()
     train_ctl_count = torch.sum(train_y_values == 0).item()
-    return torch.FloatTensor([(train_ctl_count + test_ctl_count) / (train_carrier_count+test_carrier_count)])
+    return torch.FloatTensor(
+        [(train_ctl_count + test_ctl_count) / (train_carrier_count + test_carrier_count)]
+    )
 
 
 def compute_focal_loss_weight(config, test_dataset, train_dataset):
@@ -438,8 +436,8 @@ def main():
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
     avg_node_degree = compute_avg_node_degree(test_dataset)
-    pos_weight = 1.0 # default value
-    focal_loss_weight = [1.0] # default value
+    pos_weight = 1.0  # default value
+    focal_loss_weight = [1.0]  # default value
     if config.y_val in BINARY_Y_VALS_MAP:
         pos_weight = compute_pos_weight(test_dataset, train_dataset)
         print(f"pos_weight used for loss function: {pos_weight}")

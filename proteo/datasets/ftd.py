@@ -6,10 +6,9 @@ import numpy as np
 import pandas as pd
 import PyWGCNA
 import torch
-from scipy.stats import chi2_contingency, ks_2samp, ttest_ind
+from scipy.stats import chi2_contingency, kendalltau, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from torch_geometric.data import Data, InMemoryDataset
-from scipy.stats import kendalltau
 
 LABEL_DIM_MAP = {
     "clinical_dementia_rating_global": 5,
@@ -24,6 +23,7 @@ LABEL_DIM_MAP = {
 SEXES = [["M"], ["F"], ["M", "F"]]
 MODALITIES = ["plasma", "csf"]
 
+Y_VALS_TO_NORMALIZE = ["nfl"]
 CONTINOUS_Y_VALS = [
     "nfl",
     "disease_age",
@@ -31,8 +31,11 @@ CONTINOUS_Y_VALS = [
     "memory",
     "clinical_dementia_rating",
 ]
-BINARY_Y_VALS_MAP = {"clinical_dementia_rating_global_binary":{0:0, 0.5:1, 1:1, 2:1, 3:1}, "carrier":{"CTL":0, "Carrier":1}}
-MULTICLASS_Y_VALS_MAP = {"clinical_dementia_rating_global": {0:0, 0.5:1, 1:2, 2:3, 3:4}}
+BINARY_Y_VALS_MAP = {
+    "clinical_dementia_rating_binary": {0: 0, 0.5: 1, 1: 1, 2: 1, 3: 1},
+    "carrier": {"CTL": 0, "Carrier": 1},
+}
+MULTICLASS_Y_VALS_MAP = {"clinical_dementia_rating_global": {0: 0, 0.5: 1, 1: 2, 2: 3, 3: 4}}
 
 HAS_MODALITY_COL = {
     "plasma": "HasPlasma?",
@@ -49,7 +52,7 @@ Y_VAL_COL_MAP = {
     'memory': "mem.unadj.slope",
     'clinical_dementia_rating': "FTLDCDR_SB",
     'clinical_dementia_rating_global': "CDRGLOB",
-    'clinical_dementia_rating_global_binary': "CDRGLOB",
+    'clinical_dementia_rating_binary': "CDRGLOB",
     'carrier': "Carrier.Status",
 }
 
@@ -206,22 +209,28 @@ class FTDDataset(InMemoryDataset):
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
 
-    #-----------------------------FUNCTIONS TO GET FEATURES---------------------------------#
+    # -----------------------------FUNCTIONS TO GET FEATURES---------------------------------#
     def find_top_proteins(self, filtered_data, y_val):
-
         # Get the column names of the correct proteins (plasma or csf)
-        modality_cols = [col for col in filtered_data.columns if col.endswith(MODALITY_COL_END[self.config.modality])]
+        modality_cols = [
+            col
+            for col in filtered_data.columns
+            if col.endswith(MODALITY_COL_END[self.config.modality])
+        ]
 
-        # Case where y_val = "carrier", "clinical_dementia_rating_global_binary", ks test - binary
+        # Case where y_val = "carrier", "clinical_dementia_rating_binary", ks test - binary
         if self.config.y_val in BINARY_Y_VALS_MAP:
-            top_columns, metric = self.get_top_columns_binary_classification(filtered_data, modality_cols, y_val)
+            top_columns, metric = self.get_top_columns_binary_classification(
+                filtered_data, modality_cols, y_val
+            )
         # Case where y_val = "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", regression
         elif self.config.y_val in CONTINOUS_Y_VALS:
-            top_columns, metric = self.get_top_columns_regression(filtered_data, modality_cols)
-        # Case where y_val = "clinical_dementia_rating_global", multiclass 
+            top_columns, metric = self.get_top_columns_regression(
+                filtered_data, modality_cols, y_val
+            )
+        # Case where y_val = "clinical_dementia_rating_global", multiclass
         elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
             raise NotImplementedError("Functionality not defined")
-
 
         # Save the plasma_protein_names to a file for wandb
         protein_names = top_columns['Protein'].values
@@ -230,7 +239,9 @@ class FTDDataset(InMemoryDataset):
             f'top_proteins_num_nodes_{self.config.num_nodes}_mutation_{self.config.mutation}_{self.config.modality}.npy',
         )
         # Combine into a structured array
-        structured_array = np.rec.array((protein_names, metric), dtype=[('Protein', 'U50'), ('Metric', 'f8')])    
+        structured_array = np.rec.array(
+            (protein_names, metric), dtype=[('Protein', 'U50'), ('Metric', 'f8')]
+        )
         np.save(file_path, structured_array)
 
         return top_columns['Protein'].tolist()
@@ -249,7 +260,9 @@ class FTDDataset(InMemoryDataset):
             ks_statistic, ks_p_value = ks_2samp(data1, data0)
             ks_stats.append((protein_column, ks_statistic, ks_p_value))
         ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
-        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(self.config.num_nodes)
+        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(
+            self.config.num_nodes
+        )
         return top_columns, top_columns['P Value'].values
 
     def get_top_columns_regression(self, filtered_data, modality_cols, y_val):
@@ -260,21 +273,25 @@ class FTDDataset(InMemoryDataset):
             tau, p_value = kendalltau(filtered_data[protein_column], y_val)
             correlations.append((protein_column, tau, p_value))
         correlations_df = pd.DataFrame(correlations, columns=['Protein', 'Kendall_Tau', 'P Value'])
-        correlations_df['Abs_Tau'] = correlations_df['Kendall_Tau'].abs() #take absolute value
-        top_columns = correlations_df.sort_values(by='Abs_Tau', ascending=False).head(self.config.num_nodes)
+        correlations_df['Abs_Tau'] = correlations_df['Kendall_Tau'].abs()  # take absolute value
+        top_columns = correlations_df.sort_values(by='Abs_Tau', ascending=False).head(
+            self.config.num_nodes
+        )
         return top_columns, top_columns['Kendall_Tau'].values
 
-    #-----------------------------FUNCTIONS TO GET LABELS---------------------------------#
+    # -----------------------------FUNCTIONS TO GET LABELS---------------------------------#
     def load_y_vals(self, filtered_data):
         '''Find the y_val values based on the config.'''
         y_vals = filtered_data[Y_VAL_COL_MAP[self.config.y_val]]
+        if self.config.y_val in Y_VALS_TO_NORMALIZE:
+            y_vals = log_transform(y_vals)
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
 
         if self.config.y_val in BINARY_Y_VALS_MAP:
             y_vals = self.load_binary_y_values(y_vals)
         if self.config.y_val in MULTICLASS_Y_VALS_MAP:
-            y_vals= self.load_multiclass_y_values(filtered_data)
+            y_vals = self.load_multiclass_y_values(filtered_data)
         # Remove NaN values from y_vals and return filter to remove rows where y_val is NaN
 
         # Plot histogram of y_vals
@@ -290,39 +307,42 @@ class FTDDataset(InMemoryDataset):
         mapping_dict = BINARY_Y_VALS_MAP[self.config.y_val]
         mapped_values = [mapping_dict[value] for value in y_vals]
         return mapped_values
-    
+
     def load_multiclass_y_values(self, y_vals):
         '''Load multiclass y_values and encode as index targets for focal loss'''
         mapping_dict = MULTICLASS_Y_VALS_MAP[self.config.y_val]
         mapped_values = [mapping_dict[value] for value in y_vals]
         return mapped_values
 
-
     def load_csv_data(self, config):
         '''Load the csv data features and labels'''
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
-        # Remove bimodal columns 
+        # Remove bimodal columns
         csv_data = self.remove_erroneous_columns(config, csv_data)
-        # Get the correct subset of proteins based on the mutation, if they have the correct modality measurements, and sex
+        # Get the correct subset of proteins based on the mutation, if they have the correct modality measurements, and sex and then use those to find the top proteins and labels
         condition_sex = csv_data[sex_col].isin(self.config.sex)
         condition_modality = csv_data[HAS_MODALITY_COL[self.config.modality]]
         condition_mutation = csv_data[mutation_col].isin(self.config.mutation)
         sex_mutation_modality_filter = condition_sex & condition_mutation & condition_modality
         print("Number of patients with measurements:", condition_modality.sum())
-        print(f"Number of patients with mutation status in {self.config.mutation}:", condition_mutation.sum())
-        print(f"Number of patients with sex in {self.config.sex}", sex_mutation_modality_filter.sum())
-        filtered_data = csv_data[sex_mutation_modality_filter] #Select rows that meet all conditions
-
+        print(
+            f"Number of patients with mutation status in {self.config.mutation}:",
+            condition_mutation.sum(),
+        )
+        print(f"Number of patients with sex in {self.config.sex}", condition_sex.sum())
+        print("Total number of patients with all conditions", sex_mutation_modality_filter.sum())
+        filtered_data = csv_data[
+            sex_mutation_modality_filter
+        ]  # Select rows that meet all conditions
 
         # Extract the y_val values
         y_vals, y_val_mask = self.load_y_vals(filtered_data)
-        filtered_data = filtered_data[y_val_mask] #Remove rows where y_val is NaN
+        filtered_data = filtered_data[y_val_mask]  # Remove rows where y_val is NaN
         # Extract the top proteins (features)
         top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
         top_proteins = filtered_data[top_protein_columns]
-
 
         features = np.array(top_proteins)
         labels = np.array(y_vals)
@@ -373,7 +393,6 @@ class FTDDataset(InMemoryDataset):
             test_labels,
             adj_matrix,
         )
-
 
     def remove_erroneous_columns(self, config, csv_data):
         """Remove columns that have bimodal distributions."""
