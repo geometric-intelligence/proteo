@@ -291,7 +291,7 @@ class FTDDataset(InMemoryDataset):
         if self.config.y_val in BINARY_Y_VALS_MAP:
             y_vals = self.load_binary_y_values(y_vals)
         if self.config.y_val in MULTICLASS_Y_VALS_MAP:
-            y_vals = self.load_multiclass_y_values(filtered_data)
+            y_vals = self.load_multiclass_y_values(y_vals)
         # Remove NaN values from y_vals and return filter to remove rows where y_val is NaN
 
         # Plot histogram of y_vals

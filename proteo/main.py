@@ -38,6 +38,8 @@ from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
+from ray.tune.integration.pytorch_lightning import TuneReportCallback
+from ray.train.lightning import RayTrainReportCallback
 
 import proteo.callbacks_ray as proteo_callbacks_ray
 from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
@@ -148,14 +150,15 @@ def train_func(train_loop_config):
         callbacks=[
             proteo_callbacks_ray.CustomRayWandbCallback(),
             proteo_callbacks_ray.CustomRayReportLossCallback(),
-            proteo_callbacks_ray.CustomRayCheckpointCallback(
-                checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
-            ),
+            #proteo_callbacks_ray.CustomRayCheckpointCallback(
+            #    checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
+            #),
         ],
         # How ray interacts with pytorch lightning
         plugins=[ray_lightning.RayLightningEnvironment()],
         enable_progress_bar=False,
         max_epochs=config.epochs,
+        deterministic=True,
     )
     trainer = ray_lightning.prepare_trainer(trainer)
     # FIXME: When a trial errors, Wandb still shows it as "running".
@@ -321,7 +324,7 @@ def main():
         ),
     )
     results = tuner.fit()
-    results.get_dataframe().to_csv('ray_results_search_hyperparameters.csv')
+    results.get_dataframe(filter_metric="val_loss", filter_mode="min").to_csv('ray_results_search_hyperparameters.csv')
 
 
 if __name__ == '__main__':

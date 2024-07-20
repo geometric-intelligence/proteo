@@ -83,7 +83,7 @@ class CustomWandbCallback(Callback):
         )  # Average the features across the 3 layers per person to get one value per person
         pl_module.logger.experiment.log(
             {
-                "train_preds_logits": wandb.Histogram(train_preds),
+                "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
                 "parameters (weights + biases)": wandb.Histogram(params),
                 "x0 oversmoothing 1 person": wandb.Histogram(x0),
@@ -132,7 +132,7 @@ class CustomWandbCallback(Callback):
 
             pl_module.logger.experiment.log(
                 {
-                    "val_preds_logits": wandb.Histogram(val_preds),
+                    "val_preds": wandb.Histogram(val_preds),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }

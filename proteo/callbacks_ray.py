@@ -57,8 +57,6 @@ class CustomRayCheckpointCallback(Callback):
 
     def on_train_epoch_end(self, trainer, pl_module) -> None:
         epoch = trainer.current_epoch
-        if epoch % self.checkpoint_every_n_epochs != 0:
-            return
         tmpdir = Path(self.tmpdir_prefix, str(trainer.current_epoch)).as_posix()
         os.makedirs(tmpdir, exist_ok=True)
 
@@ -70,16 +68,8 @@ class CustomRayCheckpointCallback(Callback):
         metrics["epoch"] = trainer.current_epoch
         metrics["step"] = trainer.global_step
 
-        # Save checkpoint to local, using name pattern similar than
-        # when running train.py
-        val_loss = metrics["val_loss"]
-        checkpoint_name = f"checkpoint-epoch={epoch}-val_loss={val_loss:.4f}.ckpt"
-        ckpt_path = Path(tmpdir, checkpoint_name).as_posix()
-        trainer.save_checkpoint(ckpt_path, weights_only=False)
 
-        # Report to train session
-        checkpoint = Checkpoint.from_directory(tmpdir)
-        train.report(metrics=metrics, checkpoint=checkpoint)
+        train.report(metrics=metrics)
 
         # Add a barrier to ensure all workers finished reporting here
         trainer.strategy.barrier()
@@ -90,7 +80,7 @@ class CustomRayCheckpointCallback(Callback):
 
 class CustomRayWandbCallback(Callback):
     """Callback that logs losses and plots to Wandb."""
-
+    
     # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
     # then sqrt(loss) is not the RMSE
     def on_after_backward(self, trainer, pl_module):
@@ -98,6 +88,7 @@ class CustomRayWandbCallback(Callback):
             if param.requires_grad:
                 gradients = param.grad.detach().cpu()
                 wandb.log({"gradients": wandb.Histogram(gradients)})
+    
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -112,8 +103,6 @@ class CustomRayWandbCallback(Callback):
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
-        train_loss = pl_module.trainer.callback_metrics["train_loss"]
-        train_RMSE = math.sqrt(train_loss)
         # Log the first graph ([0, :]) of x0, x1, and x2 to see if oversmoothing is happening, aka if all features across 1 person are the same
         x0 = torch.vstack(pl_module.x0).detach().cpu()[0, :]
         x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
@@ -124,8 +113,6 @@ class CustomRayWandbCallback(Callback):
         )  # Average the features across the 3 layers per person to get one value per person
         wandb.log(
             {
-                "train_loss": train_loss,
-                "train_RMSE": train_RMSE,
                 "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
                 "parameters (weights+biases)": wandb.Histogram(params),
@@ -163,13 +150,10 @@ class CustomRayWandbCallback(Callback):
         if not trainer.sanity_checking:
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
-            val_loss = pl_module.trainer.callback_metrics["val_loss"]
 
             # Log histograms and metrics
             wandb.log(
                 {
-                    "val_loss": val_loss,
-                    "val_RMSE": math.sqrt(val_loss),
                     "val_preds": wandb.Histogram(val_preds),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
@@ -236,6 +220,7 @@ class CustomRayReportLossCallback(Callback):
             prog_bar=True,
             batch_size=pl_module.config.batch_size,
         )
+        train.report({'train_loss':loss.item})
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
@@ -249,3 +234,4 @@ class CustomRayReportLossCallback(Callback):
                 prog_bar=True,
                 batch_size=pl_module.config.batch_size,
             )
+            train.report({'val_loss':loss.item})
