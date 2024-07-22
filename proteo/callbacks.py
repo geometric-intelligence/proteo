@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
 
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, CONTINOUS_Y_VALS
 
 
 class CustomWandbCallback(Callback):
@@ -97,6 +97,15 @@ class CustomWandbCallback(Callback):
             pl_module.logger.experiment.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "epoch": pl_module.current_epoch,
+                }
+            )
+        elif pl_module.config.y_val in CONTINOUS_Y_VALS:
+            scatter_plot_data = [[pred, target] for (pred, target) in zip(train_preds, train_targets)]
+            table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+            pl_module.logger.experiment.log(
+                {
+                    "Regression Scatter Plot": wandb.plot.scatter(table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"),
                     "epoch": pl_module.current_epoch,
                 }
             )

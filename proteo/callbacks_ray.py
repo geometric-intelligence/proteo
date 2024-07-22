@@ -15,7 +15,7 @@ from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
 from sklearn.metrics import confusion_matrix
 
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, CONTINOUS_Y_VALS
 
 
 class CustomRayCheckpointCallback(Callback):
@@ -57,6 +57,8 @@ class CustomRayCheckpointCallback(Callback):
 
     def on_train_epoch_end(self, trainer, pl_module) -> None:
         epoch = trainer.current_epoch
+        #if epoch % self.checkpoint_every_n_epochs != 0:
+        #    return
         tmpdir = Path(self.tmpdir_prefix, str(trainer.current_epoch)).as_posix()
         os.makedirs(tmpdir, exist_ok=True)
 
@@ -68,8 +70,16 @@ class CustomRayCheckpointCallback(Callback):
         metrics["epoch"] = trainer.current_epoch
         metrics["step"] = trainer.global_step
 
+        # Save checkpoint to local, using name pattern similar than
+        # when running train.py
+        val_loss = metrics["val_loss"]
+        checkpoint_name = f"checkpoint-epoch={epoch}-val_loss={val_loss:.4f}.ckpt"
+        ckpt_path = Path(tmpdir, checkpoint_name).as_posix()
+        trainer.save_checkpoint(ckpt_path, weights_only=False)
 
-        train.report(metrics=metrics)
+        # Report to train session
+        checkpoint = Checkpoint.from_directory(tmpdir)
+        train.report(metrics=metrics, checkpoint=checkpoint)
 
         # Add a barrier to ensure all workers finished reporting here
         trainer.strategy.barrier()
@@ -103,6 +113,8 @@ class CustomRayWandbCallback(Callback):
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
+        train_loss = pl_module.trainer.callback_metrics["train_loss"]
+        train_RMSE = math.sqrt(train_loss)
         # Log the first graph ([0, :]) of x0, x1, and x2 to see if oversmoothing is happening, aka if all features across 1 person are the same
         x0 = torch.vstack(pl_module.x0).detach().cpu()[0, :]
         x1 = torch.vstack(pl_module.x1).detach().cpu()[0, :]
@@ -112,7 +124,8 @@ class CustomRayWandbCallback(Callback):
             torch.norm(multiscale, dim=1).detach().cpu()
         )  # Average the features across the 3 layers per person to get one value per person
         wandb.log(
-            {
+            {   "train_loss": train_loss,
+                "train_RMSE": train_RMSE,
                 "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
                 "parameters (weights+biases)": wandb.Histogram(params),
@@ -123,7 +136,16 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val in BINARY_Y_VALS_MAP:
+        if pl_module.config.y_val in CONTINOUS_Y_VALS:
+            scatter_plot_data = [[pred, target] for (pred, target) in zip(train_preds, train_targets)]
+            table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+            wandb.log(
+                {
+                    "Regression Scatter Plot": wandb.plot.scatter(table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"),
+                    "epoch": pl_module.current_epoch,
+                }
+            )
+        elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
             wandb.log(
                 {
                     "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
@@ -150,10 +172,12 @@ class CustomRayWandbCallback(Callback):
         if not trainer.sanity_checking:
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
+            val_loss = pl_module.trainer.callback_metrics["val_loss"]
 
             # Log histograms and metrics
             wandb.log(
-                {
+                {   
+                    "val_loss": val_loss,
                     "val_preds": wandb.Histogram(val_preds),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
@@ -220,7 +244,6 @@ class CustomRayReportLossCallback(Callback):
             prog_bar=True,
             batch_size=pl_module.config.batch_size,
         )
-        train.report({'train_loss':loss.item})
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
@@ -234,4 +257,3 @@ class CustomRayReportLossCallback(Callback):
                 prog_bar=True,
                 batch_size=pl_module.config.batch_size,
             )
-            train.report({'val_loss':loss.item})

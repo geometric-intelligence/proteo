@@ -38,7 +38,7 @@ from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
 from ray.train.torch import TorchTrainer
 from ray.tune.schedulers import ASHAScheduler
-from ray.tune.integration.pytorch_lightning import TuneReportCallback
+from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.train.lightning import RayTrainReportCallback
 
 import proteo.callbacks_ray as proteo_callbacks_ray
@@ -149,7 +149,12 @@ def train_func(train_loop_config):
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
             proteo_callbacks_ray.CustomRayWandbCallback(),
-            proteo_callbacks_ray.CustomRayReportLossCallback(),
+            proteo_callbacks_ray.CustomRayReportLossCallback(), #report metrics to pytorch + ray
+            TuneReportCheckpointCallback(
+                metrics={"val_loss": "val_loss", "train_loss": "train_loss"},
+                filename="checkpoint.ckpt",
+                on="validation_end",
+            ),
             #proteo_callbacks_ray.CustomRayCheckpointCallback(
             #    checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
             #),
@@ -198,6 +203,7 @@ def main():
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
+            #checkpoint_frequency=config.checkpoint_freq,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',
         ),

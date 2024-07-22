@@ -93,6 +93,7 @@ num_samples: 5
 grace_period: 20  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
+checkpoint_freq: 0  # Nb of iterations between checkpoints. If 0: no checkpointing.
 checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for one off training so should be one to save absolute min val_loss checkpoint
 checkpoint_every_n_epochs: 100  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for hyperparameter search so should be 50 to save memory.
 # Nb of trainings run in parallel is the maximum amount 
