@@ -45,7 +45,13 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
 
 import proteo.callbacks as proteo_callbacks
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, FTDDataset
+from proteo.datasets.ftd import (
+    BINARY_Y_VALS_MAP,
+    MULTICLASS_Y_VALS_MAP,
+    Y_VALS_TO_NORMALIZE,
+    FTDDataset,
+    reverse_log_transform,
+)
 
 
 class Proteo(pl.LightningModule):
@@ -75,6 +81,8 @@ class Proteo(pl.LightningModule):
         avg_node_degree,
         pos_weight,
         focal_loss_weight,
+        y_mean,
+        y_std,
     ):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
@@ -93,6 +101,8 @@ class Proteo(pl.LightningModule):
         self.multiscale = []
         self.pos_weight = pos_weight
         self.focal_loss_weight = focal_loss_weight
+        self.y_mean = y_mean
+        self.y_std = y_std
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -339,6 +349,19 @@ def compute_focal_loss_weight(config, test_dataset, train_dataset):
     return weights
 
 
+def compute_mean_std(config, test_dataset, train_dataset):
+    '''Function that computes the mean and std of the target values in the training and test datasets in order to reverse the normalization done.'''
+    test_y_values = test_dataset.y
+    train_y_values = train_dataset.y
+    total_y_values = torch.cat((test_y_values, train_y_values))
+    if config.y_val in Y_VALS_TO_NORMALIZE:
+        original_data, mean, std = reverse_log_transform(total_y_values)
+    else:
+        mean = torch.mean(total_y_values)
+        std = torch.std(total_y_values)
+    return mean, std
+
+
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
     root = os.path.join(config.root_dir, config.data_dir)
@@ -444,7 +467,7 @@ def main():
     elif config.y_val in MULTICLASS_Y_VALS_MAP:
         focal_loss_weight = compute_focal_loss_weight(config, test_dataset, train_dataset)
         print(f"focal_loss_weight used for loss function: {focal_loss_weight}")
-
+    y_mean, y_std = compute_mean_std(config, test_dataset, train_dataset)
     module = Proteo(
         config,
         in_channels=train_dataset.feature_dim,  # 1 dim of input
@@ -452,22 +475,35 @@ def main():
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
+        y_mean=y_mean,
+        y_std=y_std,
     )
 
     logger = get_wandb_logger(config)
+    images_to_log = [
+        os.path.join(
+            train_dataset.processed_dir,
+            f'{config.y_val}_{config.sex}_{config.mutation}_histogram.jpg',
+        ),
+        os.path.join(
+            train_dataset.processed_dir,
+            f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg",
+        ),
+    ]
+
+    if (
+        config.y_val in Y_VALS_TO_NORMALIZE
+    ):  # add histogram of non normalized data if y is normalized
+        images_to_log.append(
+            os.path.join(
+                train_dataset.processed_dir,
+                f'{config.y_val}_{config.sex}_{config.mutation}_orig_histogram.jpg',
+            )
+        )
 
     logger.log_image(
         key="dataset_statistics",
-        images=[
-            os.path.join(
-                train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation}_histogram.jpg',
-            ),
-            os.path.join(
-                train_dataset.processed_dir,
-                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg",
-            ),
-        ],
+        images=images_to_log,
     )
     # Log top proteins, note this is in order from most to least different
     protein_file_data = read_protein_file(train_dataset.processed_dir, config)

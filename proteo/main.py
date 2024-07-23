@@ -36,13 +36,13 @@ from ray import tune
 from ray.air.integrations.wandb import setup_wandb
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train import lightning as ray_lightning
-from ray.train.torch import TorchTrainer
-from ray.tune.schedulers import ASHAScheduler
-from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.train.lightning import RayTrainReportCallback
+from ray.train.torch import TorchTrainer
+from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
+from ray.tune.schedulers import ASHAScheduler
 
 import proteo.callbacks_ray as proteo_callbacks_ray
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, Y_VALS_TO_NORMALIZE
 
 MAX_SEED = 65535
 
@@ -95,6 +95,7 @@ def train_func(train_loop_config):
         focal_loss_weight = proteo_train.compute_focal_loss_weight(
             config, test_dataset, train_dataset
         )
+    y_mean, y_std = proteo_train.compute_mean_std(config, test_dataset, train_dataset)
     # For wandb logging top proteins
     protein_file_data = proteo_train.read_protein_file(train_dataset.processed_dir, config)
     protein_names = protein_file_data['Protein']
@@ -108,8 +109,20 @@ def train_func(train_loop_config):
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
+        y_mean=y_mean,
+        y_std=y_std,
     )
-
+    if config.y_val in Y_VALS_TO_NORMALIZE:
+        wandb.log(
+            {
+                "histogram original": wandb.Image(
+                    os.path.join(
+                        train_dataset.processed_dir,
+                        f'{config.y_val}_{config.sex}_{config.mutation}_orig_histogram.jpg',
+                    )
+                )
+            }
+        )
     wandb.log(
         {
             "histogram": wandb.Image(
@@ -149,15 +162,15 @@ def train_func(train_loop_config):
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
             proteo_callbacks_ray.CustomRayWandbCallback(),
-            proteo_callbacks_ray.CustomRayReportLossCallback(), #report metrics to pytorch + ray
+            proteo_callbacks_ray.CustomRayReportLossCallback(),  # report metrics to pytorch + ray
             TuneReportCheckpointCallback(
                 metrics={"val_loss": "val_loss", "train_loss": "train_loss"},
                 filename="checkpoint.ckpt",
                 on="validation_end",
             ),
-            #proteo_callbacks_ray.CustomRayCheckpointCallback(
+            # proteo_callbacks_ray.CustomRayCheckpointCallback(
             #    checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
-            #),
+            # ),
         ],
         # How ray interacts with pytorch lightning
         plugins=[ray_lightning.RayLightningEnvironment()],
@@ -203,7 +216,6 @@ def main():
         storage_path=os.path.join(config.root_dir, config.ray_results_dir),
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
-            #checkpoint_frequency=config.checkpoint_freq,
             checkpoint_score_attribute='val_loss',
             checkpoint_score_order='min',
         ),
@@ -330,7 +342,9 @@ def main():
         ),
     )
     results = tuner.fit()
-    results.get_dataframe(filter_metric="val_loss", filter_mode="min").to_csv('ray_results_search_hyperparameters.csv')
+    results.get_dataframe(filter_metric="val_loss", filter_mode="min").to_csv(
+        'ray_results_search_hyperparameters.csv'
+    )
 
 
 if __name__ == '__main__':

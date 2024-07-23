@@ -8,16 +8,17 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import wandb
-from callbacks import get_val_accuracy
+from callbacks import get_accuracy
 from pytorch_lightning.callbacks import Callback
 from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
-from sklearn.metrics import confusion_matrix
+from callbacks import reverse_log_transform
 
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, CONTINOUS_Y_VALS
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
 
 
+# TODO: not using below function
 class CustomRayCheckpointCallback(Callback):
     """Callback that reports checkpoints to Ray on train epoch end.
 
@@ -57,7 +58,7 @@ class CustomRayCheckpointCallback(Callback):
 
     def on_train_epoch_end(self, trainer, pl_module) -> None:
         epoch = trainer.current_epoch
-        #if epoch % self.checkpoint_every_n_epochs != 0:
+        # if epoch % self.checkpoint_every_n_epochs != 0:
         #    return
         tmpdir = Path(self.tmpdir_prefix, str(trainer.current_epoch)).as_posix()
         os.makedirs(tmpdir, exist_ok=True)
@@ -90,7 +91,7 @@ class CustomRayCheckpointCallback(Callback):
 
 class CustomRayWandbCallback(Callback):
     """Callback that logs losses and plots to Wandb."""
-    
+
     # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
     # then sqrt(loss) is not the RMSE
     def on_after_backward(self, trainer, pl_module):
@@ -98,7 +99,6 @@ class CustomRayWandbCallback(Callback):
             if param.requires_grad:
                 gradients = param.grad.detach().cpu()
                 wandb.log({"gradients": wandb.Histogram(gradients)})
-    
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -124,7 +124,8 @@ class CustomRayWandbCallback(Callback):
             torch.norm(multiscale, dim=1).detach().cpu()
         )  # Average the features across the 3 layers per person to get one value per person
         wandb.log(
-            {   "train_loss": train_loss,
+            {
+                "train_loss": train_loss,
                 "train_RMSE": train_RMSE,
                 "train_preds": wandb.Histogram(train_preds),
                 "train_targets": wandb.Histogram(train_targets),
@@ -137,22 +138,63 @@ class CustomRayWandbCallback(Callback):
             }
         )
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
-            scatter_plot_data = [[pred, target] for (pred, target) in zip(train_preds, train_targets)]
+            scatter_plot_data = [
+                [pred, target] for (pred, target) in zip(train_preds, train_targets)
+            ]
             table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+            y_mean = pl_module.y_mean.detach().cpu()
+            y_std = pl_module.y_std.detach().cpu()
             wandb.log(
                 {
-                    "Regression Scatter Plot": wandb.plot.scatter(table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"),
+                    "Regression Scatter Plot Train": wandb.plot.scatter(
+                        table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"
+                    ),
+                    "not normalized train_preds": wandb.Histogram(
+                        reverse_log_transform(train_preds, y_mean, y_std)
+                    ),
                     "epoch": pl_module.current_epoch,
                 }
             )
         elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
+            train_preds_sigmoid = torch.sigmoid(train_preds)
+            predicted_classes = (train_preds_sigmoid > 0.5).int()
+            train_accuracy = (predicted_classes == train_targets).float().mean().item()
+            # Convert tensors to numpy arrays and ensure they are integers
+            train_targets_np = train_targets.numpy().astype(int).flatten()
+            predicted_classes_np = predicted_classes.numpy().astype(int).flatten()
             wandb.log(
                 {
-                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "train_preds_sigmoid": train_preds_sigmoid,
+                    "train_accuracy": train_accuracy,
+                    "conf_mat train": wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=train_targets_np,
+                        preds=predicted_classes_np,
+                        class_names=['Control (nfl), 0 (cdr)', 'Carrier (nfl), >0 (cdr)'],
+                    ),  # TODO: hacky
                     "epoch": pl_module.current_epoch,
                 }
             )
-
+        elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
+            softmax_probs = F.softmax(train_preds, dim=1)
+            class_preds = torch.argmax(softmax_probs, dim=1)
+            train_accuracy = (class_preds == train_targets).float().mean().item()
+            class_preds_np = class_preds.numpy().astype(int).flatten()
+            train_targets_np = train_targets.numpy().astype(int).flatten()
+            wandb.log(
+                {
+                    "val_preds_softmax": wandb.Histogram(softmax_probs),
+                    "val_preds_class": wandb.Histogram(class_preds),
+                    "train_accuracy": train_accuracy,
+                    "conf_matrix train": wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=train_targets_np,
+                        preds=class_preds_np,
+                        class_names=['0', '0.5', '1', '2', '3'],  # TODO: Hardcoded
+                    ),
+                    "epoch": pl_module.current_epoch,
+                }
+            )
         pl_module.train_preds.clear()  # free memory
         pl_module.train_targets.clear()
         pl_module.x0.clear()
@@ -176,15 +218,32 @@ class CustomRayWandbCallback(Callback):
 
             # Log histograms and metrics
             wandb.log(
-                {   
+                {
                     "val_loss": val_loss,
                     "val_preds": wandb.Histogram(val_preds),
                     "val_targets": wandb.Histogram(val_targets),
                     "epoch": pl_module.current_epoch,
                 }
             )
-
-            if pl_module.config.y_val in BINARY_Y_VALS_MAP:
+            if pl_module.config.y_val in CONTINOUS_Y_VALS:
+                scatter_plot_data = [
+                    [pred, target] for (pred, target) in zip(val_preds, val_targets)
+                ]
+                table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+                y_mean = pl_module.y_mean.detach().cpu()
+                y_std = pl_module.y_std.detach().cpu()
+                wandb.log(
+                    {
+                        "Regression Scatter Plot Val": wandb.plot.scatter(
+                            table, "pred", "target", title="Val Pred vs ValTarget Scatter Plot"
+                        ),
+                        "not normalized val_preds": wandb.Histogram(
+                            reverse_log_transform(val_preds, y_mean, y_std)
+                        ),
+                        "epoch": pl_module.current_epoch,
+                    }
+                )
+            elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
                 val_preds_sigmoid = torch.sigmoid(val_preds)
                 # Note this assumes binary classification
                 predicted_classes = (val_preds_sigmoid > 0.5).int()
@@ -197,31 +256,35 @@ class CustomRayWandbCallback(Callback):
                     {
                         "val_preds_sigmoid": wandb.Histogram(val_preds_sigmoid),
                         "val_accuracy": val_accuracy,
-                        "epoch": pl_module.current_epoch,
-                        "conf_mat": wandb.plot.confusion_matrix(
+                        "conf_mat val": wandb.plot.confusion_matrix(
                             probs=None,
                             y_true=val_targets_np,
                             preds=predicted_classes_np,
-                            class_names=['Control', 'Carrier'],
+                            class_names=[
+                                'Control (nfl), 0 (cdr)',
+                                'Carrier (nfl), >0 (cdr)',
+                            ],  # TODO: hacky
                         ),
+                        "epoch": pl_module.current_epoch,
                     }
                 )
             elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
-                softmax_preds = F.softmax(val_preds, dim=1)
-                class_preds = torch.argmax(softmax_preds, dim=1)
+                softmax_probs = F.softmax(val_preds, dim=1)
+                class_preds = torch.argmax(softmax_probs, dim=1)
                 val_accuracy = (class_preds == val_targets).float().mean().item()
-                conf_matrix = confusion_matrix(val_targets, class_preds)
-                conf_matrix_df = pd.DataFrame(
-                    conf_matrix,
-                    index=[f'True_{i}' for i in range(conf_matrix.shape[0])],
-                    columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])],
-                )
+                class_preds_np = class_preds.numpy().astype(int).flatten()
+                val_targets_np = val_targets.numpy().astype(int).flatten()
                 wandb.log(
                     {
-                        "val_preds_softmax": wandb.Histogram(softmax_preds),
+                        "val_preds_softmax": wandb.Histogram(softmax_probs),
                         "val_preds_class": wandb.Histogram(class_preds),
                         "val_accuracy": val_accuracy,
-                        "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
+                        "conf_matrix val": wandb.plot.confusion_matrix(
+                            probs=None,
+                            y_true=val_targets_np,
+                            preds=class_preds_np,
+                            class_names=['0', '0.5', '1', '2', '3'],  # TODO: Hardcoded
+                        ),
                         "epoch": pl_module.current_epoch,
                     }
                 )

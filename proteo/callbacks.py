@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import Callback, RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.metrics import confusion_matrix
 
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, CONTINOUS_Y_VALS
+from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
 
 
 class CustomWandbCallback(Callback):
@@ -93,26 +93,51 @@ class CustomWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val in BINARY_Y_VALS_MAP:
+        if pl_module.config.y_val in CONTINOUS_Y_VALS:
+            y_mean = pl_module.y_mean.detach().cpu()
+            y_std = pl_module.y_std.detach().cpu()
             pl_module.logger.experiment.log(
                 {
-                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "not normalized train_preds": wandb.Histogram(
+                        reverse_log_transform(train_preds, y_mean, y_std)
+                    ),
                     "epoch": pl_module.current_epoch,
                 }
             )
-        elif pl_module.config.y_val in CONTINOUS_Y_VALS:
-            scatter_plot_data = [[pred, target] for (pred, target) in zip(train_preds, train_targets)]
-            table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+        elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
+            train_preds_binary = (torch.sigmoid(train_preds) > 0.5).int()
+            # Convert tensors to numpy arrays and ensure they are integers
+            train_targets_np = train_targets.numpy().astype(int).flatten()
+            train_preds_binary_np = train_preds_binary.numpy().astype(int).flatten()
+            conf_matrix = confusion_matrix(train_targets_np, train_preds_binary_np)
+            conf_matrix_df = pd.DataFrame(
+                conf_matrix,
+                index=[f'True_{i}' for i in range(conf_matrix.shape[0])],
+                columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])],
+            )
             pl_module.logger.experiment.log(
                 {
-                    "Regression Scatter Plot": wandb.plot.scatter(table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"),
+                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "train_accuracy": get_accuracy(train_preds_binary, train_targets),
+                    "confusion_matrix train": wandb.Table(dataframe=conf_matrix_df),
                     "epoch": pl_module.current_epoch,
                 }
             )
         elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
+            softmax_probs = F.softmax(train_preds, dim=1)
+            class_preds = torch.argmax(softmax_probs, dim=1)
+            conf_matrix = confusion_matrix(train_targets, class_preds)
+            conf_matrix_df = pd.DataFrame(
+                conf_matrix,
+                index=[f'True_{i}' for i in range(conf_matrix.shape[0])],
+                columns=[f'Pred_{i}' for i in range(conf_matrix.shape[1])],
+            )
             pl_module.logger.experiment.log(
                 {
-                    "train_preds_softmax": wandb.Histogram(F.softmax(train_preds, dim=1)),
+                    "train_preds_softmax": wandb.Histogram(softmax_probs),
+                    "train_preds_class": wandb.Histogram(class_preds),
+                    "train_accuracy": get_accuracy(class_preds, train_targets),
+                    "confusion_matrix train": wandb.Table(dataframe=conf_matrix_df),
                     "epoch": pl_module.current_epoch,
                 }
             )
@@ -146,9 +171,18 @@ class CustomWandbCallback(Callback):
                     "epoch": pl_module.current_epoch,
                 }
             )
-
-            if pl_module.config.y_val in BINARY_Y_VALS_MAP:
-                # Assuming binary classification; for multi-class, adjust accordingly
+            if pl_module.config.y_val in CONTINOUS_Y_VALS:
+                y_mean = pl_module.y_mean.detach().cpu()
+                y_std = pl_module.y_std.detach().cpu()
+                pl_module.logger.experiment.log(
+                    {
+                        "not normalized val_preds": wandb.Histogram(
+                            reverse_log_transform(val_preds, y_mean, y_std)
+                        ),
+                        "epoch": pl_module.current_epoch,
+                    }
+                )
+            elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
                 # Convert tensors to numpy arrays and ensure they are integers
                 val_targets_np = val_targets.numpy().astype(int).flatten()
@@ -163,14 +197,14 @@ class CustomWandbCallback(Callback):
                 pl_module.logger.experiment.log(
                     {
                         "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
-                        "val_accuracy": get_val_accuracy(val_preds_binary, val_targets),
+                        "val_accuracy": get_accuracy(val_preds_binary, val_targets),
                         "epoch": pl_module.current_epoch,
-                        "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
+                        "confusion_matrix val": wandb.Table(dataframe=conf_matrix_df),
                     }
                 )
             elif pl_module.config.y_val in MULTICLASS_Y_VALS_MAP:
-                softmax_preds = F.softmax(val_preds, dim=1)
-                class_preds = torch.argmax(softmax_preds, dim=1)
+                softmax_probs = F.softmax(val_preds, dim=1)
+                class_preds = torch.argmax(softmax_probs, dim=1)
                 conf_matrix = confusion_matrix(val_targets, class_preds)
                 conf_matrix_df = pd.DataFrame(
                     conf_matrix,
@@ -179,10 +213,10 @@ class CustomWandbCallback(Callback):
                 )
                 pl_module.logger.experiment.log(
                     {
-                        "val_preds_softmax": wandb.Histogram(softmax_preds),
+                        "val_preds_softmax": wandb.Histogram(softmax_probs),
                         "val_preds_class": wandb.Histogram(class_preds),
-                        "val_accuracy": get_val_accuracy(class_preds, val_targets),
-                        "confusion_matrix": wandb.Table(dataframe=conf_matrix_df),
+                        "val_accuracy": get_accuracy(class_preds, val_targets),
+                        "confusion_matrix val": wandb.Table(dataframe=conf_matrix_df),
                         "epoch": pl_module.current_epoch,
                     }
                 )
@@ -209,7 +243,7 @@ def progress_bar():
     return progress_bar
 
 
-def get_val_accuracy(preds, targets):
+def get_accuracy(preds, targets):
     correct = (preds == targets).sum().item()
     total = targets.numel()
     return correct / total
@@ -219,3 +253,9 @@ def reshape_targets(val_targets):
     '''When using multiclass classification, the targets need to be reshaped'''
     reshaped_targets = [tensor.view(-1, 1) for tensor in val_targets]
     return reshaped_targets
+
+
+def reverse_log_transform(y, y_mean, y_std):
+    log_data = (y * y_std) + y_mean
+    original_data = torch.exp(log_data)
+    return original_data

@@ -130,6 +130,9 @@ class FTDDataset(InMemoryDataset):
         self.hist_path_str = (
             f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_histogram.jpg'
         )
+        self.orig_hist_path_str = (
+            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_orig_histogram.jpg'
+        )
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -230,7 +233,9 @@ class FTDDataset(InMemoryDataset):
             )
         # Case where y_val = "clinical_dementia_rating_global", multiclass
         elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
-            raise NotImplementedError("Functionality not defined")
+            top_columns, metric = self.get_top_columns_multiclass(
+                filtered_data, modality_cols, y_val
+            )
 
         # Save the plasma_protein_names to a file for wandb
         protein_names = top_columns['Protein'].values
@@ -279,11 +284,30 @@ class FTDDataset(InMemoryDataset):
         )
         return top_columns, top_columns['Kendall_Tau'].values
 
+    def get_top_columns_multiclass(self, filtered_data, modality_cols, y_val):
+        '''Find the top n proteins with the highest p score between cdr = 0 and cdr>0. NOTE: this is hardcoded for cdr global right now.'''
+        y_val = pd.Series(y_val, index=filtered_data.index)
+        group_1 = filtered_data[y_val.isin([1, 2, 3, 4])]
+        group_0 = filtered_data[y_val == 0]
+        ks_stats = []
+        for protein_column in modality_cols:
+            data1 = group_1[protein_column]
+            data0 = group_0[protein_column]
+            ks_statistic, ks_p_value = ks_2samp(data1, data0)
+            ks_stats.append((protein_column, ks_statistic, ks_p_value))
+        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
+        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(
+            self.config.num_nodes
+        )
+        return top_columns, top_columns['P Value'].values
+
     # -----------------------------FUNCTIONS TO GET LABELS---------------------------------#
     def load_y_vals(self, filtered_data):
         '''Find the y_val values based on the config.'''
         y_vals = filtered_data[Y_VAL_COL_MAP[self.config.y_val]]
         if self.config.y_val in Y_VALS_TO_NORMALIZE:
+            hist_path = os.path.join(self.processed_dir, self.orig_hist_path_str)
+            plot_histogram(pd.DataFrame(y_vals), f'original {self.config.y_val}', save_to=hist_path)
             y_vals = log_transform(y_vals)
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
@@ -428,6 +452,7 @@ def plot_histogram(data, x_label, save_to):
     plt.ylabel('Frequency')
     plt.title(f'Histogram of {x_label}')
     plt.savefig(save_to, format='jpg')
+    plt.close()
 
 
 def log_transform(data):
@@ -441,14 +466,14 @@ def log_transform(data):
 
 def reverse_log_transform(standardized_log_data):
     # De-standardize the data
-    mean = np.mean(standardized_log_data)
-    std = np.std(standardized_log_data)
+    mean = torch.mean(standardized_log_data)
+    std = torch.std(standardized_log_data)
     log_data = (standardized_log_data * std) + mean
 
     # Reverse the log transformation by applying the exponential function
-    original_data = np.exp(log_data)
+    original_data = torch.exp(log_data)
 
-    return original_data
+    return original_data, mean, std
 
 
 # Unit Tests:
