@@ -149,9 +149,6 @@ class CustomRayWandbCallback(Callback):
                     "Regression Scatter Plot Train": wandb.plot.scatter(
                         table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"
                     ),
-                    "not normalized train_preds": wandb.Histogram(
-                        reverse_log_transform(train_preds, y_mean, y_std)
-                    ),
                     "epoch": pl_module.current_epoch,
                 }
             )
@@ -236,9 +233,6 @@ class CustomRayWandbCallback(Callback):
                     {
                         "Regression Scatter Plot Val": wandb.plot.scatter(
                             table, "pred", "target", title="Val Pred vs ValTarget Scatter Plot"
-                        ),
-                        "not normalized val_preds": wandb.Histogram(
-                            reverse_log_transform(val_preds, y_mean, y_std)
                         ),
                         "epoch": pl_module.current_epoch,
                     }

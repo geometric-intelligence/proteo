@@ -24,7 +24,7 @@ sex: ['M', 'F']
 
 # WandB
 project: "proteo"
-wandb_offline: true
+wandb_offline: false
 # Controls the frequency of logging within training, 
 # by specifying how many training steps should occur between each logging event.
 log_every_n_steps: 5
@@ -110,8 +110,8 @@ l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 num_nodes_choices: [10, 30, 150, 1000, 2000, 7000]
 adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
-mutation_choices: [['GRN']] #[['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
-sex_choices: [['M', 'F']] #, ['F'], ['M', 'F']]
+mutation_choices: [['C9orf72']] #[['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
+sex_choices: [['M'], ['F'], ['M', 'F']]
 modality_choices: ['plasma', 'csf']
 y_val_choices: ['nfl'] #['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 

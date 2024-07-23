@@ -93,18 +93,7 @@ class CustomWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.config.y_val in CONTINOUS_Y_VALS:
-            y_mean = pl_module.y_mean.detach().cpu()
-            y_std = pl_module.y_std.detach().cpu()
-            pl_module.logger.experiment.log(
-                {
-                    "not normalized train_preds": wandb.Histogram(
-                        reverse_log_transform(train_preds, y_mean, y_std)
-                    ),
-                    "epoch": pl_module.current_epoch,
-                }
-            )
-        elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
+        if pl_module.config.y_val in BINARY_Y_VALS_MAP:
             train_preds_binary = (torch.sigmoid(train_preds) > 0.5).int()
             # Convert tensors to numpy arrays and ensure they are integers
             train_targets_np = train_targets.numpy().astype(int).flatten()
@@ -171,18 +160,7 @@ class CustomWandbCallback(Callback):
                     "epoch": pl_module.current_epoch,
                 }
             )
-            if pl_module.config.y_val in CONTINOUS_Y_VALS:
-                y_mean = pl_module.y_mean.detach().cpu()
-                y_std = pl_module.y_std.detach().cpu()
-                pl_module.logger.experiment.log(
-                    {
-                        "not normalized val_preds": wandb.Histogram(
-                            reverse_log_transform(val_preds, y_mean, y_std)
-                        ),
-                        "epoch": pl_module.current_epoch,
-                    }
-                )
-            elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
+            if pl_module.config.y_val in BINARY_Y_VALS_MAP:
                 val_preds_binary = (torch.sigmoid(val_preds) > 0.5).int()
                 # Convert tensors to numpy arrays and ensure they are integers
                 val_targets_np = val_targets.numpy().astype(int).flatten()
@@ -254,7 +232,7 @@ def reshape_targets(val_targets):
     reshaped_targets = [tensor.view(-1, 1) for tensor in val_targets]
     return reshaped_targets
 
-
+#TODO: Not currently being used
 def reverse_log_transform(y, y_mean, y_std):
     log_data = (y * y_std) + y_mean
     original_data = torch.exp(log_data)

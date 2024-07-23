@@ -109,8 +109,6 @@ def train_func(train_loop_config):
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
-        y_mean=y_mean,
-        y_std=y_std,
     )
     if config.y_val in Y_VALS_TO_NORMALIZE:
         wandb.log(
@@ -141,7 +139,7 @@ def train_func(train_loop_config):
                 columns=["Protein", "Metric"], data=top_proteins_data
             ),  # note this is in order from most to least different
             "parameters": wandb.Table(
-                columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
+                columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree", "Mean", "Std"],
                 data=[
                     [
                         config.modality,
@@ -149,6 +147,8 @@ def train_func(train_loop_config):
                         config.y_val,
                         config.sex,
                         avg_node_degree,
+                        y_mean,
+                        y_std,
                     ]
                 ],
             ),

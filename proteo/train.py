@@ -81,8 +81,6 @@ class Proteo(pl.LightningModule):
         avg_node_degree,
         pos_weight,
         focal_loss_weight,
-        y_mean,
-        y_std,
     ):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
@@ -101,8 +99,6 @@ class Proteo(pl.LightningModule):
         self.multiscale = []
         self.pos_weight = pos_weight
         self.focal_loss_weight = focal_loss_weight
-        self.y_mean = y_mean
-        self.y_std = y_std
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -475,8 +471,6 @@ def main():
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
-        y_mean=y_mean,
-        y_std=y_std,
     )
 
     logger = get_wandb_logger(config)
@@ -514,7 +508,7 @@ def main():
     logger.log_text(key="top_proteins", columns=["Protein", "Metric"], data=top_proteins_data)
     logger.log_text(
         key="Parameters",
-        columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
+        columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree", "Y Mean", "Y Std"],
         data=[
             [
                 config.modality,
@@ -522,6 +516,8 @@ def main():
                 config.y_val,
                 config.sex,
                 avg_node_degree,
+                y_mean,
+                y_std,
             ]
         ],
     )
