@@ -213,7 +213,7 @@ def main():
     )
 
     run_config = RunConfig(
-        storage_path=os.path.join(config.root_dir, config.ray_results_dir),
+        storage_path=os.path.join(config.root_dir, config.ray_results_dir), #TODO: Make this temp?
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',

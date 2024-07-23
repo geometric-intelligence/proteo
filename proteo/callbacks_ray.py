@@ -110,6 +110,8 @@ class CustomRayWandbCallback(Callback):
         pl_module : Proteo LightningModule
             Lightning's module for training.
         """
+        min_loss = 1000
+
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
@@ -138,20 +140,20 @@ class CustomRayWandbCallback(Callback):
             }
         )
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
-            scatter_plot_data = [
-                [pred, target] for (pred, target) in zip(train_preds, train_targets)
-            ]
-            table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
-            y_mean = pl_module.y_mean.detach().cpu()
-            y_std = pl_module.y_std.detach().cpu()
-            wandb.log(
-                {
-                    "Regression Scatter Plot Train": wandb.plot.scatter(
-                        table, "pred", "target", title="Train Pred vs Train Target Scatter Plot"
-                    ),
-                    "epoch": pl_module.current_epoch,
-                }
-            )
+            if train_loss < min_loss:
+                min_loss = train_loss
+                scatter_plot_data = [
+                    [pred, target] for (pred, target) in zip(train_preds, train_targets)
+                ]
+                table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+                wandb.log(
+                    {
+                        "Regression Scatter Plot Train": wandb.plot.scatter(
+                            table, "pred", "target", title=f"Train Pred vs Train Target Scatter Plot for for epoch {pl_module.current_epoch}"
+                        ),
+                        "epoch": pl_module.current_epoch,
+                    }
+                )
         elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
             train_preds_sigmoid = torch.sigmoid(train_preds)
             predicted_classes = (train_preds_sigmoid > 0.5).int()
@@ -209,6 +211,7 @@ class CustomRayWandbCallback(Callback):
             Lightning's module for training.
         """
         if not trainer.sanity_checking:
+            min_loss = 1000
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             val_loss = pl_module.trainer.callback_metrics["val_loss"]
@@ -223,20 +226,20 @@ class CustomRayWandbCallback(Callback):
                 }
             )
             if pl_module.config.y_val in CONTINOUS_Y_VALS:
-                scatter_plot_data = [
-                    [pred, target] for (pred, target) in zip(val_preds, val_targets)
-                ]
-                table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
-                y_mean = pl_module.y_mean.detach().cpu()
-                y_std = pl_module.y_std.detach().cpu()
-                wandb.log(
-                    {
-                        "Regression Scatter Plot Val": wandb.plot.scatter(
-                            table, "pred", "target", title="Val Pred vs ValTarget Scatter Plot"
-                        ),
-                        "epoch": pl_module.current_epoch,
-                    }
-                )
+                if val_loss < min_loss:
+                    min_loss = val_loss
+                    scatter_plot_data = [
+                        [pred, target] for (pred, target) in zip(val_preds, val_targets)
+                    ]
+                    table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
+                    wandb.log(
+                        {
+                            "Regression Scatter Plot Val": wandb.plot.scatter(
+                                table, "pred", "target", title=f"Val Pred vs Val Target Scatter Plot for epoch {pl_module.current_epoch}"
+                            ),
+                            "epoch": pl_module.current_epoch,
+                        }
+                    )
             elif pl_module.config.y_val in BINARY_Y_VALS_MAP:
                 val_preds_sigmoid = torch.sigmoid(val_preds)
                 # Note this assumes binary classification
