@@ -162,10 +162,10 @@ def train_func(train_loop_config):
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
             proteo_callbacks_ray.CustomRayWandbCallback(),
-            proteo_callbacks_ray.CustomRayReportLossCallback(),  # report metrics to pytorch + ray
+            proteo_callbacks_ray.CustomRayReportLossCallback(),
             TuneReportCheckpointCallback(
                 metrics={"val_loss": "val_loss", "train_loss": "train_loss"},
-                filename=f"checkpoint_{metrics['val_loss']}.ckpt",
+                filename=f"checkpoint.ckpt",
                 on="validation_end",
             ),
             # proteo_callbacks_ray.CustomRayCheckpointCallback(
@@ -176,11 +176,13 @@ def train_func(train_loop_config):
         plugins=[ray_lightning.RayLightningEnvironment()],
         enable_progress_bar=False,
         max_epochs=config.epochs,
+        log_every_n_steps=config.log_every_n_steps,
         deterministic=True,
     )
     trainer = ray_lightning.prepare_trainer(trainer)
     # FIXME: When a trial errors, Wandb still shows it as "running".
     trainer.fit(module, train_loader, test_loader)
+    wandb.finish()
 
 
 def main():

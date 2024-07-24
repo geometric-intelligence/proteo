@@ -27,11 +27,8 @@ rmtmp:
 
 .PHONY: rmprocessed
 rmprocessed:
-	rm -rf data/processed/*
+	rm -rf /home/data/data_louisa/processed/* && sudo chmod -R 777 /home/data/data_louisa/processed
 
-.PHONY: rmoutputs
-rmoutputs:
-	rm -rf outputs/*
 
 .PHONY: conda-osx-64.lock
 conda-osx-64.lock:
