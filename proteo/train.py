@@ -99,6 +99,8 @@ class Proteo(pl.LightningModule):
         self.multiscale = []
         self.pos_weight = pos_weight
         self.focal_loss_weight = focal_loss_weight
+        self.min_val_loss = 1000
+        self.min_train_loss = 1000
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -360,7 +362,7 @@ def compute_mean_std(config, test_dataset, train_dataset):
 
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
-    root = os.path.join(config.root_dir, config.data_dir)
+    root = config.data_dir
     train_dataset = FTDDataset(root, "train", config)
     test_dataset = FTDDataset(root, "test", config)
     return train_dataset, test_dataset

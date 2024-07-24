@@ -165,7 +165,7 @@ def train_func(train_loop_config):
             proteo_callbacks_ray.CustomRayReportLossCallback(),  # report metrics to pytorch + ray
             TuneReportCheckpointCallback(
                 metrics={"val_loss": "val_loss", "train_loss": "train_loss"},
-                filename="checkpoint.ckpt",
+                filename=f"checkpoint_{metrics['val_loss']}.ckpt",
                 on="validation_end",
             ),
             # proteo_callbacks_ray.CustomRayCheckpointCallback(
@@ -213,7 +213,7 @@ def main():
     )
 
     run_config = RunConfig(
-        storage_path=os.path.join(config.root_dir, config.ray_results_dir), #TODO: Make this temp?
+        storage_path=config.ray_results_dir,
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
             checkpoint_score_attribute='val_loss',
@@ -317,10 +317,10 @@ def main():
         'weight_initializer': tune.sample_from(weight_initializer),
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
-        'mutation': tune.choice(config.mutation_choices),
-        'sex': tune.choice(config.sex_choices),
-        'modality': tune.choice(config.modality_choices),
-        'y_val': tune.choice(config.y_val_choices),
+        'mutation': tune.grid_search(config.mutation_choices),
+        'sex': tune.grid_search(config.sex_choices),
+        'modality': tune.grid_search(config.modality_choices),
+        'y_val': tune.grid_search(config.y_val_choices),
     }
 
     scheduler = ASHAScheduler(

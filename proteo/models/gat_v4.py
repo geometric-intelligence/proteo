@@ -268,6 +268,23 @@ class GATv4(nn.Module):
         )
 
         # Pass through fully connected layers
+        '''
+        sex_features = self.encode_sex(data.sex)  #   # 0 or 1 graph
+        mutation_features = self.encode_mutation(data.mutation)
+        age_features = self.encode_age(data.age)
+        demographic_features = torch.cat(
+            [sex_features, mutation_features, age_features], dim=1
+        )
+        
+
+        total_features = torch.cat([demographic_features, multiscale_features], dim=1)
+            
+        pred = self.encoder(total_features)
+
+        pred_nfl = self.encoder_nfl(pred)
+        pred_cdr_multiclass = self.encoder_cdr_multiclass(pred)
+        pred_cognitive_decline = self.encoder_cognitive_decline(pred)
+        '''
         pred = self.encoder(multiscale_features)
         aux = [x0, x1, x2, multiscale_features]
 

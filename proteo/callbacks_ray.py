@@ -91,7 +91,6 @@ class CustomRayCheckpointCallback(Callback):
 
 class CustomRayWandbCallback(Callback):
     """Callback that logs losses and plots to Wandb."""
-
     # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
     # then sqrt(loss) is not the RMSE
     def on_after_backward(self, trainer, pl_module):
@@ -110,8 +109,6 @@ class CustomRayWandbCallback(Callback):
         pl_module : Proteo LightningModule
             Lightning's module for training.
         """
-        min_loss = 1000
-
         train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
         train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
         params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
@@ -140,16 +137,16 @@ class CustomRayWandbCallback(Callback):
             }
         )
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
-            if train_loss < min_loss:
-                min_loss = train_loss
+            if train_loss < pl_module.min_train_loss:
+                pl_module.min_train_loss = train_loss
                 scatter_plot_data = [
                     [pred, target] for (pred, target) in zip(train_preds, train_targets)
                 ]
                 table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
                 wandb.log(
                     {
-                        "Regression Scatter Plot Train": wandb.plot.scatter(
-                            table, "pred", "target", title=f"Train Pred vs Train Target Scatter Plot for for epoch {pl_module.current_epoch}"
+                        f"Regression Scatter Plot Train": wandb.plot.scatter(
+                            table, "pred", "target", title=f"Train Pred vs Train Target Scatter Plot"
                         ),
                         "epoch": pl_module.current_epoch,
                     }
@@ -211,7 +208,6 @@ class CustomRayWandbCallback(Callback):
             Lightning's module for training.
         """
         if not trainer.sanity_checking:
-            min_loss = 1000
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
             val_loss = pl_module.trainer.callback_metrics["val_loss"]
@@ -226,8 +222,8 @@ class CustomRayWandbCallback(Callback):
                 }
             )
             if pl_module.config.y_val in CONTINOUS_Y_VALS:
-                if val_loss < min_loss:
-                    min_loss = val_loss
+                if val_loss < pl_module.min_val_loss:
+                    pl_module.min_val_loss = val_loss
                     scatter_plot_data = [
                         [pred, target] for (pred, target) in zip(val_preds, val_targets)
                     ]
@@ -235,7 +231,7 @@ class CustomRayWandbCallback(Callback):
                     wandb.log(
                         {
                             "Regression Scatter Plot Val": wandb.plot.scatter(
-                                table, "pred", "target", title=f"Val Pred vs Val Target Scatter Plot for epoch {pl_module.current_epoch}"
+                                table, "pred", "target", title=f"Val Pred vs Val Target Scatter Plot"
                             ),
                             "epoch": pl_module.current_epoch,
                         }
