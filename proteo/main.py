@@ -116,7 +116,7 @@ def train_func(train_loop_config):
                 "histogram original": wandb.Image(
                     os.path.join(
                         train_dataset.processed_dir,
-                        f'{config.y_val}_{config.sex}_{config.mutation}_orig_histogram.jpg',
+                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_orig_histogram.jpg',
                     )
                 )
             }
@@ -126,7 +126,7 @@ def train_func(train_loop_config):
             "histogram": wandb.Image(
                 os.path.join(
                     train_dataset.processed_dir,
-                    f'{config.y_val}_{config.sex}_{config.mutation}_histogram.jpg',
+                    f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
                 )
             ),
             "adjacency": wandb.Image(

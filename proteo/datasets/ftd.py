@@ -128,10 +128,10 @@ class FTDDataset(InMemoryDataset):
         self.modality_str = f'{config.modality}'
         self.sex_str = f'sex_{",".join(config.sex)}'
         self.hist_path_str = (
-            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_histogram.jpg'
+            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_histogram.jpg'
         )
         self.orig_hist_path_str = (
-            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_orig_histogram.jpg'
+            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_orig_histogram.jpg'
         )
 
         super(FTDDataset, self).__init__(root)
