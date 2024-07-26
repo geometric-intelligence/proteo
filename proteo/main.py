@@ -29,6 +29,7 @@ import numpy as np
 import pytorch_lightning as pl
 import ray
 import torch
+import time
 import train as proteo_train
 import wandb
 from config_utils import CONFIG_FILE, read_config_from_file
@@ -95,7 +96,6 @@ def train_func(train_loop_config):
         focal_loss_weight = proteo_train.compute_focal_loss_weight(
             config, test_dataset, train_dataset
         )
-    y_mean, y_std = proteo_train.compute_mean_std(config, test_dataset, train_dataset)
     # For wandb logging top proteins
     protein_file_data = proteo_train.read_protein_file(train_dataset.processed_dir, config)
     protein_names = protein_file_data['Protein']
@@ -139,7 +139,7 @@ def train_func(train_loop_config):
                 columns=["Protein", "Metric"], data=top_proteins_data
             ),  # note this is in order from most to least different
             "parameters": wandb.Table(
-                columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree", "Mean", "Std"],
+                columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
                 data=[
                     [
                         config.modality,
@@ -147,8 +147,6 @@ def train_func(train_loop_config):
                         config.y_val,
                         config.sex,
                         avg_node_degree,
-                        y_mean,
-                        y_std,
                     ]
                 ],
             ),
@@ -182,6 +180,7 @@ def train_func(train_loop_config):
     trainer = ray_lightning.prepare_trainer(trainer)
     # FIXME: When a trial errors, Wandb still shows it as "running".
     trainer.fit(module, train_loader, test_loader)
+    time.sleep(5)  # Wait for wandb to finish logging
     wandb.finish()
 
 

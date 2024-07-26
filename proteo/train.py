@@ -50,7 +50,6 @@ from proteo.datasets.ftd import (
     MULTICLASS_Y_VALS_MAP,
     Y_VALS_TO_NORMALIZE,
     FTDDataset,
-    reverse_log_transform,
 )
 
 
@@ -347,18 +346,6 @@ def compute_focal_loss_weight(config, test_dataset, train_dataset):
     return weights
 
 
-def compute_mean_std(config, test_dataset, train_dataset):
-    '''Function that computes the mean and std of the target values in the training and test datasets in order to reverse the normalization done.'''
-    test_y_values = test_dataset.y
-    train_y_values = train_dataset.y
-    total_y_values = torch.cat((test_y_values, train_y_values))
-    if config.y_val in Y_VALS_TO_NORMALIZE:
-        original_data, mean, std = reverse_log_transform(total_y_values)
-    else:
-        mean = torch.mean(total_y_values)
-        std = torch.std(total_y_values)
-    return mean, std
-
 
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
@@ -465,7 +452,7 @@ def main():
     elif config.y_val in MULTICLASS_Y_VALS_MAP:
         focal_loss_weight = compute_focal_loss_weight(config, test_dataset, train_dataset)
         print(f"focal_loss_weight used for loss function: {focal_loss_weight}")
-    y_mean, y_std = compute_mean_std(config, test_dataset, train_dataset)
+
     module = Proteo(
         config,
         in_channels=train_dataset.feature_dim,  # 1 dim of input
@@ -510,7 +497,7 @@ def main():
     logger.log_text(key="top_proteins", columns=["Protein", "Metric"], data=top_proteins_data)
     logger.log_text(
         key="Parameters",
-        columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree", "Y Mean", "Y Std"],
+        columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
         data=[
             [
                 config.modality,
@@ -518,8 +505,6 @@ def main():
                 config.y_val,
                 config.sex,
                 avg_node_degree,
-                y_mean,
-                y_std,
             ]
         ],
     )

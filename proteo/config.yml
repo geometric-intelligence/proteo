@@ -16,7 +16,7 @@ error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
-modality: "plasma"
+modality: "csf"
 # List of all the mutations you want included in the dataset
 mutation: ["GRN"]
 # ['M'], ['F'],['M', 'F'] 
@@ -27,7 +27,7 @@ project: "proteo"
 wandb_offline: false
 # Controls the frequency of logging within training, 
 # by specifying how many training steps should occur between each logging event.
-log_every_n_steps: 5
+log_every_n_steps: 10
 
 # Dataset
 num_nodes: 150  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
@@ -66,7 +66,7 @@ gcn:
 
 # Training
 batch_size: 40 #for one off training
-epochs: 10
+epochs: 300
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -89,8 +89,8 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 1 #200
-grace_period: 10 #30  # Each training is run at least this nb of epochs.
+num_samples: 200
+grace_period: 30  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for one off training so should be one to save absolute min val_loss checkpoint
@@ -110,10 +110,10 @@ l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 num_nodes_choices: [10, 30, 150, 1000, 2000, 7000]
 adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
-mutation_choices: [['GRN']] #[['C9orf72', 'MAPT', 'GRN', 'CTL']] [['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
-sex_choices: [['M']] #, ['F'], ['M', 'F']]
-modality_choices: ['plasma'] #['plasma', 'csf']
-y_val_choices: ['nfl'] #['disease_age', 'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
+mutation_choices: [['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
+sex_choices: [['M'], ['F'], ['M', 'F']]
+modality_choices: ['plasma', 'csf']
+y_val_choices: ['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]

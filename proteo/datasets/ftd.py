@@ -308,9 +308,10 @@ class FTDDataset(InMemoryDataset):
         if self.config.y_val in Y_VALS_TO_NORMALIZE:
             hist_path = os.path.join(self.processed_dir, self.orig_hist_path_str)
             plot_histogram(pd.DataFrame(y_vals), f'original {self.config.y_val}', save_to=hist_path)
-            y_vals = log_transform(y_vals)
+            y_vals, mean, std = log_transform(y_vals)
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
+
 
         if self.config.y_val in BINARY_Y_VALS_MAP:
             y_vals = self.load_binary_y_values(y_vals)
@@ -370,6 +371,7 @@ class FTDDataset(InMemoryDataset):
 
         features = np.array(top_proteins)
         labels = np.array(y_vals)
+
         # ============================DONT TOUCH============================
         train_features, test_features, train_labels, test_labels = train_test_split(
             features, labels, test_size=0.20, random_state=42
@@ -460,20 +462,17 @@ def log_transform(data):
     log_data = np.log(data)
     mean = np.mean(log_data)
     std = np.std(log_data)
+    print("mean log", mean)
+    print("std log", std)
     standardized_log_data = (log_data - mean) / std
-    return standardized_log_data
+    return standardized_log_data, mean, std
 
 
-def reverse_log_transform(standardized_log_data):
+def reverse_log_transform(standardized_log_data, mean, std):
     # De-standardize the data
-    mean = torch.mean(standardized_log_data)
-    std = torch.std(standardized_log_data)
-    log_data = (standardized_log_data * std) + mean
-
-    # Reverse the log transformation by applying the exponential function
-    original_data = torch.exp(log_data)
-
-    return original_data, mean, std
+    log_data = standardized_log_data * std + mean
+    original_data = np.exp(log_data)
+    return original_data
 
 
 # Unit Tests:
