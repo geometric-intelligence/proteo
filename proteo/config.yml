@@ -20,7 +20,7 @@ modality: "csf"
 # List of all the mutations you want included in the dataset
 mutation: ["GRN"]
 # ['M'], ['F'],['M', 'F'] 
-sex: ['M', 'F'] 
+sex: ['M'] 
 
 # WandB
 project: "proteo"
@@ -48,10 +48,10 @@ gat-v4:
   heads: [2, 2]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
-  fc_dim: [256, 512, 512, 128]
-  fc_dropout: 0.5
-  fc_act: leaky_relu
-  weight_initializer: truncated_normal
+  fc_dim: [64, 128, 128, 32]
+  fc_dropout: 0.2
+  fc_act: elu
+  weight_initializer: uniform
 
 gat:  
   num_layers: 2
@@ -66,7 +66,7 @@ gcn:
 
 # Training
 batch_size: 32 #for one off training
-epochs: 10
+epochs: 300
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -75,7 +75,7 @@ lr: 0.001941593
 weight_decay: 0 #0.1
 l1_lambda: 0.007849087
 optimizer: Adam
-lr_scheduler: ReduceLROnPlateau
+lr_scheduler: LambdaLR
 
 # GPUs
 device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 

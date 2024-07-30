@@ -126,8 +126,8 @@ class CustomRayWandbCallback(Callback):
             {
                 "train_loss": train_loss,
                 "train_RMSE": train_RMSE,
-                "train_preds": wandb.Histogram(train_preds),
-                "train_targets": wandb.Histogram(train_targets),
+                "train_preds": wandb.Histogram(train_preds, num_bins=500),
+                "train_targets": wandb.Histogram(train_targets, num_bins=500),
                 "parameters (weights+biases)": wandb.Histogram(params),
                 "x0": wandb.Histogram(x0),
                 "x1": wandb.Histogram(x1),
@@ -216,8 +216,8 @@ class CustomRayWandbCallback(Callback):
             wandb.log(
                 {
                     "val_loss": val_loss,
-                    "val_preds": wandb.Histogram(val_preds),
-                    "val_targets": wandb.Histogram(val_targets),
+                    "val_preds": wandb.Histogram(val_preds, num_bins=500),
+                    "val_targets": wandb.Histogram(val_targets, num_bins=500),
                     "epoch": pl_module.current_epoch,
                 }
             )

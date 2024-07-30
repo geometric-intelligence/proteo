@@ -68,6 +68,10 @@ def train_func(train_loop_config):
         'hidden_channels': train_loop_config['hidden_channels'],
         'heads': train_loop_config['heads'],
         'num_layers': train_loop_config['num_layers'],
+        'fc_dim': train_loop_config['fc_dim'],
+        'fc_dropout': train_loop_config['fc_dropout'],
+        'fc_act': train_loop_config['fc_act'],
+        'weight_initializer': train_loop_config['weight_initializer'],
     }
     config[model].update(train_loop_config_model)
     # Remove keys that were already updated in nested configuration
@@ -307,15 +311,15 @@ def main():
         'fc_dim': tune.sample_from(fc_dim),
         'fc_dropout': tune.sample_from(fc_dropout),
         'fc_act': tune.sample_from(fc_act),
+        'weight_initializer': tune.sample_from(weight_initializer),
         # Shared parameters
         'seed': tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choices),
-        'scheduler': tune.choice(config.scheduler_choices),
+        'lr_scheduler': tune.choice(config.scheduler_choices),
         'dropout': tune.choice(config.dropout_choices),
         'l1_lambda': tune.loguniform(config.l1_lambda_min, config.l1_lambda_max),
         'act': tune.choice(config.act_choices),
-        'weight_initializer': tune.sample_from(weight_initializer),
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
         'mutation': tune.grid_search(config.mutation_choices),
