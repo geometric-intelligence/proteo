@@ -20,7 +20,7 @@ modality: "csf"
 # List of all the mutations you want included in the dataset
 mutation: ["GRN"]
 # ['M'], ['F'],['M', 'F'] 
-sex: ['M'] 
+sex: ['M', 'F'] 
 
 # WandB
 project: "proteo"
@@ -31,7 +31,7 @@ log_every_n_steps: 10
 
 # Dataset
 num_nodes: 150  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
-adj_thresh: 0.01  #0.08 
+adj_thresh: 0.9  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
@@ -40,18 +40,18 @@ wgcna_mergeCutHeight: 0.25
 
 # Model
 model: gat-v4
-dropout: 0.2  # dropout of the gconvs
-act: tanh  # act of the gconvs
+dropout: 0  # dropout of the gconvs
+act: sigmoid  # act of the gconvs
 
 gat-v4:
-  hidden_channels: [16, 64]
-  heads: [4, 3]
+  hidden_channels: [32, 64]
+  heads: [2, 2]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
-  fc_dim: [64, 128, 128, 32]
-  fc_dropout: 0.2
-  fc_act: elu
-  weight_initializer: uniform
+  fc_dim: [256, 512, 512, 128]
+  fc_dropout: 0.5
+  fc_act: leaky_relu
+  weight_initializer: truncated_normal
 
 gat:  
   num_layers: 2
@@ -65,22 +65,22 @@ gcn:
 
 
 # Training
-batch_size: 40 #for one off training
-epochs: 300
+batch_size: 32 #for one off training
+epochs: 10
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
-lr: 0.01
+lr: 0.001941593
 weight_decay: 0 #0.1
-l1_lambda: 0
+l1_lambda: 0.007849087
 optimizer: Adam
-lr_scheduler: LambdaLR
+lr_scheduler: ReduceLROnPlateau
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
-seed: 43
+seed: 19543
 
 # Miscellaneous
 use_progress_bar: true

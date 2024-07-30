@@ -241,7 +241,7 @@ class FTDDataset(InMemoryDataset):
         protein_names = top_columns['Protein'].values
         file_path = os.path.join(
             self.processed_dir,
-            f'top_proteins_num_nodes_{self.config.num_nodes}_mutation_{self.config.mutation}_{self.config.modality}.npy',
+            f'top_proteins_num_nodes_{self.config.num_nodes}_mutation_{self.config.mutation}_{self.config.modality}_{self.config.sex}.npy',
         )
         # Combine into a structured array
         structured_array = np.rec.array(
