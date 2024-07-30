@@ -170,9 +170,6 @@ def train_func(train_loop_config):
                 filename=f"checkpoint.ckpt",
                 on="validation_end",
             ),
-            # proteo_callbacks_ray.CustomRayCheckpointCallback(
-            #    checkpoint_every_n_epochs=config.checkpoint_every_n_epochs,
-            # ),
         ],
         # How ray interacts with pytorch lightning
         plugins=[ray_lightning.RayLightningEnvironment()],
@@ -183,8 +180,19 @@ def train_func(train_loop_config):
     )
     trainer = ray_lightning.prepare_trainer(trainer)
     # FIXME: When a trial errors, Wandb still shows it as "running".
+    print("BEFORE TRAINER!")
     trainer.fit(module, train_loader, test_loader)
     time.sleep(5)  # Wait for wandb to finish logging
+    print("I AM HERE!!!!")
+    wandb.run.summary['Min Val Loss'] = module.min_val_loss
+    wandb.run.summary["Best Val Preds"] = module.best_val_preds
+    wandb.run.summary["Best Val Targets"] = module.best_val_targets
+    wandb.run.summary["Best Val Epoch"] = module.best_val_epoch
+    wandb.run.summary['Min Train Loss'] = module.min_train_loss
+    wandb.run.summary["Best Train Preds"] = module.best_train_preds
+    wandb.run.summary["Best Train Targets"] = module.best_train_targets
+    wandb.run.summary["Best Train Epoch"] = module.best_train_epoch
+    print("ALMOST AT END!!!!")
     wandb.finish()
 
 
@@ -323,7 +331,7 @@ def main():
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
         'mutation': tune.grid_search(config.mutation_choices),
-        'sex': tune.grid_search(config.sex_choices),
+        'sex': tune.choice(config.sex_choices),
         'modality': tune.grid_search(config.modality_choices),
         'y_val': tune.grid_search(config.y_val_choices),
     }

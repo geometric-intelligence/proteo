@@ -139,13 +139,16 @@ class CustomRayWandbCallback(Callback):
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
             if train_loss < pl_module.min_train_loss:
                 pl_module.min_train_loss = train_loss
+                pl_module.best_train_preds = train_preds
+                pl_module.best_train_targets = train_targets
+                pl_module.best_train_epoch = pl_module.current_epoch
                 scatter_plot_data = [
                     [pred, target] for (pred, target) in zip(train_preds, train_targets)
                 ]
                 table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
                 wandb.log(
                     {
-                        f"Regression Scatter Plot Train": wandb.plot.scatter(
+                        "Regression Scatter Plot Train": wandb.plot.scatter(
                             table, "pred", "target", title=f"Train Pred vs Train Target Scatter Plot"
                         ),
                         "epoch": pl_module.current_epoch,
@@ -224,6 +227,9 @@ class CustomRayWandbCallback(Callback):
             if pl_module.config.y_val in CONTINOUS_Y_VALS:
                 if val_loss < pl_module.min_val_loss:
                     pl_module.min_val_loss = val_loss
+                    pl_module.best_val_preds = val_preds
+                    pl_module.best_val_targets = val_targets
+                    pl_module.best_val_epoch = pl_module.current_epoch
                     scatter_plot_data = [
                         [pred, target] for (pred, target) in zip(val_preds, val_targets)
                     ]
