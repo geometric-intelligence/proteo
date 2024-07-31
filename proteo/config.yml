@@ -76,7 +76,7 @@ gcn:
 
 # Training
 batch_size: 8 #for one off training
-epochs: 30
+epochs: 10
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -88,7 +88,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 19543
 
@@ -100,7 +100,7 @@ pin_memory: true
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
 num_samples: 1
-grace_period: 30  # Each training is run at least this nb of epochs.
+grace_period: 5  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for one off training so should be one to save absolute min val_loss checkpoint
@@ -120,8 +120,8 @@ l1_lambda_max: 0.00001  #0.1
 act_choices: ['relu'] #['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 num_nodes_choices: [30] #[10, 30, 150, 1000, 2000, 7000]
 adj_thresh_choices: [0.1] #[0.05, 0.1, 0.5, 0.7, 0.9]
-mutation_choices: [['GRN']] #[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
-sex_choices: [['M']] #[['M'], ['F'], ['M', 'F']]
+mutation_choices: [['MAPT']] #[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
+sex_choices: [['M','F']] #[['M'], ['F'], ['M', 'F']]
 modality_choices: ['plasma'] #['plasma', 'csf']
 y_val_choices: ['nfl'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 

@@ -136,9 +136,10 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        if pl_module.current_epoch == 2:
-            print("TRAIN PREDS", train_preds)
-            print("TRAIN TARGETS", train_targets)
+        print("epoch", pl_module.current_epoch)
+        print("train preds", train_preds[:20])
+        print("train targets", train_targets[:20])
+        print("params first 20", params[:20])
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
             if train_loss < pl_module.min_train_loss:
                 pl_module.min_train_loss = train_loss
@@ -232,6 +233,9 @@ class CustomRayWandbCallback(Callback):
                     pl_module.min_val_loss = val_loss
                     pl_module.best_val_preds = val_preds
                     pl_module.best_val_targets = val_targets
+                    print("VAL PREDS", val_preds)
+                    print("VAL TARGETS", val_targets)
+                    print("EPOCH", pl_module.current_epoch)
                     pl_module.best_val_epoch = pl_module.current_epoch
                     scatter_plot_data = [
                         [pred, target] for (pred, target) in zip(val_preds, val_targets)
