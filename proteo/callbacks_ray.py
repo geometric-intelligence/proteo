@@ -294,20 +294,6 @@ class CustomRayWandbCallback(Callback):
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
     
-    def on_train_end(self, trainer, pl_module):
-        print("I am in callback on_train_end")
-        
-        wandb.run.summary['Min Val Loss'] = pl_module.min_val_loss
-        wandb.run.summary["Best Val Preds"] = pl_module.best_val_preds
-        wandb.run.summary["Best Val Targets"] = pl_module.best_val_targets
-        wandb.run.summary["Best Val Epoch"] = pl_module.best_val_epoch
-        wandb.run.summary['Min Train Loss'] = pl_module.min_train_loss
-        wandb.run.summary["Best Train Preds"] = pl_module.best_train_preds
-        wandb.run.summary["Best Train Targets"] = pl_module.best_train_targets
-        wandb.run.summary["Best Train Epoch"] = pl_module.best_train_epoch
-        wandb.finish()
-        print("I am in callback on_train_end and I logged the best preds and targets")
-
 
 class CustomRayReportLossCallback(Callback):
     """Callback that reports val loss to Ray."""
