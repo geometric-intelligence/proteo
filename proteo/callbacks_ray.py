@@ -136,6 +136,9 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
+        if pl_module.current_epoch == 2:
+            print("TRAIN PREDS", train_preds)
+            print("TRAIN TARGETS", train_targets)
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
             if train_loss < pl_module.min_train_loss:
                 pl_module.min_train_loss = train_loss
@@ -290,11 +293,25 @@ class CustomRayWandbCallback(Callback):
 
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
+    
+    def on_train_end(self, trainer, pl_module):
+        print("I am in callback on_train_end")
+        
+        wandb.run.summary['Min Val Loss'] = pl_module.min_val_loss
+        wandb.run.summary["Best Val Preds"] = pl_module.best_val_preds
+        wandb.run.summary["Best Val Targets"] = pl_module.best_val_targets
+        wandb.run.summary["Best Val Epoch"] = pl_module.best_val_epoch
+        wandb.run.summary['Min Train Loss'] = pl_module.min_train_loss
+        wandb.run.summary["Best Train Preds"] = pl_module.best_train_preds
+        wandb.run.summary["Best Train Targets"] = pl_module.best_train_targets
+        wandb.run.summary["Best Train Epoch"] = pl_module.best_train_epoch
+        wandb.finish()
+        print("I am in callback on_train_end and I logged the best preds and targets")
 
 
 class CustomRayReportLossCallback(Callback):
     """Callback that reports val loss to Ray."""
-
+    # TODO: train_loss logged in ray_output_csv is one epoch later than the val_loss
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
         pl_module.log(

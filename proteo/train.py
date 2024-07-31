@@ -416,11 +416,10 @@ def get_wandb_logger(config):
     with open(wandb_api_key_path, 'r') as f:
         wandb_api_key = f.read().strip()
     os.environ['WANDB_API_KEY'] = wandb_api_key
-    output_dir = os.path.join(config.root_dir, config.output_dir)
     return pl_loggers.WandbLogger(
         config=config,
         project=config.project,
-        save_dir=output_dir,  # dir needs to exist, otherwise wandb saves in /tmp
+        save_dir=config.wandb_tmp_dir,  # dir needs to exist, otherwise wandb saves in /tmp
         offline=config.wandb_offline,
     )
 
@@ -442,7 +441,7 @@ def main():
     config = read_config_from_file(CONFIG_FILE)
     pl.seed_everything(config.seed)
 
-    output_dir = os.path.join(config.root_dir, config.output_dir)
+    output_dir = config.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
@@ -517,7 +516,7 @@ def main():
 
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='val_loss',
-        dirpath=os.path.join(config.root_dir, config.checkpoint_dir),
+        dirpath=config.checkpoint_dir,
         filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
         mode='min',
         every_n_epochs=config.checkpoint_every_n_epochs_train,

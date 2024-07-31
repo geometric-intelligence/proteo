@@ -1,13 +1,23 @@
 # Files
 root_dir: "/home/lcornelis/code/proteo"
-ray_results_dir: "/tmp/ray_results" #"/home/lcornelis/code/proteo/outputs/ray_results
-ray_tmp_dir: "/tmp" #"/home/lcornelis/code/proteo/outputs/ray"  
 data_dir: "/home/data/data_louisa"
+output_dir: "/scratch/lcornelis/outputs"
+
+# When train.py is run
+# Logs
+wandb_tmp_dir: "/tmp"
+# Results with checkpoints:
+checkpoint_dir: "/scratch/lcornelis/outputs/checkpoints"  # only when using train
+
+# When main.py is run, wandb logs in wandb_tmp_dir
+# Logs
+ray_tmp_dir: "/scratch/lcornelis/tmp" 
+# Results with checkpoints:
+ray_results_dir: "/scratch/lcornelis/outputs/ray_results"
+
 # Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"
-output_dir: "outputs"
-checkpoint_dir: "outputs/checkpoints"
-# Note: wandb will log into outputs/wandb
+
 
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
@@ -78,7 +88,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0] #[0, 1, 2, 3, 4, 5, 6, 7] 
 trainer_accelerator: "gpu"
 seed: 19543
 

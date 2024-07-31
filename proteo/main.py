@@ -84,7 +84,7 @@ def train_func(train_loop_config):
         project=config.project,
         api_key_file=os.path.join(config.root_dir, config.wandb_api_key_path),
         # Directory in dir needs to exist, otherwise wandb saves in /tmp
-        dir=os.path.join(config.root_dir, config.output_dir),
+        dir=config.wandb_tmp_dir,
         mode="offline" if config.wandb_offline else "online",
     )
 
@@ -182,18 +182,7 @@ def train_func(train_loop_config):
     # FIXME: When a trial errors, Wandb still shows it as "running".
     print("BEFORE TRAINER!")
     trainer.fit(module, train_loader, test_loader)
-    time.sleep(5)  # Wait for wandb to finish logging
     print("I AM HERE!!!!")
-    wandb.run.summary['Min Val Loss'] = module.min_val_loss
-    wandb.run.summary["Best Val Preds"] = module.best_val_preds
-    wandb.run.summary["Best Val Targets"] = module.best_val_targets
-    wandb.run.summary["Best Val Epoch"] = module.best_val_epoch
-    wandb.run.summary['Min Train Loss'] = module.min_train_loss
-    wandb.run.summary["Best Train Preds"] = module.best_train_preds
-    wandb.run.summary["Best Train Targets"] = module.best_train_targets
-    wandb.run.summary["Best Train Epoch"] = module.best_train_epoch
-    print("ALMOST AT END!!!!")
-    wandb.finish()
 
 
 def main():
@@ -213,8 +202,10 @@ def main():
     https://docs.ray.io/en/latest/_modules/ray/train/torch/torch_trainer.html#TorchTrainer
     """
     config = read_config_from_file(CONFIG_FILE)
-    output_dir = os.path.join(config.root_dir, config.output_dir)
+    output_dir = config.output_dir
     os.makedirs(output_dir, exist_ok=True)
+    ray_tmp_dir = config.ray_tmp_dir
+    os.makedirs(ray_tmp_dir, exist_ok=True)
     os.makedirs(config.ray_tmp_dir, exist_ok=True)
     ray.init(_temp_dir=config.ray_tmp_dir)
 
