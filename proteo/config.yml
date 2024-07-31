@@ -16,7 +16,7 @@ error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
-modality: "csf"
+modality: "plasma"
 # List of all the mutations you want included in the dataset
 mutation: ["GRN"]
 # ['M'], ['F'],['M', 'F'] 
@@ -30,8 +30,8 @@ wandb_offline: false
 log_every_n_steps: 10
 
 # Dataset
-num_nodes: 150  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
-adj_thresh: 0.9  #0.08 
+num_nodes: 30  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+adj_thresh: 0.1  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
@@ -41,16 +41,16 @@ wgcna_mergeCutHeight: 0.25
 # Model
 model: gat-v4
 dropout: 0  # dropout of the gconvs
-act: sigmoid  # act of the gconvs
+act: relu  # act of the gconvs
 
 gat-v4:
-  hidden_channels: [32, 64]
-  heads: [2, 2]
+  hidden_channels: [8, 16]
+  heads: [2, 3]
   use_layer_norm: true
   which_layer: ['layer1', 'layer2', 'layer3']
   fc_dim: [64, 128, 128, 32]
-  fc_dropout: 0.2
-  fc_act: elu
+  fc_dropout: 0.1
+  fc_act: relu
   weight_initializer: uniform
 
 gat:  
@@ -65,15 +65,15 @@ gcn:
 
 
 # Training
-batch_size: 32 #for one off training
+batch_size: 8 #for one off training
 epochs: 30
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
 accumulate_grad_batches: 1
-lr: 0.001941593
+lr: 0.1
 weight_decay: 0 #0.1
-l1_lambda: 0.007849087
+l1_lambda: 0.00001
 optimizer: Adam
 lr_scheduler: LambdaLR
 
@@ -98,30 +98,30 @@ checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
 cpu_per_worker: 16
 gpu_per_worker: 1
-lr_min: 0.000001
+lr_min: 0.1 #0.000001
 lr_max: 0.1
 model_grid_search: ['gat-v4']
 # Choices
-batch_size_choices: [8, 16, 32, 50]  # note: 352 train and 89 val --> 3 val batch for bs = 32
-scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
-dropout_choices: [0, 0.05, 0.1, 0.2, 0.3]
+batch_size_choices: [8] #[8, 16, 32, 50]  # note: 352 train and 89 val --> 3 val batch for bs = 32
+lr_scheduler_choices: ['LambdaLR'] #['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
+dropout_choices: [0] #[0, 0.05, 0.1, 0.2, 0.3]
 l1_lambda_min: 0.00001
-l1_lambda_max: 0.1
-act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
-num_nodes_choices: [10, 30, 150, 1000, 2000, 7000]
-adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
+l1_lambda_max: 0.00001  #0.1
+act_choices: ['relu'] #['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
+num_nodes_choices: [30] #[10, 30, 150, 1000, 2000, 7000]
+adj_thresh_choices: [0.1] #[0.05, 0.1, 0.5, 0.7, 0.9]
 mutation_choices: [['GRN']] #[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
-sex_choices: [['M'], ['F'], ['M', 'F']]
-modality_choices: ['plasma', 'csf']
+sex_choices: [['M']] #[['M'], ['F'], ['M', 'F']]
+modality_choices: ['plasma'] #['plasma', 'csf']
 y_val_choices: ['nfl'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 
 # GAT-v4
-gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]
-gat_v4_heads: [[2, 3], [2, 2], [4, 4]]
-gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
-gat_v4_fc_dropout: [0.1, 0.2, 0.5]
-gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
-gat_v4_weight_initializer: ['xavier', 'kaiming', 'orthogonal', 'truncated_normal', 'uniform']
+gat_v4_hidden_channels: [[8, 16]] #[[8, 16], [32, 64], [64, 128]]
+gat_v4_heads: [[2, 3]] #[[2, 3], [2, 2], [4, 4]]
+gat_v4_fc_dim: [[64, 128, 128, 32]] #[[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
+gat_v4_fc_dropout: [0.1] #[0.1, 0.2, 0.5]
+gat_v4_fc_act: ['relu'] #['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
+gat_v4_weight_initializer: ['uniform'] #['xavier', 'kaiming', 'orthogonal', 'truncated_normal', 'uniform']
 # GAT
 gat_num_layers: [2, 4, 6, 12]  # only for GAT and GCN
 gat_hidden_channels: [8, 32, 128, 256]

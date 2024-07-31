@@ -321,10 +321,10 @@ def main():
         'fc_act': tune.sample_from(fc_act),
         'weight_initializer': tune.sample_from(weight_initializer),
         # Shared parameters
-        'seed': tune.randint(0, MAX_SEED),
+        'seed': 19543,  #tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choices),
-        'lr_scheduler': tune.choice(config.scheduler_choices),
+        'lr_scheduler': tune.choice(config.lr_scheduler_choices),
         'dropout': tune.choice(config.dropout_choices),
         'l1_lambda': tune.loguniform(config.l1_lambda_min, config.l1_lambda_max),
         'act': tune.choice(config.act_choices),
@@ -342,7 +342,6 @@ def main():
         grace_period=config.grace_period,
         reduction_factor=config.reduction_factor,
     )
-
     tuner = tune.Tuner(
         ray_trainer,
         param_space={"train_loop_config": search_space},
