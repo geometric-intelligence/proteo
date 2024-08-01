@@ -17,7 +17,6 @@ from callbacks import reverse_log_transform
 
 from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
 
-
 # TODO: not using below function
 class CustomRayCheckpointCallback(Callback):
     """Callback that reports checkpoints to Ray on train epoch end.
@@ -136,16 +135,9 @@ class CustomRayWandbCallback(Callback):
                 "epoch": pl_module.current_epoch,
             }
         )
-        print("epoch", pl_module.current_epoch)
-        print("train preds", train_preds[:20])
-        print("train targets", train_targets[:20])
-        print("params first 20", params[:20])
         if pl_module.config.y_val in CONTINOUS_Y_VALS:
             if train_loss < pl_module.min_train_loss:
                 pl_module.min_train_loss = train_loss
-                pl_module.best_train_preds = train_preds
-                pl_module.best_train_targets = train_targets
-                pl_module.best_train_epoch = pl_module.current_epoch
                 scatter_plot_data = [
                     [pred, target] for (pred, target) in zip(train_preds, train_targets)
                 ]
@@ -231,12 +223,6 @@ class CustomRayWandbCallback(Callback):
             if pl_module.config.y_val in CONTINOUS_Y_VALS:
                 if val_loss < pl_module.min_val_loss:
                     pl_module.min_val_loss = val_loss
-                    pl_module.best_val_preds = val_preds
-                    pl_module.best_val_targets = val_targets
-                    print("VAL PREDS", val_preds)
-                    print("VAL TARGETS", val_targets)
-                    print("EPOCH", pl_module.current_epoch)
-                    pl_module.best_val_epoch = pl_module.current_epoch
                     scatter_plot_data = [
                         [pred, target] for (pred, target) in zip(val_preds, val_targets)
                     ]

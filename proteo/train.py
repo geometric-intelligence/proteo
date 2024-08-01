@@ -100,12 +100,6 @@ class Proteo(pl.LightningModule):
         self.focal_loss_weight = focal_loss_weight
         self.min_val_loss = 1000
         self.min_train_loss = 1000
-        self.best_val_pred = []
-        self.best_val_target = []
-        self.best_train_pred = []
-        self.best_train_target = []
-        self.best_val_epoch = 0
-        self.best_train_epoch = 0
 
         if config.model == 'gat-v4':
             self.model = GATv4(

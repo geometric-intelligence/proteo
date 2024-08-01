@@ -180,9 +180,8 @@ def train_func(train_loop_config):
     )
     trainer = ray_lightning.prepare_trainer(trainer)
     # FIXME: When a trial errors, Wandb still shows it as "running".
-    print("BEFORE TRAINER!")
     trainer.fit(module, train_loader, test_loader)
-    print("I AM HERE!!!!")
+    torch.cuda.empty_cache()
 
 
 def main():
@@ -312,7 +311,7 @@ def main():
         'fc_act': tune.sample_from(fc_act),
         'weight_initializer': tune.sample_from(weight_initializer),
         # Shared parameters
-        'seed': 19543,  #tune.randint(0, MAX_SEED),
+        'seed': tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
         'batch_size': tune.choice(config.batch_size_choices),
         'lr_scheduler': tune.choice(config.lr_scheduler_choices),
@@ -322,7 +321,7 @@ def main():
         'num_nodes': tune.choice(config.num_nodes_choices),
         'adj_thresh': tune.choice(config.adj_thresh_choices),
         'mutation': tune.grid_search(config.mutation_choices),
-        'sex': tune.choice(config.sex_choices),
+        'sex': tune.grid_search(config.sex_choices),
         'modality': tune.grid_search(config.modality_choices),
         'y_val': tune.grid_search(config.y_val_choices),
     }
