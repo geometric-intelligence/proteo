@@ -99,7 +99,7 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 100
+num_samples: 200
 grace_period: 30  # Each training is run at least this nb of epochs.
 reduction_factor: 8
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
@@ -120,7 +120,7 @@ l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 num_nodes_choices: [10, 30, 150, 1000, 7000]
 adj_thresh_choices: [0.05, 0.1, 0.5, 0.7, 0.9]
-mutation_choices: [['GRN'],['MAPT'], ['C9orf72']] #,['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
+mutation_choices: [['GRN']] #[['GRN'],['MAPT'], ['C9orf72']] #,['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: [['M'], ['F'], ['M', 'F']]
 modality_choices: ['plasma', 'csf']
 y_val_choices: ['nfl'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
