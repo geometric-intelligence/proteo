@@ -232,7 +232,8 @@ def reshape_targets(val_targets):
     reshaped_targets = [tensor.view(-1, 1) for tensor in val_targets]
     return reshaped_targets
 
-#TODO: Not currently being used
+
+# TODO: Not currently being used
 def reverse_log_transform(y, y_mean, y_std):
     log_data = (y * y_std) + y_mean
     original_data = torch.exp(log_data)

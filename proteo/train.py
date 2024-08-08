@@ -346,7 +346,6 @@ def compute_focal_loss_weight(config, test_dataset, train_dataset):
     return weights
 
 
-
 def construct_datasets(config):
     # Load the datasets, which are InMemoryDataset objects
     root = config.data_dir

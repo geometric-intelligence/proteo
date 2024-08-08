@@ -24,12 +24,12 @@ Seems OK to disregard.
 
 import os
 import random
+import time
 
 import numpy as np
 import pytorch_lightning as pl
 import ray
 import torch
-import time
 import train as proteo_train
 import wandb
 from config_utils import CONFIG_FILE, read_config_from_file

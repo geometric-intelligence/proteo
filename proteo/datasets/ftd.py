@@ -127,12 +127,8 @@ class FTDDataset(InMemoryDataset):
         self.mutation_str = f'mutation_{",".join(config.mutation)}'
         self.modality_str = f'{config.modality}'
         self.sex_str = f'sex_{",".join(config.sex)}'
-        self.hist_path_str = (
-            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_histogram.jpg'
-        )
-        self.orig_hist_path_str = (
-            f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_orig_histogram.jpg'
-        )
+        self.hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_histogram.jpg'
+        self.orig_hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_orig_histogram.jpg'
 
         super(FTDDataset, self).__init__(root)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -312,7 +308,6 @@ class FTDDataset(InMemoryDataset):
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
 
-
         if self.config.y_val in BINARY_Y_VALS_MAP:
             y_vals = self.load_binary_y_values(y_vals)
         if self.config.y_val in MULTICLASS_Y_VALS_MAP:
@@ -473,5 +468,3 @@ def reverse_log_transform(standardized_log_data, mean, std):
     log_data = standardized_log_data * std + mean
     original_data = torch.exp(log_data)
     return original_data
-
-

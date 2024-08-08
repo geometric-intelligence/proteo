@@ -8,14 +8,14 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import wandb
-from callbacks import get_accuracy
+from callbacks import get_accuracy, reverse_log_transform
 from pytorch_lightning.callbacks import Callback
 from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
-from callbacks import reverse_log_transform
 
 from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
+
 
 # TODO: not using below function
 class CustomRayCheckpointCallback(Callback):
@@ -90,6 +90,7 @@ class CustomRayCheckpointCallback(Callback):
 
 class CustomRayWandbCallback(Callback):
     """Callback that logs losses and plots to Wandb."""
+
     # FIXME: if loss is not the MSE (because loss has regularization, or loss=L1),
     # then sqrt(loss) is not the RMSE
     def on_after_backward(self, trainer, pl_module):
@@ -145,7 +146,10 @@ class CustomRayWandbCallback(Callback):
                 wandb.log(
                     {
                         "Regression Scatter Plot Train": wandb.plot.scatter(
-                            table, "pred", "target", title=f"Train Pred vs Train Target Scatter Plot"
+                            table,
+                            "pred",
+                            "target",
+                            title=f"Train Pred vs Train Target Scatter Plot",
                         ),
                         "epoch": pl_module.current_epoch,
                     }
@@ -230,7 +234,10 @@ class CustomRayWandbCallback(Callback):
                     wandb.log(
                         {
                             "Regression Scatter Plot Val": wandb.plot.scatter(
-                                table, "pred", "target", title=f"Val Pred vs Val Target Scatter Plot"
+                                table,
+                                "pred",
+                                "target",
+                                title=f"Val Pred vs Val Target Scatter Plot",
                             ),
                             "epoch": pl_module.current_epoch,
                         }
@@ -283,10 +290,11 @@ class CustomRayWandbCallback(Callback):
 
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
-    
+
 
 class CustomRayReportLossCallback(Callback):
     """Callback that reports val loss to Ray."""
+
     # TODO: train_loss logged in ray_output_csv is one epoch later than the val_loss
     def on_train_batch_end(self, trainer, pl_module, outputs, *args):
         loss = outputs["loss"]
