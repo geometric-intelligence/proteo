@@ -26,11 +26,11 @@ error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
-modality: "plasma"
+modality: "csf"
 # List of all the mutations you want included in the dataset
-mutation: ["GRN"]
+mutation: ["C9orf72"]
 # ['M'], ['F'],['M', 'F'] 
-sex: ['M', 'F'] 
+sex: ['F'] 
 
 # WandB
 project: "proteo"
@@ -40,7 +40,7 @@ wandb_offline: false
 log_every_n_steps: 10
 
 # Dataset
-num_nodes: 30  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+num_nodes: 10  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
 adj_thresh: 0.1  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10

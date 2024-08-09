@@ -351,7 +351,7 @@ class FTDDataset(InMemoryDataset):
             f"Number of patients with mutation status in {self.config.mutation}:",
             condition_mutation.sum(),
         )
-        print(f"Number of patients with sex in {self.config.sex}", condition_sex.sum())
+        print(f"Number of patients with sex in {self.config.sex}:", condition_sex.sum())
         print("Total number of patients with all conditions", sex_mutation_modality_filter.sum())
         filtered_data = csv_data[
             sex_mutation_modality_filter
