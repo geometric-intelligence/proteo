@@ -334,7 +334,7 @@ class FTDDataset(InMemoryDataset):
         mapped_values = [mapping_dict[value] for value in y_vals]
         return mapped_values
 
-    def load_csv_data(self, config):
+    def load_csv_data_pre_pt_files(self, config):
         '''Load the csv data features and labels'''
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
@@ -366,7 +366,10 @@ class FTDDataset(InMemoryDataset):
 
         features = np.array(top_proteins)
         labels = np.array(y_vals)
-
+        return features, labels, top_protein_columns #NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
+    
+    def load_csv_data(self, config):
+        features, labels, _ = self.load_csv_data_pre_pt_files(config)
         # ============================DONT TOUCH============================
         train_features, test_features, train_labels, test_labels = train_test_split(
             features, labels, test_size=0.20, random_state=42
