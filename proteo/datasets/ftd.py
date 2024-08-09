@@ -426,6 +426,8 @@ class FTDDataset(InMemoryDataset):
         modality_columns = error_proteins_df['Plasma'].dropna().tolist()
         csf_columns = error_proteins_df['CSF'].dropna().tolist()
         columns_to_remove = list(set(modality_columns + csf_columns))
+        if config.y_val == 'nfl':
+            columns_to_remove.append('NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA')
         # Remove the columns
         csv_data = csv_data.drop(columns=columns_to_remove)
         return csv_data
