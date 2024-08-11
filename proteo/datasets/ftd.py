@@ -366,10 +366,14 @@ class FTDDataset(InMemoryDataset):
 
         features = np.array(top_proteins)
         labels = np.array(y_vals)
-        return features, labels, top_proteins, top_protein_columns #NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
+
+        # Extract column labels for sex to understand explainer results 
+        filtered_sex_col = filtered_data[sex_col]
+
+        return features, labels, top_proteins, top_protein_columns, filtered_sex_col #NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
     
     def load_csv_data(self, config):
-        features, labels, top_proteins, _ = self.load_csv_data_pre_pt_files(config)
+        features, labels, top_proteins, _, _ = self.load_csv_data_pre_pt_files(config)
         # ============================DONT TOUCH============================
         train_features, test_features, train_labels, test_labels = train_test_split(
             features, labels, test_size=0.20, random_state=42
@@ -427,7 +431,7 @@ class FTDDataset(InMemoryDataset):
         csf_columns = error_proteins_df['CSF'].dropna().tolist()
         columns_to_remove = list(set(modality_columns + csf_columns))
         if config.y_val == 'nfl':
-            columns_to_remove.append('NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA')
+            columns_to_remove.extend(['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA'])
         # Remove the columns
         csv_data = csv_data.drop(columns=columns_to_remove)
         return csv_data
