@@ -34,13 +34,13 @@ sex: ['F', 'M']
 
 # WandB
 project: "proteo"
-wandb_offline: false
+wandb_offline: true
 # Controls the frequency of logging within training, 
 # by specifying how many training steps should occur between each logging event.
 log_every_n_steps: 10
 
 # Dataset
-num_nodes: 205  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+num_nodes: 201  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
 adj_thresh: 0.1  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
@@ -89,7 +89,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6] 
+device: [0] #[0, 1, 2, 3, 4, 5, 6] 
 trainer_accelerator: "gpu"
 seed: 42
 

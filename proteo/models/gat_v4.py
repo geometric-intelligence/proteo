@@ -212,19 +212,13 @@ class GATv4(nn.Module):
         return nn.Sequential(*layers)
 
     def build_sex_encoder(self):
-        return nn.Sequential(
-            nn.Linear(in_features=2, out_features = self.num_nodes), # Sex is binary, one hot encoded
-        )
+        return nn.Embedding(num_embeddings=2, embedding_dim=self.num_nodes) #2 sexes
 
     def build_mutation_encoder(self):
-        return nn.Sequential(
-            nn.Linear(in_features=4, out_features = self.num_nodes), # Mutation is one-hot encoded
-        )
+        return nn.Embedding(num_embeddings=4, embedding_dim=self.num_nodes) #4 mutations
     
     def build_age_encoder(self):
-        return nn.Sequential(
-            nn.Linear(in_features=1, out_features = self.num_nodes), # Age is a single value
-        )
+        return nn.Linear(1, self.num_nodes) #1 age
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -246,7 +240,10 @@ class GATv4(nn.Module):
             data = Batch().from_data_list([data])
 
         batch = data.batch
-        edge_index = data.edge_index
+        edge_index = data.edge_index 
+        sex = data.sex # [bs] - 0 or 1
+        mutation = data.mutation # [bs] - 0, 1, 2, 3
+        age = data.age  # [bs] - age
 
         # Initial operations before GAT layers
         x = x.requires_grad_()  # [bs*nodes, in_channels]
@@ -283,21 +280,17 @@ class GATv4(nn.Module):
         # Concatenate multiscale features - results in [bs, 3*nodes]
         multiscale_features = {'layer1': x0, 'layer2': x1, 'layer3': x2}
         multiscale_features = torch.cat(
-            [multiscale_features[layer] for layer in self.which_layer], dim=1
+            [multiscale_features[layer] for layer in self.which_layer[0:3]], dim=1 #just take first 3 gat layers
         )
 
         # Pass through fully connected layers and encode graph level data
         if len(self.which_layer) > 3: # If more than the 3 GA layers are used
             sex_features = self.sex_encoder(data.sex)
-            print("shape of sex features", sex_features.shape)
-            mutation_features = self.mutation_encoder(data.mutation)
-            print("shape of mutation features", mutation_features.shape)
-            age_features = self.age_encoder(data.age)
-            print("shape of age features", age_features.shape)
+            mutation_features = self.mutation_encoder(mutation)
+            age_features = self.age_encoder(age.view(-1,1)) #reshape to [bs, 1] for linear layer
             demographic_features = torch.cat(
                 [sex_features, mutation_features, age_features], dim=1
             )
-            print("shape of demographic features", demographic_features.shape)
             
 
             total_features = torch.cat([demographic_features, multiscale_features], dim=1)
