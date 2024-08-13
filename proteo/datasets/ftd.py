@@ -8,6 +8,7 @@ import PyWGCNA
 import torch
 from scipy.stats import chi2_contingency, kendalltau, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data, InMemoryDataset
 
 LABEL_DIM_MAP = {
@@ -58,6 +59,7 @@ Y_VAL_COL_MAP = {
 
 mutation_col = "Mutation"
 sex_col = "SEX_AT_BIRTH"
+age_col = "AGE_AT_VISIT"
 
 
 class FTDDataset(InMemoryDataset):
@@ -172,7 +174,7 @@ class FTDDataset(InMemoryDataset):
             f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_test.pt",
         ]
 
-    def create_graph_data(self, feature, label, adj_matrix):
+    def create_graph_data(self, feature, label, adj_matrix, sex, mutation, age,):
         """Create Data object for each graph.
 
         Compute attributes x, edge_index, and y for each graph.
@@ -184,7 +186,7 @@ class FTDDataset(InMemoryDataset):
         # Extract the pairs of connected nodes
         edge_index = torch.tensor(pairs_indices.tolist())
         edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
-        return Data(x=x, edge_index=edge_index, y=label)
+        return Data(x=x, edge_index=edge_index, y=label, sex=sex, mutation=mutation, age=age)
 
     def process(self):
         """Read data into huge `Data` list, i.e., a list of graphs"""
@@ -193,17 +195,23 @@ class FTDDataset(InMemoryDataset):
             train_labels,
             test_features,
             test_labels,
+            train_sex,
+            test_sex,
+            train_mutation,
+            test_mutation,
+            train_age,
+            test_age,
             adj_matrix,
         ) = self.load_csv_data(self.config)
 
         train_data_list = []
-        for feature, label in zip(train_features, train_labels):
-            data = self.create_graph_data(feature, label, adj_matrix)
+        for feature, label, sex, mutation, age in zip(train_features, train_labels, train_sex, train_mutation, train_age):
+            data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
             train_data_list.append(data)
 
         test_data_list = []
-        for feature, label in zip(test_features, test_labels):
-            data = self.create_graph_data(feature, label, adj_matrix)
+        for feature, label, sex, mutation, age in zip(test_features, test_labels, test_sex, test_mutation, test_age):
+            data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
             test_data_list.append(data)
         self.save(train_data_list, self.processed_paths[0])
         self.save(test_data_list, self.processed_paths[1])
@@ -367,24 +375,74 @@ class FTDDataset(InMemoryDataset):
         features = np.array(top_proteins)
         labels = np.array(y_vals)
 
-        # Extract column labels for sex to understand explainer results 
+        # Extract column labels for sex to understand explainer results
         filtered_sex_col = filtered_data[sex_col]
+        filtered_mutation_col = filtered_data[mutation_col]
+        filtered_age_col = filtered_data[age_col]
 
-        return features, labels, top_proteins, top_protein_columns, filtered_sex_col #NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
-    
+        return (
+            features,
+            labels,
+            top_proteins,
+            top_protein_columns,
+            filtered_sex_col,
+            filtered_mutation_col,
+            filtered_age_col,
+        )  # NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
+
     def load_csv_data(self, config):
-        features, labels, top_proteins, _, _ = self.load_csv_data_pre_pt_files(config)
+        (
+            features,
+            labels,
+            top_proteins,
+            top_protein_columns,
+            filtered_sex_col,
+            filtered_mutation_col,
+            filtered_age_col,
+        ) = self.load_csv_data_pre_pt_files(config)
+
+        # One hot encode sex and mutation
+        encoder = OneHotEncoder(sparse_output=False)
+        print("filtered age col", filtered_age_col)
+        print("filtered sex col type", type(filtered_sex_col.values.shape))
+        sex_labels = encoder.fit_transform(filtered_sex_col.values.reshape(-1, 1))
+        mutation_labels = encoder.fit_transform(filtered_mutation_col.values.reshape(-1, 1))
         # ============================DONT TOUCH============================
-        train_features, test_features, train_labels, test_labels = train_test_split(
-            features, labels, test_size=0.20, random_state=42
+        (
+            train_features,
+            test_features,
+            train_labels,
+            test_labels,
+            train_sex,
+            test_sex,
+            train_mutation,
+            test_mutation,
+            train_age,
+            test_age,
+        ) = train_test_split(
+            features,
+            labels,
+            sex_labels,
+            mutation_labels,
+            filtered_age_col,
+            test_size=0.20,
+            random_state=42,
         )
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
         train_labels = torch.FloatTensor(train_labels)
         test_labels = torch.FloatTensor(test_labels)
+        train_sex = torch.FloatTensor(train_sex)
+        test_sex = torch.FloatTensor(test_sex)
+        train_mutation = torch.FloatTensor(train_mutation)
+        test_mutation = torch.FloatTensor(test_mutation)
+        train_age = torch.FloatTensor(train_age.values)
+        test_age = torch.FloatTensor(test_age.values)
         print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
         print("--> Total features and labels:", features.shape, labels.shape)
+        print("Training sex, mutation and age labels shape:", train_sex.shape, train_mutation.shape, train_age.shape)
+        print("Testing sex, mutation and age labels shape:", test_sex.shape, test_mutation.shape, test_age.shape)
 
         adj_path = os.path.join(
             self.processed_dir,
@@ -419,6 +477,12 @@ class FTDDataset(InMemoryDataset):
             train_labels,
             test_features,
             test_labels,
+            train_sex,
+            test_sex,
+            train_mutation,
+            test_mutation,
+            train_age,
+            test_age,
             adj_matrix,
         )
 
@@ -431,7 +495,9 @@ class FTDDataset(InMemoryDataset):
         csf_columns = error_proteins_df['CSF'].dropna().tolist()
         columns_to_remove = list(set(modality_columns + csf_columns))
         if config.y_val == 'nfl':
-            columns_to_remove.extend(['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA'])
+            columns_to_remove.extend(
+                ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA']
+            )
         # Remove the columns
         csv_data = csv_data.drop(columns=columns_to_remove)
         return csv_data

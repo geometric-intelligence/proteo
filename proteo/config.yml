@@ -24,7 +24,7 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
-y_val: "carrier"
+y_val: "nfl"
 # Plasma or CSF
 modality: "csf"
 # List of all the mutations you want included in the dataset
@@ -40,7 +40,7 @@ wandb_offline: false
 log_every_n_steps: 10
 
 # Dataset
-num_nodes: 7000  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
+num_nodes: 205  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take
 adj_thresh: 0.1  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
@@ -57,7 +57,8 @@ gat-v4:
   hidden_channels: [8, 16]
   heads: [2, 3]
   use_layer_norm: true
-  which_layer: ['layer1', 'layer2', 'layer3']
+  # Note - if you want to encode sex, mutation and age at the graph level, they need to be included in which_layer
+  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation','age']
   fc_dim: [64, 128, 128, 32]
   fc_dropout: 0.1
   fc_act: relu
@@ -88,7 +89,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-device: [0, 1, 2, 3, 4, 5, 6, 7] 
+device: [0, 1, 2, 3, 4, 5, 6] 
 trainer_accelerator: "gpu"
 seed: 42
 
