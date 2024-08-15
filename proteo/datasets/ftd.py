@@ -402,13 +402,6 @@ class FTDDataset(InMemoryDataset):
         ) = self.load_csv_data_pre_pt_files(config)
 
         # One hot encode sex and mutation
-        '''encoder = OneHotEncoder(sparse_output=False)
-        print("filtered age col", filtered_age_col)
-        print("filtered sex col type", type(filtered_sex_col.values.shape))
-        sex_labels = encoder.fit_transform(filtered_sex_col.values.reshape(-1, 1))
-        print("shape of sex_labels,", sex_labels.shape)
-        mutation_labels = encoder.fit_transform(filtered_mutation_col.values.reshape(-1, 1))
-        print("shape of mutation_labels,", mutation_labels.shape)'''
         sex_labels = np.array(filtered_sex_col.astype('category').cat.codes)
         mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
         # ============================DONT TOUCH============================

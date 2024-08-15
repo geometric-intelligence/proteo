@@ -218,7 +218,7 @@ class GATv4(nn.Module):
         return nn.Embedding(num_embeddings=4, embedding_dim=self.num_nodes) #4 mutations
     
     def build_age_encoder(self):
-        return nn.Linear(1, self.num_nodes) #1 age
+        return nn.Linear(1, self.num_nodes) #1 age #TODO: Add nonlinearity?
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -284,7 +284,7 @@ class GATv4(nn.Module):
         )
 
         # Pass through fully connected layers and encode graph level data
-        if len(self.which_layer) > 3: # If more than the 3 GA layers are used
+        if all(feature in self.which_layer for feature in ['sex', 'mutation', 'age']):
             sex_features = self.sex_encoder(data.sex)
             mutation_features = self.mutation_encoder(mutation)
             age_features = self.age_encoder(age.view(-1,1)) #reshape to [bs, 1] for linear layer
