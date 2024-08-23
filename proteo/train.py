@@ -116,6 +116,8 @@ class Proteo(pl.LightningModule):
                 fc_act=self.config_model.fc_act,
                 num_nodes=self.config.num_nodes,
                 weight_initializer=self.config_model.weight_initializer,
+                use_master_nodes=self.config.use_master_nodes,
+                master_nodes=self.config.master_nodes,
             )
         elif config.model == 'gat':
             self.model = GAT(
@@ -482,7 +484,7 @@ def main():
         ),
         os.path.join(
             train_dataset.processed_dir,
-            f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg",
+            f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.jpg",
         ),
     ]
 

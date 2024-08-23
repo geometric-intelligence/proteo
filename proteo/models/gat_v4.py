@@ -141,6 +141,8 @@ class GATv4(nn.Module):
         fc_act,
         num_nodes,
         weight_initializer,
+        use_master_nodes,
+        master_nodes,
     ):
         super(GATv4, self).__init__()
         self.in_channels = in_channels
@@ -154,7 +156,11 @@ class GATv4(nn.Module):
         self.fc_dim = fc_dim
         self.fc_dropout = fc_dropout
         self.fc_act = fc_act
-        self.fc_input_dim = num_nodes * len(which_layer)
+        # Conditionally define fc_input_dim based on config.use_master_nodes
+        if use_master_nodes:
+            self.fc_input_dim = (num_nodes + len(master_nodes) * len(which_layer)
+        else:
+            self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]
         self.num_nodes = num_nodes
 
@@ -167,7 +173,10 @@ class GATv4(nn.Module):
         self.build_pooling_layers()
 
         # Layer normalization
-        self.layer_norm = LayerNorm(self.num_nodes)
+        if use_master_nodes:
+            self.layer_norm = LayerNorm(num_nodes + len(master_nodes))
+        else:
+            self.layer_norm = LayerNorm(self.num_nodes)
 
         # Fully connected layers
         self.encoder = self.build_fc_layers()

@@ -136,7 +136,7 @@ def train_func(train_loop_config):
             "adjacency": wandb.Image(
                 os.path.join(
                     train_dataset.processed_dir,
-                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg",
+                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.jpg",
                 )
             ),
             "top_proteins": wandb.Table(

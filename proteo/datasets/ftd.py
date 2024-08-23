@@ -138,7 +138,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_{split}.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -170,11 +170,19 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_test.pt",
         ]
 
-    def create_graph_data(self, feature, label, adj_matrix, sex, mutation, age,):
+    def create_graph_data(
+        self,
+        feature,
+        label,
+        adj_matrix,
+        sex,
+        mutation,
+        age,
+    ):
         """Create Data object for each graph.
 
         Compute attributes x, edge_index, and y for each graph.
@@ -205,12 +213,16 @@ class FTDDataset(InMemoryDataset):
         ) = self.load_csv_data(self.config)
 
         train_data_list = []
-        for feature, label, sex, mutation, age in zip(train_features, train_labels, train_sex, train_mutation, train_age):
+        for feature, label, sex, mutation, age in zip(
+            train_features, train_labels, train_sex, train_mutation, train_age
+        ):
             data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
             train_data_list.append(data)
 
         test_data_list = []
-        for feature, label, sex, mutation, age in zip(test_features, test_labels, test_sex, test_mutation, test_age):
+        for feature, label, sex, mutation, age in zip(
+            test_features, test_labels, test_sex, test_mutation, test_age
+        ):
             data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
             test_data_list.append(data)
         self.save(train_data_list, self.processed_paths[0])
@@ -372,13 +384,16 @@ class FTDDataset(InMemoryDataset):
         top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
         top_proteins = filtered_data[top_protein_columns]
 
-        features = np.array(top_proteins)
-        labels = np.array(y_vals)
-
         # Extract column labels for sex to understand explainer results
         filtered_sex_col = filtered_data[sex_col]
+        print("Dimensions of filtered sex col", filtered_sex_col.shape)
         filtered_mutation_col = filtered_data[mutation_col]
         filtered_age_col = filtered_data[age_col]
+
+        features = np.array(top_proteins)
+        print("Features shape before master nodes:", features.shape)
+
+        labels = np.array(y_vals)
 
         return (
             features,
@@ -401,9 +416,20 @@ class FTDDataset(InMemoryDataset):
             filtered_age_col,
         ) = self.load_csv_data_pre_pt_files(config)
 
-        # One hot encode sex and mutation
+        # Convert sex and mutation to categorical labels
         sex_labels = np.array(filtered_sex_col.astype('category').cat.codes)
         mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
+
+        if self.config.use_master_nodes:
+            sex_master_node = sex_labels.reshape(-1, 1)
+            mutation_master_node = mutation_labels.reshape(-1, 1)
+            age_master_node = filtered_age_col.values.reshape(-1, 1)
+            features = np.concatenate(
+                (features, sex_master_node, mutation_master_node, age_master_node), axis=1
+            )
+            print("using master nodes")
+            print("features shape after master nodes", features.shape)
+
         # ============================DONT TOUCH============================
         (
             train_features,
@@ -438,16 +464,26 @@ class FTDDataset(InMemoryDataset):
         print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
         print("--> Total features and labels:", features.shape, labels.shape)
-        print("Training sex, mutation and age labels shape:", train_sex.shape, train_mutation.shape, train_age.shape)
-        print("Testing sex, mutation and age labels shape:", test_sex.shape, test_mutation.shape, test_age.shape)
+        print(
+            "Training sex, mutation and age labels shape:",
+            train_sex.shape,
+            train_mutation.shape,
+            train_age.shape,
+        )
+        print(
+            "Testing sex, mutation and age labels shape:",
+            test_sex.shape,
+            test_mutation.shape,
+            test_age.shape,
+        )
 
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.csv',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
-            calculate_adjacency_matrix(top_proteins, save_to=adj_path)
+            calculate_adjacency_matrix(config, top_proteins, save_to=adj_path)
         print(f"Loading adjacency matrix from: {adj_path}...")
         adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
         # Threshold adjacency matrix
@@ -464,7 +500,7 @@ class FTDDataset(InMemoryDataset):
         plt.savefig(
             os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.jpg',
             )
         )
         plt.close()
@@ -500,7 +536,7 @@ class FTDDataset(InMemoryDataset):
         return csv_data
 
 
-def calculate_adjacency_matrix(plasma_protein, save_to):
+def calculate_adjacency_matrix(config, plasma_protein, save_to):
     """Calculate and save adjacency matrix."""
     plasma_protein_df = pd.DataFrame(plasma_protein)
     softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df)
@@ -508,6 +544,18 @@ def calculate_adjacency_matrix(plasma_protein, save_to):
     adjacency = PyWGCNA.WGCNA.adjacency(
         plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid"
     )
+    print("Adjacency matrix shape:", adjacency.shape)
+    print("Adjacency matrix:", adjacency)
+    if config.use_master_nodes:
+        padding_size = len(config.master_nodes)
+        adjacency = np.pad(
+            adjacency,
+            pad_width=((0, padding_size), (0, padding_size)),
+            mode='constant',
+            constant_values=1,
+        )
+        print("Adjacency matrix shape after padding:", adjacency.shape)
+        print("Adjacency matrix after padding:", adjacency)
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
     adjacency_df = pd.DataFrame(adjacency)
