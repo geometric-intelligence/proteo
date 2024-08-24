@@ -545,7 +545,6 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
         plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid"
     )
     print("Adjacency matrix shape:", adjacency.shape)
-    print("Adjacency matrix:", adjacency)
     if config.use_master_nodes:
         padding_size = len(config.master_nodes)
         adjacency = np.pad(
@@ -555,7 +554,7 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
             constant_values=1,
         )
         print("Adjacency matrix shape after padding:", adjacency.shape)
-        print("Adjacency matrix after padding:", adjacency)
+
     # Using adjacency matrix calculate the topological overlap matrix (TOM).
     # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
     adjacency_df = pd.DataFrame(adjacency)

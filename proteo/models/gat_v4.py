@@ -158,7 +158,7 @@ class GATv4(nn.Module):
         self.fc_act = fc_act
         # Conditionally define fc_input_dim based on config.use_master_nodes
         if use_master_nodes:
-            self.fc_input_dim = (num_nodes + len(master_nodes) * len(which_layer)
+            self.fc_input_dim = ((num_nodes + len(master_nodes)) * len(which_layer))
         else:
             self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]
@@ -174,7 +174,7 @@ class GATv4(nn.Module):
 
         # Layer normalization
         if use_master_nodes:
-            self.layer_norm = LayerNorm(num_nodes + len(master_nodes))
+            self.layer_norm = LayerNorm(self.num_nodes + len(master_nodes))
         else:
             self.layer_norm = LayerNorm(self.num_nodes)
 
