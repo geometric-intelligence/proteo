@@ -9,6 +9,35 @@ from scipy.stats import zscore
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+c9_mean_dict = {"['M']_csf":2.20139473218633, 
+                "['F']_plasma":2.5069125020915246,
+                "['F']_csf":2.3905483112831987,
+                "['M', 'F']_plasma":2.4382370774886417,
+                "['M', 'F']_csf":2.323617044833538}
+c9_std_dict = {"['M']_csf":0.9414006476156331,
+                "['F']_plasma":0.9801098341235991,
+                "['F']_csf":0.95108017948172,
+                "['M', 'F']_plasma":0.9639665529956777,
+                "['M', 'F']_csf":0.951972757962228}
+MAPT_mean_dict = {"['M']_csf":2.080694213697065, 
+                "['M']_plasma":2.1657279439973016,
+                "['F']_csf":2.0152637385189265,
+                "['M', 'F']_csf": 2.0454624193703754}
+MAPT_std_dict = {"['M']_csf":0.6213240141321779,
+                "['M']_plasma":0.6840496344783593,
+                "['F']_csf":0.7999340389937927,
+                "['M', 'F']_csf":0.7237378322971036}
+GRN_mean_dict = {"['M']_csf": 2.178815827183045,
+                "['F']_plasma":3.120974866855634,
+                "['F']_csf": 3.2586357196385385,
+                "['M', 'F']_csf":2.752470145050026}
+GRN_std_dict = {"['M']_csf":0.7776541040264751,
+                "['F']_plasma":1.2401561087499366,
+                "['F']_csf":1.1764975422138229,
+                "['M', 'F']_csf":1.1441881493582908}
+all_nodes_mean = 2.124088581365514
+all_nodes_std = 0.8733420033790319
 
 def load_checkpoint(relative_checkpoint_path):
     '''Load the checkpoint as a module. Note levels_up depends on the directory structure of the ray_results folder'''
@@ -147,7 +176,7 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
 
 
     # Calculate MSE for each subgroup in training data
-    train_mse_results = {}
+    train_rmse_results = {}
     for sex in sex_labels:
         for mutation in mutation_labels:
             for age_range in age_bins:
@@ -163,12 +192,13 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
                 # Compute MSE if there are any samples in the subgroup
                 if len(subgroup_preds) > 0:
                     mse = F.mse_loss(subgroup_targets, subgroup_preds)
-                    train_mse_results[subgroup_name] = mse
+                    rmse = torch.sqrt(mse)
+                    train_rmse_results[subgroup_name] = rmse, len(subgroup_preds)
                 else:
-                    train_mse_results[subgroup_name] = None
+                    train_rmse_results[subgroup_name] = "No samples in subgroup"
 
     # Calculate MSE for each subgroup in validation data
-    val_mse_results =  {}
+    val_rmse_results =  {}
     for sex in sex_labels:
         for mutation in mutation_labels:
             for age_range in age_bins:
@@ -184,11 +214,11 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
                 # Compute MSE if there are any samples in the subgroup
                 if len(subgroup_preds) > 0:
                     mse = F.mse_loss(subgroup_targets, subgroup_preds)
-                    val_mse_results[subgroup_name] = mse
+                    val_rmse_results[subgroup_name] = mse, len(subgroup_preds)
                 else:
-                    val_mse_results[subgroup_name] = None
+                    val_rmse_results[subgroup_name] = "No samples in subgroup"
 
-    return train_mse_results, val_mse_resultsgit a
+    return train_rmse_results, val_rmse_results
 
 
 
