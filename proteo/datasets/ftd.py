@@ -138,7 +138,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_{split}.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -170,8 +170,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_test.pt",
         ]
 
     def create_graph_data(
@@ -479,7 +479,7 @@ class FTDDataset(InMemoryDataset):
 
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.csv',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
@@ -500,7 +500,7 @@ class FTDDataset(InMemoryDataset):
         plt.savefig(
             os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg',
             )
         )
         plt.close()
