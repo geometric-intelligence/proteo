@@ -78,7 +78,6 @@ def load_checkpoint(relative_checkpoint_path):
 def load_config(module):
     '''Load the config from the module  and return it'''
     config = module.config
-    print(config)
     return config
 
 
@@ -97,7 +96,6 @@ def load_model_and_predict(module, config, device='cuda'):
             # Forward pass
             pred = module(batch)
             target = batch.y.view(pred.shape)
-
         # Store predictions and targets
         train_preds.append(pred.cpu())
         train_targets.append(target.cpu())
@@ -247,55 +245,61 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
 
     # Calculate MSE for each subgroup in training data
     train_rmse_results = {}
+    val_rmse_results = {}
     for sex in sex_labels:
         for mutation in mutation_labels:
             for age_range in age_bins:
-                subgroup_name = f"Train_{sex}_{mutation}_{age_range[0]}-{age_range[1]}"
+                subgroup_name = f"{sex}_{mutation}_{age_range[0]}-{age_range[1]}"
 
                 # Create mask for current subgroup
-                mask = (
+                train_mask = (
                     (train_sex_labels == sex)
                     & (train_mutation_labels == mutation)
                     & (train_age_labels >= age_range[0])
                     & (train_age_labels < age_range[1])
                 )
+                train_mask = torch.tensor(train_mask.values, dtype=torch.bool)
 
                 # Filter predictions and targets based on mask
-                subgroup_preds = train_preds[mask]
-                subgroup_targets = train_targets[mask]
+                train_subgroup_preds = train_preds[train_mask]
+                train_subgroup_targets = train_targets[train_mask]
 
                 # Compute MSE if there are any samples in the subgroup
-                if len(subgroup_preds) > 0:
-                    mse = F.mse_loss(subgroup_targets, subgroup_preds)
+                if len(train_subgroup_preds) > 0:
+                    mse = F.mse_loss(train_subgroup_targets, train_subgroup_preds)
                     rmse = torch.sqrt(mse)
-                    train_rmse_results[subgroup_name] = rmse, len(subgroup_preds)
+                    train_rmse_results[subgroup_name] = rmse, len(train_subgroup_preds)
                 else:
                     train_rmse_results[subgroup_name] = "No samples in subgroup"
 
-    # Calculate MSE for each subgroup in validation data
-    val_rmse_results = {}
-    for sex in sex_labels:
-        for mutation in mutation_labels:
-            for age_range in age_bins:
-                subgroup_name = f"Val_{sex}_{mutation}_{age_range[0]}-{age_range[1]}"
-
-                # Create mask for current subgroup
-                mask = (
+                val_mask = (
                     (test_sex_labels == sex)
                     & (test_mutation_labels == mutation)
                     & (test_age_labels >= age_range[0])
                     & (test_age_labels < age_range[1])
                 )
-
+                val_mask = torch.tensor(val_mask.values, dtype=torch.bool)
                 # Filter predictions and targets based on mask
-                subgroup_preds = val_preds[mask]
-                subgroup_targets = val_targets[mask]
+                val_subgroup_preds = val_preds[val_mask]
+                val_subgroup_targets = val_targets[val_mask]
 
                 # Compute MSE if there are any samples in the subgroup
-                if len(subgroup_preds) > 0:
-                    mse = F.mse_loss(subgroup_targets, subgroup_preds)
-                    val_rmse_results[subgroup_name] = mse, len(subgroup_preds)
+                if len(val_subgroup_preds) > 0:
+                    mse = F.mse_loss(val_subgroup_targets, val_subgroup_preds)
+                    val_rmse_results[subgroup_name] = mse, len(val_subgroup_preds)
                 else:
                     val_rmse_results[subgroup_name] = "No samples in subgroup"
 
     return train_rmse_results, val_rmse_results
+
+def main():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    #Best run passing in sex, mutation and age before encoder
+    train_rmse_results, val_rmse_results = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-13_15-49-20/model=gat-v4,seed=31061_269_act=sigmoid,adj_thresh=0.1000,batch_size=8,dropout=0.1000,l1_lambda=0.0008,lr=0.0000,lr_scheduler=Lamb_2024-08-13_16-58-56/checkpoint_000005', device, 2.124088581365514, 0.8733420033790319)
+    print("Train RMSE Results:")
+    print(train_rmse_results)
+    print("Val RMSE Results:")
+    print(val_rmse_results)
+
+if __name__ == "__main__":
+    main()
