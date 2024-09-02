@@ -158,7 +158,7 @@ class GATv4(nn.Module):
         self.fc_act = fc_act
         # Conditionally define fc_input_dim based on config.use_master_nodes
         if use_master_nodes:
-            self.fc_input_dim = ((num_nodes + len(master_nodes)) * len(which_layer))
+            self.fc_input_dim = (num_nodes + len(master_nodes)) * len(which_layer)
         else:
             self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]
@@ -221,13 +221,13 @@ class GATv4(nn.Module):
         return nn.Sequential(*layers)
 
     def build_sex_encoder(self):
-        return nn.Embedding(num_embeddings=2, embedding_dim=self.num_nodes) #2 sexes
+        return nn.Embedding(num_embeddings=2, embedding_dim=self.num_nodes)  # 2 sexes
 
     def build_mutation_encoder(self):
-        return nn.Embedding(num_embeddings=4, embedding_dim=self.num_nodes) #4 mutations
-    
+        return nn.Embedding(num_embeddings=4, embedding_dim=self.num_nodes)  # 4 mutations
+
     def build_age_encoder(self):
-        return nn.Linear(1, self.num_nodes) #1 age #TODO: Add nonlinearity?
+        return nn.Linear(1, self.num_nodes)  # 1 age #TODO: Add nonlinearity?
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -249,9 +249,9 @@ class GATv4(nn.Module):
             data = Batch().from_data_list([data])
 
         batch = data.batch
-        edge_index = data.edge_index 
-        sex = data.sex # [bs] - 0 or 1
-        mutation = data.mutation # [bs] - 0, 1, 2, 3
+        edge_index = data.edge_index
+        sex = data.sex  # [bs] - 0 or 1
+        mutation = data.mutation  # [bs] - 0, 1, 2, 3
         age = data.age  # [bs] - age
 
         # Initial operations before GAT layers
@@ -289,21 +289,19 @@ class GATv4(nn.Module):
         # Concatenate multiscale features - results in [bs, 3*nodes]
         multiscale_features = {'layer1': x0, 'layer2': x1, 'layer3': x2}
         multiscale_features = torch.cat(
-            [multiscale_features[layer] for layer in self.which_layer[0:3]], dim=1 #just take first 3 gat layers
+            [multiscale_features[layer] for layer in self.which_layer[0:3]],
+            dim=1,  # just take first 3 gat layers
         )
 
         # Pass through fully connected layers and encode graph level data
         if all(feature in self.which_layer for feature in ['sex', 'mutation', 'age']):
             sex_features = self.sex_encoder(data.sex)
             mutation_features = self.mutation_encoder(mutation)
-            age_features = self.age_encoder(age.view(-1,1)) #reshape to [bs, 1] for linear layer
-            demographic_features = torch.cat(
-                [sex_features, mutation_features, age_features], dim=1
-            )
-            
+            age_features = self.age_encoder(age.view(-1, 1))  # reshape to [bs, 1] for linear layer
+            demographic_features = torch.cat([sex_features, mutation_features, age_features], dim=1)
 
             total_features = torch.cat([demographic_features, multiscale_features], dim=1)
-                
+
             pred = self.encoder(total_features)
         else:
             pred = self.encoder(multiscale_features)
