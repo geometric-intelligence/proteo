@@ -136,6 +136,7 @@ def process_checkpoints(checkpoint_paths, mean_dict, std_dict, device):
         print(f"Loading checkpoint from: {checkpoint_path}")
         module = load_checkpoint(checkpoint_path)
         config = load_config(module)
+        print(config)
         #print("Config being used:", config)
         print(f"{i} best checkpoint for {config.sex} and {config.modality}")
         key = f"{config.sex}_{config.modality}"
