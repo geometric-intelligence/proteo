@@ -295,7 +295,7 @@ class GATv4(nn.Module):
 
         # Pass through fully connected layers and encode graph level data
         if all(feature in self.which_layer for feature in ['sex', 'mutation', 'age']):
-            sex_features = self.sex_encoder(data.sex)
+            sex_features = self.sex_encoder(sex)
             mutation_features = self.mutation_encoder(mutation)
             age_features = self.age_encoder(age.view(-1, 1))  # reshape to [bs, 1] for linear layer
             demographic_features = torch.cat([sex_features, mutation_features, age_features], dim=1)

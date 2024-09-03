@@ -161,7 +161,6 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
         val_z_scores,
     ]
 
-
 def process_checkpoints(checkpoint_paths, mean_dict, std_dict, device):
     results = []
     i = 1
@@ -180,7 +179,6 @@ def process_checkpoints(checkpoint_paths, mean_dict, std_dict, device):
         results.append(result)
         i += 1
     return results
-
 
 def get_sex_mutation_age_distribution(config):
     # Make an instance of the FTDDataset class to use the load_csv_data_pre_pt_files method
@@ -214,7 +212,6 @@ def get_sex_mutation_age_distribution(config):
         train_age_labels,
         test_age_labels,
     )
-
 
 def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, std):
     module = load_checkpoint(relative_checkpoint_path)
