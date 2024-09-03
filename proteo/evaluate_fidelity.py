@@ -11,7 +11,6 @@ from torch_geometric.explain.config import ExplanationType, ModelMode
 from torch_geometric.loader import DataLoader
 
 
-
 ############### METRICS ################
 def fidelity(explainer, explanation):
     """Evaluates the fidelity of an
@@ -106,8 +105,8 @@ def characterization_score(pos_fidelity, neg_fidelity, pos_weight=0.5, neg_weigh
     if (pos_weight + neg_weight) != 1.0:
         raise ValueError(f"The weights need to sum up to 1 " f"(got {pos_weight} and {neg_weight})")
 
-    numer = (neg_weight + pos_weight)
-    denom = (neg_weight/neg_fidelity) + (pos_weight / (1.0/pos_fidelity))
+    numer = neg_weight + pos_weight
+    denom = (neg_weight / neg_fidelity) + (pos_weight / (1.0 / pos_fidelity))
     return numer / denom
 
 
@@ -179,7 +178,11 @@ def run_explainer_fidelity_single_dataset(dataset, explainer):
         characterization_score_val = characterization_score(fidelity_plus, fidelity_minus)
         all_characterization_scores.append(characterization_score_val)
 
-    return np.array(all_fidelity_plus), np.array(all_fidelity_minus), np.array(all_characterization_scores)
+    return (
+        np.array(all_fidelity_plus),
+        np.array(all_fidelity_minus),
+        np.array(all_characterization_scores),
+    )
 
 
 def fidelity_per_subgroup_train_and_test(checkpoint_path):
@@ -260,7 +263,7 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
 
                 # Filter predictions and targets based on mask for train
                 train_subgroup_fid_plus = train_fidelity_plus[train_mask]
-                if age_range == (70,90):
+                if age_range == (70, 90):
                     print(train_subgroup_fid_plus)
                 train_subgroup_fid_minus = train_fidelity_minus[train_mask]
                 train_characterization_score = train_characterization_scores[train_mask]
@@ -308,7 +311,6 @@ def main():
     print(train_fidelity_results)
     print("Test fidelity results not personalized")
     print(test_fidelity_results)
-
 
 
 if __name__ == "__main__":

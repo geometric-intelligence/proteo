@@ -83,6 +83,7 @@ def load_config(module):
     config = module.config
     return config
 
+
 def construct_loaders_eval(config, train_dataset, test_dataset):
     # Make DataLoader objects to handle batching
     train_loader = DataLoader(  # makes into one big graph
@@ -100,6 +101,7 @@ def construct_loaders_eval(config, train_dataset, test_dataset):
         pin_memory=config.pin_memory,
     )
     return train_loader, test_loader
+
 
 def load_model_and_predict(module, config, device='cuda'):
     '''Run the module with the correct train and test datasets and return the predictions and targets'''
@@ -181,6 +183,7 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
         val_z_scores,
     ]
 
+
 def process_checkpoints(checkpoint_paths, mean_dict, std_dict, device):
     results = []
     i = 1
@@ -199,6 +202,7 @@ def process_checkpoints(checkpoint_paths, mean_dict, std_dict, device):
         results.append(result)
         i += 1
     return results
+
 
 def get_sex_mutation_age_distribution(config):
     # Make an instance of the FTDDataset class to use the load_csv_data_pre_pt_files method
@@ -232,6 +236,7 @@ def get_sex_mutation_age_distribution(config):
         train_age_labels,
         test_age_labels,
     )
+
 
 def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, std):
     module = load_checkpoint(relative_checkpoint_path)
@@ -311,39 +316,56 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
 
     return train_rmse_results, val_rmse_results
 
+
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    #Best run passing in sex, mutation and age before encoder
-    train_rmse_results_personalized, val_rmse_results_personalized = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-13_15-49-20/model=gat-v4,seed=31061_269_act=sigmoid,adj_thresh=0.1000,batch_size=8,dropout=0.1000,l1_lambda=0.0008,lr=0.0000,lr_scheduler=Lamb_2024-08-13_16-58-56/checkpoint_000005', device, 2.124088581365514, 0.8733420033790319)
+    # Best run passing in sex, mutation and age before encoder
+    (
+        train_rmse_results_personalized,
+        val_rmse_results_personalized,
+    ) = predict_for_subgroups_with_labels(
+        '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-13_15-49-20/model=gat-v4,seed=31061_269_act=sigmoid,adj_thresh=0.1000,batch_size=8,dropout=0.1000,l1_lambda=0.0008,lr=0.0000,lr_scheduler=Lamb_2024-08-13_16-58-56/checkpoint_000005',
+        device,
+        2.124088581365514,
+        0.8733420033790319,
+    )
     print("Train RMSE Results Personalized:")
     print(train_rmse_results_personalized)
     print("Val RMSE Results Personalized:")
     print(val_rmse_results_personalized)
-    train_rmse_results, val_rmse_results = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=4565_459_act=elu,adj_thresh=0.7000,batch_size=32,dropout=0,l1_lambda=0.0644,lr=0.0000,lr_scheduler=ReduceLROnPla_2024-08-15_12-16-06/checkpoint_000000', device, 2.124088581365514, 0.8733420033790319)
+    train_rmse_results, val_rmse_results = predict_for_subgroups_with_labels(
+        '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=4565_459_act=elu,adj_thresh=0.7000,batch_size=32,dropout=0,l1_lambda=0.0644,lr=0.0000,lr_scheduler=ReduceLROnPla_2024-08-15_12-16-06/checkpoint_000000',
+        device,
+        2.124088581365514,
+        0.8733420033790319,
+    )
     print("Train RMSE Results Not personalized:")
     print(train_rmse_results)
     print("Val RMSE Results Not personalized:")
     print(val_rmse_results)
     loss_difference_val = {
-    key: (
-        val_rmse_results[key][0].item() - val_rmse_results_personalized[key][0].item()
-        if not isinstance(val_rmse_results[key][0], str) and not isinstance(val_rmse_results_personalized[key][0], str)
-        else "NA"
-    )
-    for key in train_rmse_results
-}
+        key: (
+            val_rmse_results[key][0].item() - val_rmse_results_personalized[key][0].item()
+            if not isinstance(val_rmse_results[key][0], str)
+            and not isinstance(val_rmse_results_personalized[key][0], str)
+            else "NA"
+        )
+        for key in train_rmse_results
+    }
     print("Loss Difference Val:")
     print(loss_difference_val)
     loss_difference_train = {
-    key: (
-        train_rmse_results[key][0].item() - train_rmse_results_personalized[key][0].item()
-        if not isinstance(train_rmse_results[key][0], str) and not isinstance(train_rmse_results_personalized[key][0], str)
-        else "NA"
-    )
-    for key in train_rmse_results
-}
+        key: (
+            train_rmse_results[key][0].item() - train_rmse_results_personalized[key][0].item()
+            if not isinstance(train_rmse_results[key][0], str)
+            and not isinstance(train_rmse_results_personalized[key][0], str)
+            else "NA"
+        )
+        for key in train_rmse_results
+    }
     print("Loss Difference Train:")
     print(loss_difference_train)
+
 
 if __name__ == "__main__":
     main()
