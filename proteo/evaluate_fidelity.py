@@ -106,8 +106,9 @@ def characterization_score(pos_fidelity, neg_fidelity, pos_weight=0.5, neg_weigh
     if (pos_weight + neg_weight) != 1.0:
         raise ValueError(f"The weights need to sum up to 1 " f"(got {pos_weight} and {neg_weight})")
 
-    denom = (pos_weight / pos_fidelity) + (neg_weight / (1.0 - neg_fidelity))
-    return 1.0 / denom
+    numer = (neg_weight + pos_weight)
+    denom = (neg_weight/neg_fidelity) + (pos_weight / (1.0/pos_fidelity))
+    return numer / denom
 
 
 ############### FUNCTIONS ################
@@ -259,6 +260,8 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
 
                 # Filter predictions and targets based on mask for train
                 train_subgroup_fid_plus = train_fidelity_plus[train_mask]
+                if age_range == (70,90):
+                    print(train_subgroup_fid_plus)
                 train_subgroup_fid_minus = train_fidelity_minus[train_mask]
                 train_characterization_score = train_characterization_scores[train_mask]
 
@@ -292,10 +295,20 @@ def main():
     train_fidelity_results, test_fidelity_results = fidelity_per_subgroup_train_and_test(
         checkpoint_path
     )
-    print("Train fidelity results")
+    print("Train personalized fidelity results personalized")
     print(train_fidelity_results)
-    print("Test fidelity results")
+    print("Test personalized fidelity results personalized")
     print(test_fidelity_results)
+
+    checkpoint_path = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=4565_459_act=elu,adj_thresh=0.7000,batch_size=32,dropout=0,l1_lambda=0.0644,lr=0.0000,lr_scheduler=ReduceLROnPla_2024-08-15_12-16-06/checkpoint_000000'
+    train_fidelity_results, test_fidelity_results = fidelity_per_subgroup_train_and_test(
+        checkpoint_path
+    )
+    print("Train fidelity results not personalized")
+    print(train_fidelity_results)
+    print("Test fidelity results not personalized")
+    print(test_fidelity_results)
+
 
 
 if __name__ == "__main__":
