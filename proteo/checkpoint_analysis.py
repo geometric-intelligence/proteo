@@ -155,6 +155,8 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
     train_preds, train_targets, train_mse, val_preds, val_targets, val_mse = load_model_and_predict(
         module, config, device
     )
+    print("Train Preds:")
+    print(train_preds)
     train_preds = reverse_log_transform(train_preds, mean, std)
     train_targets = reverse_log_transform(train_targets, mean, std)
     train_mse = F.mse_loss(train_preds, train_targets)
@@ -168,6 +170,8 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
         val_preds.view(-1).detach().cpu().numpy() - val_targets.view(-1).detach().cpu().numpy(),
         ddof=1,
     )
+    print("Original Units Train MSE:", train_mse)
+    print("Original Units Train RMSE:", train_rmse)
     print("Original Units Val MSE:", val_mse)
     print("Original Units Val RMSE:", val_rmse)
     print("Val Z scores:", val_z_scores)
@@ -246,73 +250,69 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
         module, config, device
     )
 
-    # Convert the predictions back to the original units
+    '''# Convert the predictions back to the original units - not for now
     train_preds = reverse_log_transform(train_preds, mean, std)
     train_targets = reverse_log_transform(train_targets, mean, std)
     val_preds = reverse_log_transform(val_preds, mean, std)
-    val_targets = reverse_log_transform(val_targets, mean, std)
+    val_targets = reverse_log_transform(val_targets, mean, std)'''
+    
     # Get the group labels for the training and validation sets
     (
         train_sex_labels,
         test_sex_labels,
         train_mutation_labels,
         test_mutation_labels,
-        train_age_labels,
-        test_age_labels,
+        _,  # Removing age labels
+        _,
     ) = get_sex_mutation_age_distribution(config)
 
     # Define subgroups
     sex_labels = ['M', 'F']
     mutation_labels = ["C9orf72", "MAPT", "GRN", "CTL"]
-    age_bins = [(10, 30), (30, 50), (50, 70), (70, 90)]
 
-    # Calculate MSE for each subgroup in training data
+    # Calculate RMSE for each subgroup in training data
     train_rmse_results = {}
     val_rmse_results = {}
     for sex in sex_labels:
         for mutation in mutation_labels:
-            for age_range in age_bins:
-                subgroup_name = f"{sex}_{mutation}_{age_range[0]}-{age_range[1]}"
+            subgroup_name = f"{sex}_{mutation}"
 
-                # Create mask for current subgroup
-                train_mask = (
-                    (train_sex_labels == sex)
-                    & (train_mutation_labels == mutation)
-                    & (train_age_labels >= age_range[0])
-                    & (train_age_labels < age_range[1])
-                )
-                train_mask = torch.tensor(train_mask.values, dtype=torch.bool)
+            # Create mask for current subgroup
+            train_mask = (
+                (train_sex_labels == sex) & 
+                (train_mutation_labels == mutation)
+            )
+            train_mask = torch.tensor(train_mask.values, dtype=torch.bool)
 
-                # Filter predictions and targets based on mask
-                train_subgroup_preds = train_preds[train_mask]
-                train_subgroup_targets = train_targets[train_mask]
+            # Filter predictions and targets based on mask
+            train_subgroup_preds = train_preds[train_mask]
+            train_subgroup_targets = train_targets[train_mask]
 
-                # Compute MSE if there are any samples in the subgroup
-                if len(train_subgroup_preds) > 0:
-                    mse = F.mse_loss(train_subgroup_preds, train_subgroup_targets)
-                    rmse = torch.sqrt(mse)
-                    train_rmse_results[subgroup_name] = rmse, len(train_subgroup_preds)
-                else:
-                    train_rmse_results[subgroup_name] = "No samples in subgroup"
+            # Compute RMSE if there are any samples in the subgroup
+            if len(train_subgroup_preds) > 0:
+                mse = F.mse_loss(train_subgroup_preds, train_subgroup_targets)
+                rmse = torch.sqrt(mse)
+                train_rmse_results[subgroup_name] = rmse, len(train_subgroup_preds)
+            else:
+                train_rmse_results[subgroup_name] = "No samples in subgroup"
 
-                val_mask = (
-                    (test_sex_labels == sex)
-                    & (test_mutation_labels == mutation)
-                    & (test_age_labels >= age_range[0])
-                    & (test_age_labels < age_range[1])
-                )
-                val_mask = torch.tensor(val_mask.values, dtype=torch.bool)
-                # Filter predictions and targets based on mask
-                val_subgroup_preds = val_preds[val_mask]
-                val_subgroup_targets = val_targets[val_mask]
+            val_mask = (
+                (test_sex_labels == sex) & 
+                (test_mutation_labels == mutation)
+            )
+            val_mask = torch.tensor(val_mask.values, dtype=torch.bool)
 
-                # Compute MSE if there are any samples in the subgroup
-                if len(val_subgroup_preds) > 0:
-                    mse = F.mse_loss(val_subgroup_preds, val_subgroup_targets)
-                    rmse = torch.sqrt(mse)
-                    val_rmse_results[subgroup_name] = rmse, len(val_subgroup_preds)
-                else:
-                    val_rmse_results[subgroup_name] = "No samples in subgroup"
+            # Filter predictions and targets based on mask
+            val_subgroup_preds = val_preds[val_mask]
+            val_subgroup_targets = val_targets[val_mask]
+
+            # Compute RMSE if there are any samples in the subgroup
+            if len(val_subgroup_preds) > 0:
+                mse = F.mse_loss(val_subgroup_preds, val_subgroup_targets)
+                rmse = torch.sqrt(mse)
+                val_rmse_results[subgroup_name] = rmse, len(val_subgroup_preds)
+            else:
+                val_rmse_results[subgroup_name] = "No samples in subgroup"
 
     return train_rmse_results, val_rmse_results
 
@@ -320,9 +320,11 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # Best run passing in sex, mutation and age before encoder
+    train_rmse_results_personalized_m, val_rmse_results_personalized_m = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006', device, 10,10)
+    
     (
-        train_rmse_results_personalized,
-        val_rmse_results_personalized,
+        train_rmse_results_personalized_f,
+        val_rmse_results_personalized_f,
     ) = predict_for_subgroups_with_labels(
         '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-13_15-49-20/model=gat-v4,seed=31061_269_act=sigmoid,adj_thresh=0.1000,batch_size=8,dropout=0.1000,l1_lambda=0.0008,lr=0.0000,lr_scheduler=Lamb_2024-08-13_16-58-56/checkpoint_000005',
         device,
@@ -330,9 +332,17 @@ def main():
         0.8733420033790319,
     )
     print("Train RMSE Results Personalized:")
-    print(train_rmse_results_personalized)
-    print("Val RMSE Results Personalized:")
-    print(val_rmse_results_personalized)
+    print(train_rmse_results_personalized_f)
+    #print("Val RMSE Results Personalized:")
+    #print(val_rmse_results_personalized_f)
+
+    train_rmse_results_personalized_m, val_rmse_results_personalized_m = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006', device, 2.124088581365514, 0.8733420033790319,)
+    print("Train RMSE Results Personalized_m:")
+    print(train_rmse_results_personalized_m)
+
+
+
+
     train_rmse_results, val_rmse_results = predict_for_subgroups_with_labels(
         '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=4565_459_act=elu,adj_thresh=0.7000,batch_size=32,dropout=0,l1_lambda=0.0644,lr=0.0000,lr_scheduler=ReduceLROnPla_2024-08-15_12-16-06/checkpoint_000000',
         device,
@@ -341,30 +351,43 @@ def main():
     )
     print("Train RMSE Results Not personalized:")
     print(train_rmse_results)
-    print("Val RMSE Results Not personalized:")
-    print(val_rmse_results)
-    loss_difference_val = {
+    #print("Val RMSE Results Not personalized:")
+    #print(val_rmse_results)
+    loss_difference_val_f = {
         key: (
-            val_rmse_results[key][0].item() - val_rmse_results_personalized[key][0].item()
+            val_rmse_results[key][0].item() - val_rmse_results_personalized_f[key][0].item()
             if not isinstance(val_rmse_results[key][0], str)
-            and not isinstance(val_rmse_results_personalized[key][0], str)
+            and not isinstance(val_rmse_results_personalized_f[key][0], str)
             else "NA"
         )
         for key in train_rmse_results
     }
-    print("Loss Difference Val:")
-    print(loss_difference_val)
-    loss_difference_train = {
+    #print("Loss Difference Val:")
+    #print(loss_difference_val_f)
+    loss_difference_train_f = {
         key: (
-            train_rmse_results[key][0].item() - train_rmse_results_personalized[key][0].item()
+            train_rmse_results[key][0].item() - train_rmse_results_personalized_f[key][0].item()
             if not isinstance(train_rmse_results[key][0], str)
-            and not isinstance(train_rmse_results_personalized[key][0], str)
+            and not isinstance(train_rmse_results_personalized_f[key][0], str)
             else "NA"
         )
         for key in train_rmse_results
     }
-    print("Loss Difference Train:")
-    print(loss_difference_train)
+    print("Loss Difference Train for fully connected:")
+    print(loss_difference_train_f)
+
+    loss_difference_train_m = {
+        key: (
+            train_rmse_results[key][0].item() - train_rmse_results_personalized_m[key][0].item()
+            if not isinstance(train_rmse_results[key][0], str)
+            and not isinstance(train_rmse_results_personalized_m[key][0], str)
+            else "NA"
+        )
+        for key in train_rmse_results
+    }
+    print("Loss Difference Train for master nodes:")
+    print(loss_difference_train_m)
+
 
 
 if __name__ == "__main__":
