@@ -542,7 +542,7 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df)
     print("Soft threshold:", softThreshold[0])
     adjacency = PyWGCNA.WGCNA.adjacency(
-        plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid"
+        plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid", corOptions="bicor"
     )
     print("Adjacency matrix shape:", adjacency.shape)
     if config.use_master_nodes:

@@ -78,7 +78,7 @@ def fidelity(explainer, explanation):
         # You want pos_fidelity to be as high as possible, big difference between complement_y_hat and y when you remove the subgraph
         pos_fidelity = torch.nn.functional.mse_loss(complement_y_hat, y)
         # You want neg_fidelity to be as low as possible
-        neg_fidelity = torch.nn.functional.mse_loss(explain_y_hat, y)
+        neg_fidelity = 1/torch.nn.functional.mse_loss(explain_y_hat, y)
 
     return float(pos_fidelity), float(neg_fidelity), y
 
@@ -119,6 +119,7 @@ def load_config(module):
     if not hasattr(config, 'use_master_nodes'):
         # Add the attribute with a default value (e.g., False)
         setattr(config, 'use_master_nodes', False)
+    setattr(config, 'data_dir', '/scratch/lcornelis/data/data_louisa')
     return config
 
 
@@ -215,8 +216,8 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path, train_mse, val_mse):
         node_mask_type='attributes',  # 'object', # Generate masks that indicate the importance of individual node features
         edge_mask_type=None,
         threshold_config=dict(  # Keep only the top 300 most important proteins and set the rest to 0
-            threshold_type='hard',  # Hard threshold is applied to each mask. The elements of the mask with a value below the value are set to 0, the others are set to 1
-            value=0.01,
+            threshold_type='topk_hard',  # Hard threshold is applied to each mask. The elements of the mask with a value below the value are set to 0, the others are set to 1
+            value=3000,
         ),
     )
 
@@ -265,8 +266,6 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path, train_mse, val_mse):
             train_subgroup_fid_minus = train_fidelity_minus[train_mask]
             train_subgroup_y = train_y[train_mask]
             train_subgroup_y_preds = train_y_preds[train_mask]
-            print("shape of train_subgroup_y_preds", train_subgroup_y_preds.shape)
-            print("shape of train_subgroup_y", train_subgroup_y.shape)
             train_subgroup_mse = np.mean((train_subgroup_y - train_subgroup_y_preds) ** 2)
             train_characterization_score = train_characterization_scores[train_mask]
 
@@ -281,36 +280,18 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path, train_mse, val_mse):
             # Compute avg if there are any samples in the subgroup
             if len(train_subgroup_fid_plus) > 0:
                 train_fidelity_results[subgroup_name] = (
-                    np.mean(train_subgroup_fid_plus) / train_mse,
-                    np.mean(train_subgroup_fid_minus) / train_mse,
-                    np.mean(train_characterization_score),
-                    np.mean(train_subgroup_fid_plus - train_subgroup_fid_minus),
-                    np.mean(train_subgroup_fid_plus) / train_subgroup_mse,
-                    np.mean(train_subgroup_fid_minus) / train_subgroup_mse,
-                    train_subgroup_fid_plus / train_mse,
-                    train_subgroup_fid_minus / train_mse,
-                    train_characterization_score,
-                    train_subgroup_fid_plus - train_subgroup_fid_minus,
-                    train_subgroup_fid_plus / train_subgroup_mse,
-                    train_subgroup_fid_minus / train_subgroup_mse,
+                    np.mean(train_subgroup_fid_plus), #take the mean over people in the subgroup
+                    np.mean(train_subgroup_fid_minus),
+                    train_subgroup_mse
                 )
             else:
                 train_fidelity_results[subgroup_name] = "No samples in subgroup"
 
             if len(test_subgroup_fid_plus) > 0:
                 test_fidelity_results[subgroup_name] = (
-                    np.mean(test_subgroup_fid_plus) / val_mse,
-                    np.mean(test_subgroup_fid_minus) / val_mse,
-                    np.mean(test_characterization_score),
-                    np.mean(test_subgroup_fid_plus - test_subgroup_fid_minus),
-                    np.mean(test_subgroup_fid_plus) / test_subgroup_mse,
-                    np.mean(test_subgroup_fid_minus) / test_subgroup_mse,
-                    test_subgroup_fid_plus / val_mse,
-                    test_subgroup_fid_minus / val_mse,
-                    test_characterization_score,
-                    test_subgroup_fid_plus - test_subgroup_fid_minus,
-                    test_subgroup_fid_plus / test_subgroup_mse,
-                    test_subgroup_fid_minus / test_subgroup_mse,
+                    np.mean(test_subgroup_fid_plus),
+                    np.mean(test_subgroup_fid_minus),
+                    test_subgroup_mse
                 )
             else:
                 test_fidelity_results[subgroup_name] = "No samples in subgroup"
@@ -364,7 +345,7 @@ def plot_two_dicts(dict1, dict2):
     plt.show()
     
 def main():
-    checkpoint_path = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-13_15-49-20/model=gat-v4,seed=31061_269_act=sigmoid,adj_thresh=0.1000,batch_size=8,dropout=0.1000,l1_lambda=0.0008,lr=0.0000,lr_scheduler=Lamb_2024-08-13_16-58-56/checkpoint_000005'
+    checkpoint_path = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006'
     train_fidelity_results_personalized, test_fidelity_results_personalized = fidelity_per_subgroup_train_and_test(
         checkpoint_path,  0.617820680141449, 0.29270920157432556
     )
@@ -374,7 +355,7 @@ def main():
     print(test_fidelity_results_personalized)
 
     
-    checkpoint_path = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=4565_459_act=elu,adj_thresh=0.7000,batch_size=32,dropout=0,l1_lambda=0.0644,lr=0.0000,lr_scheduler=ReduceLROnPla_2024-08-15_12-16-06/checkpoint_000000'
+    checkpoint_path = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=35068_564_act=sigmoid,adj_thresh=0.7000,batch_size=8,dropout=0.2000,l1_lambda=0.0006,lr=0.0000,lr_scheduler=Lamb_2024-08-15_13-19-27/checkpoint_000065'
     train_fidelity_results, test_fidelity_results = fidelity_per_subgroup_train_and_test(
         checkpoint_path, 1.0415549278259277, 0.8367679119110107
     )
@@ -383,8 +364,14 @@ def main():
     print("Test fidelity results not personalized")
     print(test_fidelity_results)
 
-    plot_two_dicts(train_fidelity_results, train_fidelity_results_personalized)
-    plot_two_dicts(test_fidelity_results, test_fidelity_results_personalized)
+    result = {}
+    for key in test_fidelity_results_personalized:
+        if key in test_fidelity_results:
+            # Subtract both elements in the tuple
+            result[key] = (test_fidelity_results[key][0] - test_fidelity_results_personalized[key][0], test_fidelity_results[key][1] - test_fidelity_results_personalized[key][1], test_fidelity_results[key][2] - test_fidelity_results_personalized[key][2])
+    print("Difference between personalized and not personalized test set")
+    print(result)
+
     
 if __name__ == "__main__":
     main()
