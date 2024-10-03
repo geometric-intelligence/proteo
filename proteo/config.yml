@@ -21,7 +21,7 @@ wandb_api_key_path: "wandb_api_key.txt"
 
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
-raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124.csv"
+raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
@@ -41,7 +41,7 @@ log_every_n_steps: 10
 
 # Dataset
 num_nodes: 7247  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
-use_master_nodes: true # USE THESE FOR MASTER NODES
+use_master_nodes: false # USE THESE FOR MASTER NODES
 master_nodes: ['sex', 'mutation', 'age'] #Note: You need to manually change this and the code if the master nodes change
 adj_thresh: 0.13  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
@@ -125,7 +125,7 @@ num_nodes_choices: [7247] #[10, 30, 150, 1000, 7000]
 adj_thresh_choices: [0.05, 0.07, 0.1, 0.2, 0.5, 0.7, 0.9]
 mutation_choices: [['GRN', 'MAPT','C9orf72','CTL']] #,['MAPT'], ['C9orf72']],['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: [['M', 'F']]
-modality_choices: ['plasma', 'csf']
+modality_choices: ['csf']
 y_val_choices: ['nfl'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 
 # GAT-v4

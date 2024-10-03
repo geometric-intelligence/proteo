@@ -46,6 +46,7 @@ captum = "^0.7.0"
 ray = {extras = ["tune"], version = "^2.24.0"}
 focal-loss-torch = "^0.1.2"
 ucimlrepo = "^0.0.7"
+config_utils = "^0.3"
 
 
 [[tool.poetry.source]]

@@ -27,7 +27,7 @@ rmtmp:
 
 .PHONY: rmprocessed
 rmprocessed:
-	rm -rf /home/data/data_louisa/processed/* && sudo chmod -R 777 /home/data/data_louisa/processed
+	rm -rf /scratch/lcornelis/data/data_louisa/processed/* && sudo chmod -R 777 /scratch/lcornelis/data/data_louisa/processed
 
 
 .PHONY: conda-osx-64.lock
