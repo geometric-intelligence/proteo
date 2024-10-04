@@ -453,8 +453,8 @@ def main():
 
     output_dir = config.output_dir
     os.makedirs(output_dir, exist_ok=True)
-
-    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.device))
+    
+    #os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.devices))
 
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
@@ -546,7 +546,7 @@ def main():
         callbacks=trainer_callbacks,
         logger=logger,
         accelerator=config.trainer_accelerator,
-        devices=len(config.device),
+        devices=config.devices,
         num_nodes=config.nodes_count,
         strategy=pl_strategies.DDPStrategy(find_unused_parameters=False),
         sync_batchnorm=config.sync_batchnorm,
@@ -565,7 +565,7 @@ def main():
             + f"-{ckpt_callback.filename}"
         )
         # Print these only for rank 0 GPU, to avoid cluttering the console
-        print(f"Using device(s) {config.device}")
+        print(f"Using device(s) {config.devices}")
         print_datasets(train_dataset, test_dataset)
         print_loaders(train_loader, test_loader)
         print(f"Outputs will be saved into:\n {logger.save_dir}")

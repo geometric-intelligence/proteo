@@ -159,8 +159,8 @@ def train_func(train_loop_config):
 
     # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
-        devices='auto',
-        accelerator='auto',
+        devices= config.devices,
+        accelerator= config.trainer_accelerator,
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
             proteo_callbacks_ray.CustomRayWandbCallback(),
@@ -209,10 +209,14 @@ def main():
     ray.init(_temp_dir=config.ray_tmp_dir)
 
     # Wrap Lightning's Trainer with Ray's TorchTrainer for Tuner
+    if config.use_gpu:
+        resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker}
+    else:
+        resources_per_worker={'CPU': config.cpu_per_worker}
     scaling_config = ScalingConfig(
         num_workers=1,
-        use_gpu=True,
-        resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker},
+        use_gpu=config.use_gpu,
+        resources_per_worker=resources_per_worker,
     )
 
     run_config = RunConfig(
