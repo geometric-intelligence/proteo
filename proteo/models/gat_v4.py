@@ -183,6 +183,12 @@ class GATv4(nn.Module):
         self.sex_encoder = self.build_sex_encoder()
         self.mutation_encoder = self.build_mutation_encoder()
         self.age_encoder = self.build_age_encoder()
+        self.feature_encoders = {
+            'sex': self.sex_encoder,
+            'mutation': self.mutation_encoder,
+            'age': lambda x: self.age_encoder(x.view(-1, 1))  # Use a lambda function to reshape age appropriately
+        }
+
 
         # Initialize weights
         self.reset_parameters()
@@ -250,9 +256,7 @@ class GATv4(nn.Module):
 
         batch = data.batch
         edge_index = data.edge_index
-        sex = data.sex  # [bs] - 0 or 1
-        mutation = data.mutation  # [bs] - 0, 1, 2, 3
-        age = data.age  # [bs] - age
+        encoded_features = []
 
         # Initial operations before GAT layers
         x = x.requires_grad_()  # [bs*nodes, in_channels]
@@ -293,18 +297,22 @@ class GATv4(nn.Module):
             dim=1,  # just take first 3 gat layers
         )
 
-        # Pass through fully connected layers and encode graph level data
-        if all(feature in self.which_layer for feature in ['sex', 'mutation', 'age']):
-            sex_features = self.sex_encoder(sex)
-            mutation_features = self.mutation_encoder(mutation)
-            age_features = self.age_encoder(age.view(-1, 1))  # reshape to [bs, 1] for linear layer
-            demographic_features = torch.cat([sex_features, mutation_features, age_features], dim=1)
-
+        for feature, encoder in self.feature_encoders.items():
+            if feature in self.which_layer:
+                feature_value = locals().get(feature)  # Get the value of the feature (e.g., sex, mutation, age)
+                encoded_features.append(encoder(feature_value))
+        
+        if encoded_features:
+            demographic_features = torch.cat(encoded_features, dim=1)
+            # Concatenate demographic features with multiscale features
             total_features = torch.cat([demographic_features, multiscale_features], dim=1)
-
-            pred = self.encoder(total_features)
         else:
-            pred = self.encoder(multiscale_features)
+            # No demographic features present, just use the multiscale features
+            total_features = multiscale_features
+
+        # Pass through the final encoder
+        pred = self.encoder(total_features)
+
         '''
         pred_nfl = self.encoder_nfl(pred)
         pred_cdr_multiclass = self.encoder_cdr_multiclass(pred)

@@ -26,11 +26,11 @@ error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
-modality: "plasma"
+modality: "csf"
 # List of all the mutations you want included in the dataset
 mutation: ["C9orf72", "MAPT", "GRN", "CTL"]  
 # ['M'], ['F'],['M', 'F'] 
-sex: ['F', 'M'] 
+sex: ['F']
 
 # WandB
 project: "proteo"
@@ -40,10 +40,10 @@ wandb_offline: false
 log_every_n_steps: 10
 
 # Dataset
-num_nodes: 7247  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
+num_nodes: 7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
 use_master_nodes: false # USE THESE FOR MASTER NODES
-master_nodes: ['sex', 'mutation', 'age'] #Note: You need to manually change this and the code if the master nodes change
-adj_thresh: 0.13  #0.08 
+master_nodes: ['sex', 'mutation', 'age'] #Note: You need to manually change this and the code if the master nodes change, needs all 3 to work
+adj_thresh: 0.14  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
