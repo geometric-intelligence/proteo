@@ -256,6 +256,9 @@ class GATv4(nn.Module):
 
         batch = data.batch
         edge_index = data.edge_index
+        sex = data.sex  # [bs] - 0 or 1
+        mutation = data.mutation  # [bs] - 0, 1, 2, 3
+        age = data.age  # [bs] - age
         encoded_features = []
 
         # Initial operations before GAT layers

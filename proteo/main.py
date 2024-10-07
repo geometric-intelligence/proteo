@@ -210,15 +210,15 @@ def main():
 
     # Wrap Lightning's Trainer with Ray's TorchTrainer for Tuner
     if config.use_gpu:
-        resources_per_worker={'CPU': config.cpu_per_worker, 'GPU': config.gpu_per_worker}
+        resources_per_worker={'GPU': config.gpu_per_worker}
     else:
         resources_per_worker={'CPU': config.cpu_per_worker}
     scaling_config = ScalingConfig(
         num_workers=1,
         use_gpu=config.use_gpu,
         resources_per_worker=resources_per_worker,
+        placement_strategy="STRICT_SPREAD",
     )
-
     run_config = RunConfig(
         storage_path=config.ray_results_dir,
         checkpoint_config=CheckpointConfig(
