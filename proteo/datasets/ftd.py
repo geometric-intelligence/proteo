@@ -421,12 +421,15 @@ class FTDDataset(InMemoryDataset):
         mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
 
         if self.config.use_master_nodes:
-            sex_master_node = sex_labels.reshape(-1, 1)
-            mutation_master_node = mutation_labels.reshape(-1, 1)
-            age_master_node = filtered_age_col.values.reshape(-1, 1)
-            features = np.concatenate(
-                (features, sex_master_node, mutation_master_node, age_master_node), axis=1
-            )
+            master_node_dict = {
+                'sex': sex_labels.reshape(-1, 1),
+                'mutation': mutation_labels.reshape(-1, 1),
+                'age': filtered_age_col.values.reshape(-1, 1)
+            }
+            master_node_features = [master_node_dict[feature] for feature in self.config.master_nodes if feature in master_node_dict]
+            if master_node_features:
+                master_node_features = np.concatenate(master_node_features, axis=1)
+                features = np.concatenate((features, master_node_features), axis=1)
             print("using master nodes")
             print("features shape after master nodes", features.shape)
 
