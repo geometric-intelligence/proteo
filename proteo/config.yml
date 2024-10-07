@@ -1,19 +1,19 @@
 # Files
 root_dir: "/home/lcornelis/code/proteo"
-data_dir: "/scratch/lcornelis/data/data_louisa"
-output_dir: "/scratch/lcornelis/outputs"
+data_dir: "/data/lcornelis/data/data_louisa"
+output_dir: "/home/lcornelis/code/proteo/outputs"
 
 # When train.py is run
 # Logs
-wandb_tmp_dir: "/tmp"
+wandb_tmp_dir: "/home/lcornelis/code/proteo/outputs/wandb_tmp"
 # Results with checkpoints:
-checkpoint_dir: "/scratch/lcornelis/outputs/checkpoints"  # only when using train
+checkpoint_dir: "/home/lcornelis/code/proteo/outputs/checkpoints"  # only when using train
 
 # When main.py is run, wandb logs in wandb_tmp_dir
 # Logs
-ray_tmp_dir: "/scratch/lcornelis/tmp" 
+ray_tmp_dir: "/home/lcornelis/code/proteo/outputs/ray_tmp" 
 # Results with checkpoints:
-ray_results_dir: "/scratch/lcornelis/outputs/ray_results"
+ray_results_dir: "/home/lcornelis/code/proteo/outputs/ray_results"
 
 # Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"
@@ -30,7 +30,7 @@ modality: "csf"
 # List of all the mutations you want included in the dataset
 mutation: ["C9orf72", "MAPT", "GRN", "CTL"]  
 # ['M'], ['F'],['M', 'F'] 
-sex: ['F']
+sex: ['M','F']
 
 # WandB
 project: "proteo"
@@ -40,7 +40,7 @@ wandb_offline: false
 log_every_n_steps: 10
 
 # Dataset
-num_nodes: 7289  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
+num_nodes: 7258  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
 use_master_nodes: false # USE THESE FOR MASTER NODES
 master_nodes: ['sex', 'mutation', 'age'] #Note: You need to manually change this and the code if the master nodes change, needs all 3 to work
 adj_thresh: 0.14  #0.08 
@@ -60,7 +60,7 @@ gat-v4:
   heads: [2, 3]
   use_layer_norm: true
   # Note - if you want to encode sex, mutation and age at the graph level, they need to be included in which_layer
-  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation','age'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
+  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation', 'age'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
   fc_dim: [64, 128, 128, 32]
   fc_dropout: 0.1
   fc_act: relu
@@ -91,7 +91,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-devices: 'auto' #[0, 1, 2, 3, 4, 5, 6, 7]
+devices: [0, 1] #'auto' #[0, 1, 2, 3, 4, 5, 6, 7]
 trainer_accelerator: "gpu"
 seed: 42
 
@@ -109,8 +109,8 @@ num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritt
 checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for one off training so should be one to save absolute min val_loss checkpoint
 # Nb of trainings run in parallel is the maximum amount 
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
-use_gpu: False
-cpu_per_worker: 16
+use_gpu: True
+cpu_per_worker: 1
 gpu_per_worker: 1
 lr_min: 0.000001
 lr_max: 0.1
@@ -122,7 +122,7 @@ dropout_choices: [0, 0.05, 0.1, 0.2, 0.3]
 l1_lambda_min: 0.00001
 l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
-num_nodes_choices: [7247] #[10, 30, 150, 1000, 7000]
+num_nodes_choices: [7258] #[10, 30, 150, 1000, 7000]
 adj_thresh_choices: [0.05, 0.07, 0.1, 0.2, 0.5, 0.7, 0.9]
 mutation_choices: [['GRN', 'MAPT','C9orf72','CTL']] #,['MAPT'], ['C9orf72']],['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: [['M', 'F']]
