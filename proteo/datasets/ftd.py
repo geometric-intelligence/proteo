@@ -482,7 +482,7 @@ class FTDDataset(InMemoryDataset):
 
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.csv',
+            f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
