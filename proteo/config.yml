@@ -42,8 +42,8 @@ log_every_n_steps: 10
 # Dataset
 num_nodes: 7258  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
 use_master_nodes: false # USE THESE FOR MASTER NODES
-master_nodes: ['sex', 'mutation', 'age'] #Note: You need to manually change this and the code if the master nodes change, needs all 3 to work
-adj_thresh: 0.14  #0.08 
+master_nodes: ['sex', 'mutation', 'age'] #Note: You can pick which attributes of sex, mutation and age you want here
+adj_thresh: 0.16  #0.08 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
 wgcna_mergeCutHeight: 0.25
@@ -60,7 +60,7 @@ gat-v4:
   heads: [2, 3]
   use_layer_norm: true
   # Note - if you want to encode sex, mutation and age at the graph level, they need to be included in which_layer
-  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation', 'age'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
+  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation'] #, 'age'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
   fc_dim: [64, 128, 128, 32]
   fc_dropout: 0.1
   fc_act: relu
@@ -91,7 +91,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-devices: [0, 1] #'auto' #[0, 1, 2, 3, 4, 5, 6, 7]
+devices: [0] #' #[0, 1, 2, 3, 4, 5, 6, 7]
 trainer_accelerator: "gpu"
 seed: 42
 

@@ -159,7 +159,7 @@ def train_func(train_loop_config):
 
     # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
-        devices= config.devices,
+        devices= [0], #because we constrain one GPU per worker, this will always find one
         accelerator= config.trainer_accelerator,
         strategy=ray_lightning.RayDDPStrategy(),
         callbacks=[
@@ -207,6 +207,7 @@ def main():
     os.makedirs(ray_tmp_dir, exist_ok=True)
     os.makedirs(config.ray_tmp_dir, exist_ok=True)
     ray.init(_temp_dir=config.ray_tmp_dir)
+    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.devices))
 
     # Wrap Lightning's Trainer with Ray's TorchTrainer for Tuner
     if config.use_gpu:

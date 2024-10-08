@@ -542,11 +542,11 @@ class FTDDataset(InMemoryDataset):
 def calculate_adjacency_matrix(config, plasma_protein, save_to):
     """Calculate and save adjacency matrix."""
     plasma_protein_df = pd.DataFrame(plasma_protein)
-    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df)
+    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df, corOptions = {"corType": "bicor"})
     print("Soft threshold:", softThreshold[0])
     adjacency = PyWGCNA.WGCNA.adjacency(
         plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid", corOptions="bicor"
-    )
+    ) #for type = "signed hybrid", adjacency = cor^power if cor>0 and 0 otherwise
     print("Adjacency matrix shape:", adjacency.shape)
     if config.use_master_nodes:
         padding_size = len(config.master_nodes)

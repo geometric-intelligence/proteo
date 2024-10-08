@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+import gc
 import torch
 import torch.nn.functional as F
 import wandb
@@ -200,6 +201,9 @@ class CustomRayWandbCallback(Callback):
         pl_module.x1.clear()
         pl_module.x2.clear()
 
+        gc.collect()  # Clean up Python's garbage
+        torch.cuda.empty_cache()  # Clear any GPU memory cache
+
     def on_validation_epoch_end(self, trainer, pl_module):
         """Save val predictions and targets as histograms and log confusion matrix.
 
@@ -290,6 +294,9 @@ class CustomRayWandbCallback(Callback):
 
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
+
+        gc.collect()  # Clean up Python's garbage
+        torch.cuda.empty_cache()  # Clear any GPU memory cache
 
 
 class CustomRayReportLossCallback(Callback):
