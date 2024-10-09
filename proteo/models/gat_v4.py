@@ -6,13 +6,14 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import LayerNorm, Parameter
 from torch_geometric.data import Batch
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GATv2Conv
 from torch_geometric.nn.dense.linear import Linear
 from torch_geometric.utils import to_dense_batch
 
 
 # Overriding parameter intitialization
-class CustomGATConv(GATConv):
+# Overriding parameter intitialization
+class CustomGATConv(GATv2Conv):
     def __init__(
         self,
         in_channels: Union[int, Tuple[int, int]],
@@ -25,22 +26,15 @@ class CustomGATConv(GATConv):
         edge_dim: Optional[int] = None,
         fill_value: Union[float, Tensor, str] = 'mean',
         bias: bool = True,
-        weight_initializer=None,  # The only thing changed from orig. implementation
+        share_weights: bool = False,
+        residual: bool = False,
+        weight_initializer=None,  # The custom weight initializer
         **kwargs,
     ):
-        kwargs.setdefault('aggr', 'add')
+        # Save custom weight initializer
+        self.weight_init = weight_initializer
 
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.heads = heads
-        self.concat = concat
-        self.negative_slope = negative_slope
-        self.dropout = dropout
-        self.add_self_loops = add_self_loops
-        self.edge_dim = edge_dim
-        self.fill_value = fill_value
-        self.weight_init = weight_initializer  # The only thing changed from orig. implementation
-
+        # Call the base GATv2Conv initializer
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -52,63 +46,41 @@ class CustomGATConv(GATConv):
             edge_dim=edge_dim,
             fill_value=fill_value,
             bias=bias,
+            share_weights=share_weights,
+            residual=residual,
             **kwargs,
         )
 
-        # In case we are operating in bipartite graphs, we apply separate
-        # transformations 'lin_src' and 'lin_dst' to source and target nodes:
-        self.lin = self.lin_src = self.lin_dst = None
-        if isinstance(in_channels, int):
-            self.lin = Linear(
-                in_channels, heads * out_channels, bias=False, weight_initializer='glorot'
-            )
-        else:
-            self.lin_src = Linear(
-                in_channels[0], heads * out_channels, False, weight_initializer='glorot'
-            )
-            self.lin_dst = Linear(
-                in_channels[1], heads * out_channels, False, weight_initializer='glorot'
-            )
+        # Apply custom weight initialization if provided
+        if weight_initializer is not None:
+            self.apply_custom_initializers()
 
-        # The learnable parameters to compute attention coefficients:
-        self.att_src = Parameter(torch.empty(1, heads, out_channels))
-        self.att_dst = Parameter(torch.empty(1, heads, out_channels))
-
-        if edge_dim is not None:
-            self.lin_edge = Linear(
-                edge_dim, heads * out_channels, bias=False, weight_initializer='glorot'
-            )
-            self.att_edge = Parameter(torch.empty(1, heads, out_channels))
-        else:
-            self.lin_edge = None
-            self.register_parameter('att_edge', None)
-
-        if bias and concat:
-            self.bias = Parameter(torch.empty(heads * out_channels))
-        elif bias and not concat:
-            self.bias = Parameter(torch.empty(out_channels))
-        else:
-            self.register_parameter('bias', None)
-
-        self.reset_parameters()
-
-    def reset_parameters(self, **kwargs):
-        super().reset_parameters()
-        if self.lin is not None:
-            self.weight_init(self.lin.weight)
-        if self.lin_src is not None:
-            self.weight_init(self.lin_src.weight)
-        if self.lin_dst is not None:
-            self.weight_init(self.lin_dst.weight)
+    def apply_custom_initializers(self):
+        """Apply custom weight initializers to the GATv2Conv layers."""
+        if self.lin_l is not None:
+            self.weight_init(self.lin_l.weight)
+        if self.lin_r is not None and not self.share_weights:
+            self.weight_init(self.lin_r.weight)
         if self.lin_edge is not None:
-            self.weight_init(self.lin_edge)
-        if self.att_edge is not None:
-            self.weight_init(self.att_edge)
-        self.weight_init(self.att_src)
-        self.weight_init(self.att_dst)
+            self.weight_init(self.lin_edge.weight)
+        if self.res is not None:
+            self.weight_init(self.res.weight)
+
+        # Initialize the attention coefficient
+        self.weight_init(self.att)
+        
+        # Initialize the bias if it exists.
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
+    def reset_parameters(self):
+        """Override reset_parameters to ensure custom initialization."""
+        # Call the original reset_parameters
+        super().reset_parameters()
+
+        # Re-apply custom initialization after reset
+        if self.weight_init is not None:
+            self.apply_custom_initializers()
 
 class GATv4(nn.Module):
     ACT_MAP = {
@@ -199,9 +171,10 @@ class GATv4(nn.Module):
             self.convs.append(
                 CustomGATConv(
                     in_channels=input_dim,
-                    out_channels=hidden_dim,
+                    out_channels=hidden_dim, #dim of each node at the end
                     heads=num_heads,
                     dropout=self.dropout,
+                    concat=True,
                     weight_initializer=self.weight_initializer,
                 )
             )

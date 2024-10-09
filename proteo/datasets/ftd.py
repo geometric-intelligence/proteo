@@ -10,6 +10,7 @@ from scipy.stats import chi2_contingency, kendalltau, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data, InMemoryDataset
+import pingouin as pg
 
 LABEL_DIM_MAP = {
     "clinical_dementia_rating_global": 5,
@@ -542,10 +543,11 @@ class FTDDataset(InMemoryDataset):
 def calculate_adjacency_matrix(config, plasma_protein, save_to):
     """Calculate and save adjacency matrix."""
     plasma_protein_df = pd.DataFrame(plasma_protein)
-    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df, corOptions = {"corType": "bicor"})
+    corOptions = {"corFnc": "bicor"}
+    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df, corFnc="bicor")
     print("Soft threshold:", softThreshold[0])
-    adjacency = PyWGCNA.WGCNA.adjacency(
-        plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid", corOptions="bicor"
+    adjacency = adjacency(
+        plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid", corFnc = "bicor"
     ) #for type = "signed hybrid", adjacency = cor^power if cor>0 and 0 otherwise
     print("Adjacency matrix shape:", adjacency.shape)
     if config.use_master_nodes:
@@ -563,6 +565,98 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     adjacency_df = pd.DataFrame(adjacency)
     print(f"Saving adjacency matrix to: {save_to}...")
     adjacency_df.to_csv(save_to, header=None, index=False)
+
+
+###### FOR BICOR ##########
+def biweight_midcorrelation_matrix(data):
+    """
+    Computes the biweight midcorrelation matrix using Pingouin's bicorr function.
+
+    Parameters:
+    - data : 2D array of shape (n_features, n_samples)
+
+    Returns:
+    - biweight_corr_matrix : 2D array of shape (n_features, n_features) representing
+      the biweight midcorrelation matrix.
+    """
+    # Initialize an empty matrix to store the biweight midcorrelation coefficients
+    n_features = data.shape[0]
+    biweight_corr_matrix = np.zeros((n_features, n_features))
+
+    # Compute the biweight midcorrelation for each pair of variables
+    for i in range(n_features):
+        for j in range(i, n_features):
+            # Compute biweight midcorrelation for data[i, :] and data[j, :]
+            corr, _ = pg.bicorr(data[i, :], data[j, :])
+            biweight_corr_matrix[i, j] = corr
+            biweight_corr_matrix[j, i] = corr  # Symmetric matrix
+
+    return biweight_corr_matrix
+
+#Adapting pywgcna function to include bicor:
+def adjacency(
+    datExpr,
+    selectCols=None,
+    adjacencyType="unsigned",
+    power=6,
+    corFnc="pearson",  # New parameter to specify correlation type
+    corOptions=None,
+):
+    """
+    Calculates (correlation or distance) network adjacency from given expression data or from a similarity matrix.
+
+    :param datExpr: Data frame containing expression data. Columns correspond to genes and rows to samples.
+    :type datExpr: pandas dataframe
+    :param selectCols: For correlation networks only; can be used to select genes whose adjacencies will be calculated. Should be either a numeric list giving the indices of the genes to be used, or a boolean list indicating which genes are to be used.
+    :type selectCols: list
+    :param adjacencyType: Adjacency network type. Allowed values are (unique abbreviations of) "unsigned", "signed", "signed hybrid". (default = unsigned)
+    :type adjacencyType: str
+    :param power: Soft thresholding power.
+    :type power: int
+    :param corFnc: Function specifying which correlation to use. Options: "pearson" or "bicor".
+    :type corFnc: str
+    :param corOptions: Dictionary specifying additional arguments to be passed to the correlation function.
+    :type corOptions: dict
+
+    :return: Adjacency matrix
+    :rtype: pandas dataframe
+    """
+    print("Calculating adjacency matrix...")
+
+    # Define valid adjacency types
+    adjacencyTypes = ["unsigned", "signed", "signed hybrid"]
+    if adjacencyType not in adjacencyTypes:
+        raise ValueError(f"Unrecognized 'adjacencyType'. Recognized values are {adjacencyTypes}")
+
+    # Step 1: Compute correlation matrix based on corFnc parameter
+    if selectCols is None:
+        if corFnc == "pearson":
+            # Compute Pearson correlation matrix using numpy's corrcoef
+            cor_mat = np.corrcoef(datExpr.T)
+        elif corFnc == "bicor":
+            # Compute biweight midcorrelation matrix
+            cor_mat = biweight_midcorrelation_matrix(datExpr.values.T)
+        else:
+            raise ValueError("Supported correlation functions are: 'pearson', 'bicor'")
+    else:
+        if corFnc == "pearson":
+            cor_mat = np.corrcoef(x=datExpr, y=datExpr[:, selectCols])
+        elif corFnc == "bicor":
+            raise ValueError("Biweight midcorrelation does not support selectCols functionality.")
+
+    # Step 2: Apply adjacency type transformation
+    if adjacencyType == "unsigned":
+        cor_mat = np.abs(cor_mat)
+    elif adjacencyType == "signed":
+        cor_mat = (1 + cor_mat) / 2
+    elif adjacencyType == "signed hybrid":
+        cor_mat[cor_mat < 0] = 0
+
+    print("\tDone..\n")
+
+    # Step 3: Return the adjacency matrix raised to the power of the specified soft-thresholding power
+    return cor_mat ** power
+
 
 
 def plot_histogram(data, x_label, save_to):
