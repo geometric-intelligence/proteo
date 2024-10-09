@@ -10,7 +10,10 @@ from scipy.stats import chi2_contingency, kendalltau, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data, InMemoryDataset
-import pingouin as pg
+import rpy2.robjects as ro
+from rpy2.robjects import pandas2ri, r
+from rpy2.robjects.packages import importr
+from rpy2.robjects import r as R
 
 LABEL_DIM_MAP = {
     "clinical_dementia_rating_global": 5,
@@ -498,7 +501,7 @@ class FTDDataset(InMemoryDataset):
         # Plot and save adjacency matrix as jpg
         cmap = mcolors.LinearSegmentedColormap.from_list("", ["white", "black"])
         plt.figure()
-        plt.imshow(adj_matrix, cmap=cmap)
+        plt.imshow(adj_matrix.cpu().numpy(), cmap=cmap)
         plt.colorbar(ticks=[0, 1], label='Adjacency Value')
         plt.title("Visualization of Adjacency Matrix")
         plt.savefig(
@@ -541,60 +544,103 @@ class FTDDataset(InMemoryDataset):
 
 
 def calculate_adjacency_matrix(config, plasma_protein, save_to):
-    """Calculate and save adjacency matrix."""
-    plasma_protein_df = pd.DataFrame(plasma_protein)
-    corOptions = {"corFnc": "bicor"}
-    softThreshold = PyWGCNA.WGCNA.pickSoftThreshold(plasma_protein_df, corFnc="bicor")
-    print("Soft threshold:", softThreshold[0])
-    adjacency = adjacency(
-        plasma_protein, power=softThreshold[0], adjacencyType="signed hybrid", corFnc = "bicor"
-    ) #for type = "signed hybrid", adjacency = cor^power if cor>0 and 0 otherwise
-    print("Adjacency matrix shape:", adjacency.shape)
+    pandas2ri.activate()
+    wgcna = importr('WGCNA')
+    """Calculate and save adjacency matrix using R's WGCNA."""
+    # Convert the input `plasma_protein` (NumPy array) to a pandas DataFrame if necessary
+    if not isinstance(plasma_protein, pd.DataFrame):
+        plasma_protein_df = pd.DataFrame(plasma_protein)
+    else:
+        plasma_protein_df = plasma_protein
+
+    # Convert pandas DataFrame to R DataFrame
+    r_plasma_protein = pandas2ri.py2rpy(plasma_protein_df)
+
+    # Call R's `pickSoftThreshold` function to determine the soft thresholding power
+    soft_threshold_result = wgcna.pickSoftThreshold(r_plasma_protein,corFnc ="bicor", networkType="signed")
+    soft_threshold_power = soft_threshold_result.rx2('powerEstimate')[0]  # Extract the estimated power
+    if config.modality == 'csf' and all(mut in config.mutation for mut in ["C9orf72", "MAPT", "GRN", "CTL"]):
+        soft_threshold_power = 10 #went over values w Rowan and selected this.
+    print(f"Soft threshold power: {soft_threshold_power}")
+
+    # Call R's `adjacency` function using the chosen power and the desired correlation function (bicor)
+    adjacency_matrix_r = wgcna.adjacency(
+        r_plasma_protein, 
+        power=soft_threshold_power, 
+        type="signed",  # Specify network type
+        corFnc="bicor"         # Use biweight midcorrelation
+    )
+
+    # Convert the resulting adjacency matrix from R back to a NumPy array
+    adjacency_matrix = adjacency_matrix_r
+
+    print("Adjacency matrix shape:", adjacency_matrix.shape)
+
+    # Pad the adjacency matrix if master nodes are used
     if config.use_master_nodes:
         padding_size = len(config.master_nodes)
-        adjacency = np.pad(
-            adjacency,
+        adjacency_matrix = np.pad(
+            adjacency_matrix,
             pad_width=((0, padding_size), (0, padding_size)),
             mode='constant',
             constant_values=1,
         )
-        print("Adjacency matrix shape after padding:", adjacency.shape)
+        print("Adjacency matrix shape after padding:", adjacency_matrix.shape)
 
-    # Using adjacency matrix calculate the topological overlap matrix (TOM).
-    # TOM = PyWGCNA.WGCNA.TOMsimilarity(adjacency)
-    adjacency_df = pd.DataFrame(adjacency)
-    print(f"Saving adjacency matrix to: {save_to}...")
+    # Save the adjacency matrix to the specified file path
+    adjacency_df = pd.DataFrame(adjacency_matrix)
     adjacency_df.to_csv(save_to, header=None, index=False)
+    print(f"Adjacency matrix saved to: {save_to}")
 
 
 ###### FOR BICOR ##########
+
 def biweight_midcorrelation_matrix(data):
     """
-    Computes the biweight midcorrelation matrix using Pingouin's bicorr function.
+    Computes the biweight midcorrelation matrix for all columns in the given data.
 
     Parameters:
-    - data : 2D array of shape (n_features, n_samples)
+    - data : 2D numpy array of shape (n_samples, n_features)
+      This function expects each column to be a separate feature, and the caller
+      should handle transposing the data if needed.
 
     Returns:
-    - biweight_corr_matrix : 2D array of shape (n_features, n_features) representing
+    - biweight_corr_matrix : 2D numpy array of shape (n_features, n_features) representing
       the biweight midcorrelation matrix.
     """
-    # Initialize an empty matrix to store the biweight midcorrelation coefficients
-    n_features = data.shape[0]
+    # Number of features (columns)
+    n_features = data.shape[1]  # n_features is the number of columns in the data
+
+    # Initialize the correlation matrix
     biweight_corr_matrix = np.zeros((n_features, n_features))
 
-    # Compute the biweight midcorrelation for each pair of variables
+    # Calculate the medians and MADs for each column once
+    medians = np.median(data, axis=0)  # Median for each column
+    MADs = np.median(np.abs(data - medians), axis=0)  # Median absolute deviation for each column
+
+    # Loop through each pair of columns
     for i in range(n_features):
         for j in range(i, n_features):
-            # Compute biweight midcorrelation for data[i, :] and data[j, :]
-            corr, _ = pg.bicorr(data[i, :], data[j, :])
-            biweight_corr_matrix[i, j] = corr
-            biweight_corr_matrix[j, i] = corr  # Symmetric matrix
+            # Standardized deviations from the median
+            Ux = (data[:, i] - medians[i]) / (9 * MADs[i])
+            Uy = (data[:, j] - medians[j]) / (9 * MADs[j])
+
+            # Biweight weight function
+            Wx = (1 - Ux**2)**2 * (np.abs(Ux) < 1)
+            Wy = (1 - Uy**2)**2 * (np.abs(Uy) < 1)
+
+            # Compute biweight midcorrelation
+            numerator = np.sum(Wx * Wy * (data[:, i] - medians[i]) * (data[:, j] - medians[j]))
+            denominator = np.sqrt(np.sum((Wx * (data[:, i] - medians[i]))**2) * np.sum((Wy * (data[:, j] - medians[j]))**2))
+
+            # Assign correlation value
+            biweight_corr_matrix[i, j] = numerator / denominator if denominator != 0 else 0
+            biweight_corr_matrix[j, i] = biweight_corr_matrix[i, j]  # Symmetric matrix
 
     return biweight_corr_matrix
 
 #Adapting pywgcna function to include bicor:
-def adjacency(
+def find_adjacency(
     datExpr,
     selectCols=None,
     adjacencyType="unsigned",
@@ -635,7 +681,7 @@ def adjacency(
             cor_mat = np.corrcoef(datExpr.T)
         elif corFnc == "bicor":
             # Compute biweight midcorrelation matrix
-            cor_mat = biweight_midcorrelation_matrix(datExpr.values.T)
+            cor_mat = biweight_midcorrelation_matrix(datExpr.values)
         else:
             raise ValueError("Supported correlation functions are: 'pearson', 'bicor'")
     else:
