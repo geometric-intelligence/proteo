@@ -12,7 +12,7 @@ repository = "https://github.com/geometry-intellince/proteo"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-numpy = "^1.23.2"
+numpy = ">=1.26.4,<1.27.0"
 click = "<9.0"
 aioboto3 = ">=10.0.0"
 aiobotocore = {extras = ["boto3"], version = "^2.4.0"}
@@ -47,7 +47,6 @@ ray = {extras = ["tune"], version = "^2.24.0"}
 focal-loss-torch = "^0.1.2"
 ucimlrepo = "^0.0.7"
 config_utils = "^0.3"
-pingouin = "^0.5.5"
 
 
 [[tool.poetry.source]]

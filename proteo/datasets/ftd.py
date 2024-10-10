@@ -1,5 +1,5 @@
 import os
-
+os.environ["RPY2_RINTERFACE_SIGINT"] = "FALSE"
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,10 +10,6 @@ from scipy.stats import chi2_contingency, kendalltau, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data, InMemoryDataset
-import rpy2.robjects as ro
-from rpy2.robjects import pandas2ri, r
-from rpy2.robjects.packages import importr
-from rpy2.robjects import r as R
 
 LABEL_DIM_MAP = {
     "clinical_dementia_rating_global": 5,
@@ -544,6 +540,10 @@ class FTDDataset(InMemoryDataset):
 
 
 def calculate_adjacency_matrix(config, plasma_protein, save_to):
+    import rpy2.robjects as ro
+    from rpy2.robjects import pandas2ri, r
+    from rpy2.robjects.packages import importr
+    from rpy2.robjects import r as R
     pandas2ri.activate()
     wgcna = importr('WGCNA')
     """Calculate and save adjacency matrix using R's WGCNA."""
@@ -591,117 +591,6 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     adjacency_df = pd.DataFrame(adjacency_matrix)
     adjacency_df.to_csv(save_to, header=None, index=False)
     print(f"Adjacency matrix saved to: {save_to}")
-
-
-###### FOR BICOR ##########
-
-def biweight_midcorrelation_matrix(data):
-    """
-    Computes the biweight midcorrelation matrix for all columns in the given data.
-
-    Parameters:
-    - data : 2D numpy array of shape (n_samples, n_features)
-      This function expects each column to be a separate feature, and the caller
-      should handle transposing the data if needed.
-
-    Returns:
-    - biweight_corr_matrix : 2D numpy array of shape (n_features, n_features) representing
-      the biweight midcorrelation matrix.
-    """
-    # Number of features (columns)
-    n_features = data.shape[1]  # n_features is the number of columns in the data
-
-    # Initialize the correlation matrix
-    biweight_corr_matrix = np.zeros((n_features, n_features))
-
-    # Calculate the medians and MADs for each column once
-    medians = np.median(data, axis=0)  # Median for each column
-    MADs = np.median(np.abs(data - medians), axis=0)  # Median absolute deviation for each column
-
-    # Loop through each pair of columns
-    for i in range(n_features):
-        for j in range(i, n_features):
-            # Standardized deviations from the median
-            Ux = (data[:, i] - medians[i]) / (9 * MADs[i])
-            Uy = (data[:, j] - medians[j]) / (9 * MADs[j])
-
-            # Biweight weight function
-            Wx = (1 - Ux**2)**2 * (np.abs(Ux) < 1)
-            Wy = (1 - Uy**2)**2 * (np.abs(Uy) < 1)
-
-            # Compute biweight midcorrelation
-            numerator = np.sum(Wx * Wy * (data[:, i] - medians[i]) * (data[:, j] - medians[j]))
-            denominator = np.sqrt(np.sum((Wx * (data[:, i] - medians[i]))**2) * np.sum((Wy * (data[:, j] - medians[j]))**2))
-
-            # Assign correlation value
-            biweight_corr_matrix[i, j] = numerator / denominator if denominator != 0 else 0
-            biweight_corr_matrix[j, i] = biweight_corr_matrix[i, j]  # Symmetric matrix
-
-    return biweight_corr_matrix
-
-#Adapting pywgcna function to include bicor:
-def find_adjacency(
-    datExpr,
-    selectCols=None,
-    adjacencyType="unsigned",
-    power=6,
-    corFnc="pearson",  # New parameter to specify correlation type
-    corOptions=None,
-):
-    """
-    Calculates (correlation or distance) network adjacency from given expression data or from a similarity matrix.
-
-    :param datExpr: Data frame containing expression data. Columns correspond to genes and rows to samples.
-    :type datExpr: pandas dataframe
-    :param selectCols: For correlation networks only; can be used to select genes whose adjacencies will be calculated. Should be either a numeric list giving the indices of the genes to be used, or a boolean list indicating which genes are to be used.
-    :type selectCols: list
-    :param adjacencyType: Adjacency network type. Allowed values are (unique abbreviations of) "unsigned", "signed", "signed hybrid". (default = unsigned)
-    :type adjacencyType: str
-    :param power: Soft thresholding power.
-    :type power: int
-    :param corFnc: Function specifying which correlation to use. Options: "pearson" or "bicor".
-    :type corFnc: str
-    :param corOptions: Dictionary specifying additional arguments to be passed to the correlation function.
-    :type corOptions: dict
-
-    :return: Adjacency matrix
-    :rtype: pandas dataframe
-    """
-    print("Calculating adjacency matrix...")
-
-    # Define valid adjacency types
-    adjacencyTypes = ["unsigned", "signed", "signed hybrid"]
-    if adjacencyType not in adjacencyTypes:
-        raise ValueError(f"Unrecognized 'adjacencyType'. Recognized values are {adjacencyTypes}")
-
-    # Step 1: Compute correlation matrix based on corFnc parameter
-    if selectCols is None:
-        if corFnc == "pearson":
-            # Compute Pearson correlation matrix using numpy's corrcoef
-            cor_mat = np.corrcoef(datExpr.T)
-        elif corFnc == "bicor":
-            # Compute biweight midcorrelation matrix
-            cor_mat = biweight_midcorrelation_matrix(datExpr.values)
-        else:
-            raise ValueError("Supported correlation functions are: 'pearson', 'bicor'")
-    else:
-        if corFnc == "pearson":
-            cor_mat = np.corrcoef(x=datExpr, y=datExpr[:, selectCols])
-        elif corFnc == "bicor":
-            raise ValueError("Biweight midcorrelation does not support selectCols functionality.")
-
-    # Step 2: Apply adjacency type transformation
-    if adjacencyType == "unsigned":
-        cor_mat = np.abs(cor_mat)
-    elif adjacencyType == "signed":
-        cor_mat = (1 + cor_mat) / 2
-    elif adjacencyType == "signed hybrid":
-        cor_mat[cor_mat < 0] = 0
-
-    print("\tDone..\n")
-
-    # Step 3: Return the adjacency matrix raised to the power of the specified soft-thresholding power
-    return cor_mat ** power
 
 
 

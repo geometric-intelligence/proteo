@@ -5,6 +5,12 @@
 ```shell
 $ conda create -n proteo --file conda-linux-64.lock
 $ conda activate proteo
+$ R
+$ if (!requireNamespace("BiocManager", quietly = TRUE))
+$    install.packages("BiocManager")
+
+$ BiocManager::install("WGCNA")
+$ q()
 $ poetry install --with=dev,gpu
 ```
 

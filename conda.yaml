@@ -8,3 +8,6 @@ dependencies:
   - numpy
   - pip
   - poetry>=1.5.0
+  - r-base  # This installs the R language
+  - r-essentials  # Includes a collection of commonly used R packages
+  - rpy2  # Python to R interface
