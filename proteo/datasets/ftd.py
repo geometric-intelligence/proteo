@@ -360,7 +360,7 @@ class FTDDataset(InMemoryDataset):
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
         # Remove bimodal columns
-        csv_data = self.remove_erroneous_columns(config, csv_data)
+        csv_data = remove_erroneous_columns(config, csv_data, self.raw_dir)
         # Get the correct subset of proteins based on the mutation, if they have the correct modality measurements, and sex and then use those to find the top proteins and labels
         condition_sex = csv_data[sex_col].isin(self.config.sex)
         condition_modality = csv_data[HAS_MODALITY_COL[self.config.modality]]
@@ -380,7 +380,7 @@ class FTDDataset(InMemoryDataset):
         # Extract the y_val values
         y_vals, y_val_mask = self.load_y_vals(filtered_data)
         filtered_data = filtered_data[y_val_mask]  # Remove rows where y_val is NaN
-        # Extract the top proteins (features)
+        # Extract the top proteins (features) for building datasets
         top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
         top_proteins = filtered_data[top_protein_columns]
 
@@ -479,14 +479,41 @@ class FTDDataset(InMemoryDataset):
             test_mutation.shape,
             test_age.shape,
         )
+        if config.sex_specific_adj:
+            adj_path_M = os.path.join(
+                self.processed_dir,
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_M.csv'
+                )
+            adj_path_F = os.path.join(
+                self.processed_dir,
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_F.csv'
+            )
+            if not os.path.exists(adj_path_M) or not os.path.exists(adj_path_F):
+                print("Sex-specific adjacency matrices do not exist. Calculating now...")
+                calculate_sex_specific_adj(self.raw_paths[0], config, adj_path_M, adj_path_F, self.raw_dir)
 
-        adj_path = os.path.join(
-            self.processed_dir,
-            f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.csv',
-        )
-        # Calculate and save adjacency matrix
-        if not os.path.exists(adj_path):
-            calculate_adjacency_matrix(config, top_proteins, save_to=adj_path)
+            print(f"Loading male adjacency matrix from: {adj_path_M}...")
+            adj_matrix_M = np.array(pd.read_csv(adj_path_M, header=None)).astype(float)
+            adj_matrix_M = torch.FloatTensor(np.where(adj_matrix_M > config.adj_thresh, 1, 0))
+            print("Male adjacency matrix:", adj_matrix_M.shape)
+            print("Number of edges in male adjacency matrix:", adj_matrix_M.sum())
+
+            print(f"Loading female adjacency matrix from: {adj_path_F}...")
+            adj_matrix_F = np.array(pd.read_csv(adj_path_F, header=None)).astype(float)
+            adj_matrix_F = torch.FloatTensor(np.where(adj_matrix_F > config.adj_thresh, 1, 0))
+            print("Female adjacency matrix:", adj_matrix_F.shape)
+            print("Number of edges in female adjacency matrix:", adj_matrix_F.sum())
+
+            
+        else:
+            adj_path = os.path.join(
+                self.processed_dir,
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}.csv',
+            )
+            # Calculate and save adjacency matrix
+            if not os.path.exists(adj_path):
+                calculate_adjacency_matrix(config, top_proteins, save_to=adj_path)
+        
         print(f"Loading adjacency matrix from: {adj_path}...")
         adj_matrix = np.array(pd.read_csv(adj_path, header=None)).astype(float)
         # Threshold adjacency matrix
@@ -522,21 +549,21 @@ class FTDDataset(InMemoryDataset):
             adj_matrix,
         )
 
-    def remove_erroneous_columns(self, config, csv_data):
-        """Remove columns that have bimodal distributions."""
-        csv_path = os.path.join(self.raw_dir, config.error_protein_file_name)
-        error_proteins_df = pd.read_excel(csv_path)
-        # Extract column names under "Plasma" and "CSF"
-        modality_columns = error_proteins_df['Plasma'].dropna().tolist()
-        csf_columns = error_proteins_df['CSF'].dropna().tolist()
-        columns_to_remove = list(set(modality_columns + csf_columns))
-        if config.y_val == 'nfl':
-            columns_to_remove.extend(
-                ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA']
-            )
-        # Remove the columns
-        csv_data = csv_data.drop(columns=columns_to_remove)
-        return csv_data
+def remove_erroneous_columns(config, csv_data, raw_dir):
+    """Remove columns that have bimodal distributions."""
+    csv_path = os.path.join(raw_dir, config.error_protein_file_name)
+    error_proteins_df = pd.read_excel(csv_path)
+    # Extract column names under "Plasma" and "CSF"
+    modality_columns = error_proteins_df['Plasma'].dropna().tolist()
+    csf_columns = error_proteins_df['CSF'].dropna().tolist()
+    columns_to_remove = list(set(modality_columns + csf_columns))
+    if config.y_val == 'nfl':
+        columns_to_remove.extend(
+            ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA']
+        )
+    # Remove the columns
+    csv_data = csv_data.drop(columns=columns_to_remove)
+    return csv_data
 
 
 def calculate_adjacency_matrix(config, plasma_protein, save_to):
@@ -592,6 +619,13 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     adjacency_df.to_csv(save_to, header=None, index=False)
     print(f"Adjacency matrix saved to: {save_to}")
 
+def calculate_sex_specific_adj(csv_path, config, save_to_M, save_to_F, raw_dir):
+    csv_data = pd.read_csv(csv_path)
+    csv_data = remove_erroneous_columns(config, csv_data, raw_dir)
+    male_data = csv_data[csv_data[sex_col] == 'M']
+    female_data = csv_data[csv_data[sex_col] == 'F']
+    calculate_adjacency_matrix(config, male_data, save_to_M)
+    calculate_adjacency_matrix(config, female_data, save_to_F)
 
 
 def plot_histogram(data, x_label, save_to):
