@@ -138,7 +138,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specifc_{self.config.sex_specific_adj}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_{split}.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -170,8 +170,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         return [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specifc_{self.config.sex_specific_adj}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes_sex_specifc_{self.config.sex_specific_adj}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test.pt",
         ]
 
     def create_graph_data(
@@ -227,7 +227,6 @@ class FTDDataset(InMemoryDataset):
             for feature, label, sex, mutation, age in zip(train_features, train_labels, train_sex, train_mutation, train_age):
                 # Choose male or female adjacency matrix based on sex label (assuming 1 = Male, 0 = Female)
                 adj_matrix = adj_matrix_M if sex.item() == 1 else adj_matrix_F
-                print("FIRST 10 of adj matrix sex", adj_matrix[:10])
                 data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
                 train_data_list.append(data)
 
@@ -243,7 +242,6 @@ class FTDDataset(InMemoryDataset):
 
             # Iterate through train data and use the single adjacency matrix
             for feature, label, sex, mutation, age in zip(train_features, train_labels, train_sex, train_mutation, train_age):
-                print("FIRST 10 of adj matrix not sex", adj_matrix[:10])
                 data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
                 train_data_list.append(data)
 
@@ -416,7 +414,7 @@ class FTDDataset(InMemoryDataset):
         # Extract the top proteins (features) for building datasets
         top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
         top_proteins = filtered_data[top_protein_columns]
-        filtered_data_for_adj = filtered_data_for_adj[top_protein_columns]
+        filtered_data_for_adj = filtered_data_for_adj[top_protein_columns + [sex_col]] #keep sex for filtering later
 
         # Extract column labels for sex to understand explainer results
         filtered_sex_col = filtered_data[sex_col]
@@ -516,16 +514,16 @@ class FTDDataset(InMemoryDataset):
         if config.sex_specific_adj:
             adj_path_M = os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_M.csv'
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.csv'
                 )
             adj_path_F = os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_F.csv'
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.csv'
             )
             if not os.path.exists(adj_path_M) or not os.path.exists(adj_path_F):
                 print("Sex-specific adjacency matrices do not exist. Calculating now...")
-                filtered_data_M = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "M"]
-                filtered_data_F = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "F"]
+                filtered_data_M = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "M"].drop(columns=[sex_col])
+                filtered_data_F = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "F"].drop(columns=[sex_col])
                 calculate_adjacency_matrix(config, filtered_data_M, save_to= adj_path_M)
                 calculate_adjacency_matrix(config, filtered_data_F, save_to= adj_path_F)
             
@@ -533,27 +531,28 @@ class FTDDataset(InMemoryDataset):
             adj_matrix_F = self.load_adjacency_matrix(adj_path_F, config.adj_thresh)
             self.plot_adj_matrix(adj_matrix_M, os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_M.jpg'
+                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg'
                 ))
             self.plot_adj_matrix(adj_matrix_F, os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_F.jpg'
+                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg'
             ))
             adj_matrices.extend([adj_matrix_M, adj_matrix_F])
         else:
             adj_path = os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}.csv',
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.csv',
             )
             # Calculate and save adjacency matrix
             if not os.path.exists(adj_path):
-                calculate_adjacency_matrix(config, filtered_data_for_adj, save_to=adj_path)
+                filtered_data_no_sex = filtered_data_for_adj.drop(columns=[sex_col])
+                calculate_adjacency_matrix(config, filtered_data_no_sex, save_to=adj_path)
         
             adj_matrix = self.load_adjacency_matrix(adj_path, config.adj_thresh)
             # Plot and save adjacency matrix as jpg
             self.plot_adj_matrix(adj_matrix, os.path.join(
                 self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
             ))
             adj_matrices.append(adj_matrix)
         return (
@@ -588,7 +587,7 @@ class FTDDataset(InMemoryDataset):
         print("Number of edges:", adj_matrix.sum())
         return adj_matrix
 
-    def plot_adj_matrix(adj_matrix, path):
+    def plot_adj_matrix(self, adj_matrix, path):
         cmap = mcolors.LinearSegmentedColormap.from_list("", ["white", "black"])
         plt.figure()
         plt.imshow(adj_matrix.cpu().numpy(), cmap=cmap)

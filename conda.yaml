@@ -11,3 +11,4 @@ dependencies:
   - r-base  # This installs the R language
   - r-essentials  # Includes a collection of commonly used R packages
   - rpy2  # Python to R interface
+  - libstdcxx-ng  # Ensures you have the correct C++ standard library

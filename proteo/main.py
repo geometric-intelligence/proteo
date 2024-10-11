@@ -154,13 +154,13 @@ def train_func(train_loop_config):
         log_data["adjacency_M"] = wandb.Image(
             os.path.join(
                 train_dataset.processed_dir,
-                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_M_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg",
+                f"adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg",
             )
         )
         log_data["adjacency_F"] = wandb.Image(
             os.path.join(
                 train_dataset.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_F.jpg',
+                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg',
             )
         )
     else:
@@ -168,7 +168,7 @@ def train_func(train_loop_config):
         log_data["adjacency"] = wandb.Image(
             os.path.join(
                 train_dataset.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}.jpg',
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
             )
         )
     wandb.log(log_data)
