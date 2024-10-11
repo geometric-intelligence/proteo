@@ -139,6 +139,7 @@ gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
 gat_v4_fc_dropout: [0.1, 0.2, 0.5]
 gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
 gat_v4_weight_initializer: ['xavier', 'kaiming', 'orthogonal', 'truncated_normal', 'uniform']
+
 # GAT
 gat_num_layers: [2, 4, 6, 12]  # only for GAT and GCN
 gat_hidden_channels: [8, 32, 128, 256]

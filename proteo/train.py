@@ -482,12 +482,29 @@ def main():
         os.path.join(
             train_dataset.processed_dir,
             f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
-        ),
-        os.path.join(
-            train_dataset.processed_dir,
-            f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.jpg",
-        ),
+        )
     ]
+    # Check if sex-specific adjacency is enabled
+    if config.sex_specific_adj:
+        # Load both male and female adjacency images
+        images_to_log.extend([
+            os.path.join(
+                train_dataset.processed_dir,
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_M.jpg'
+            ),
+            os.path.join(
+                train_dataset.processed_dir,
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_F.jpg'
+            ),
+        ])
+    else:
+        # Load the single adjacency image if sex-specific adjacency is not enabled
+        images_to_log.append(
+            os.path.join(
+                train_dataset.processed_dir,
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}.jpg',
+            )
+        )
 
     if (
         config.y_val in Y_VALS_TO_NORMALIZE

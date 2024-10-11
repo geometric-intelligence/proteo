@@ -125,37 +125,53 @@ def train_func(train_loop_config):
                 )
             }
         )
-    wandb.log(
-        {
-            "histogram": wandb.Image(
-                os.path.join(
-                    train_dataset.processed_dir,
-                    f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
-                )
-            ),
-            "adjacency": wandb.Image(
-                os.path.join(
-                    train_dataset.processed_dir,
-                    f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}.jpg",
-                )
-            ),
-            "top_proteins": wandb.Table(
-                columns=["Protein", "Metric"], data=top_proteins_data
-            ),  # note this is in order from most to least different
-            "parameters": wandb.Table(
-                columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
-                data=[
-                    [
-                        config.modality,
-                        config.mutation,
-                        config.y_val,
-                        config.sex,
-                        avg_node_degree,
-                    ]
-                ],
-            ),
-        }
-    )
+    # Initialize the dictionary to log
+    log_data = {
+        "histogram": wandb.Image(
+            os.path.join(
+                train_dataset.processed_dir,
+                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
+            )
+        ),
+        "top_proteins": wandb.Table(
+            columns=["Protein", "Metric"], data=top_proteins_data
+        ),  # note this is in order from most to least different
+        "parameters": wandb.Table(
+            columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
+            data=[
+                [
+                    config.modality,
+                    config.mutation,
+                    config.y_val,
+                    config.sex,
+                    avg_node_degree,
+                ]
+            ],
+        ),
+    }
+    if config.sex_specific_adj:
+    # Add both male and female adjacency images to the log
+        log_data["adjacency_M"] = wandb.Image(
+            os.path.join(
+                train_dataset.processed_dir,
+                f"adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_M_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg",
+            )
+        )
+        log_data["adjacency_F"] = wandb.Image(
+            os.path.join(
+                train_dataset.processed_dir,
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}_F.jpg',
+            )
+        )
+    else:
+        # Add the single adjacency image to the log
+        log_data["adjacency"] = wandb.Image(
+            os.path.join(
+                train_dataset.processed_dir,
+                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specifc_{config.sex_specific_adj}.jpg',
+            )
+        )
+    wandb.log(log_data)
 
     # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
     trainer = pl.Trainer(
