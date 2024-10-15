@@ -28,7 +28,7 @@ y_val: "nfl"
 # Plasma or CSF
 modality: "csf"
 # List of all the mutations you want included in the dataset
-mutation: ["C9orf72", "MAPT", "GRN", "CTL"]  
+mutation: ["MAPT","C9orf72", "GRN", "CTL"]  
 # ['M'], ['F'],['M', 'F'] 
 sex: ['M', 'F']
 

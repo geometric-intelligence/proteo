@@ -12,6 +12,7 @@ $    install.packages("BiocManager")
 $ BiocManager::install("WGCNA")
 $ q()
 $ poetry install --with=dev,gpu
+$ Add "export LD_PRELOAD=/home/lcornelis/anaconda3/envs/proteo/lib/libstdc++.so.6" to nano ~/.bashrc file
 ```
 
 # Dev

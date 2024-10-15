@@ -413,6 +413,7 @@ class FTDDataset(InMemoryDataset):
         filtered_data = filtered_data[y_val_mask]  # Remove rows where y_val is NaN
         # Extract the top proteins (features) for building datasets
         top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
+        top_protein_columns = sorted(top_protein_columns) #to ensure same ordering when using all proteins 
         top_proteins = filtered_data[top_protein_columns]
         filtered_data_for_adj = filtered_data_for_adj[top_protein_columns + [sex_col]] #keep sex for filtering later
 
@@ -523,12 +524,14 @@ class FTDDataset(InMemoryDataset):
             if not os.path.exists(adj_path_M) or not os.path.exists(adj_path_F):
                 print("Sex-specific adjacency matrices do not exist. Calculating now...")
                 filtered_data_M = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "M"].drop(columns=[sex_col])
+                print("Length of filtered M:", len(filtered_data_M))
                 filtered_data_F = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "F"].drop(columns=[sex_col])
+                print("Length of filtered F:", len(filtered_data_F))
                 calculate_adjacency_matrix(config, filtered_data_M, save_to= adj_path_M)
                 calculate_adjacency_matrix(config, filtered_data_F, save_to= adj_path_F)
             
-            adj_matrix_M = self.load_adjacency_matrix(adj_path_M, config.adj_thresh)
-            adj_matrix_F = self.load_adjacency_matrix(adj_path_F, config.adj_thresh)
+            adj_matrix_M = self.load_adjacency_matrix(adj_path_M, config.adj_thresh, config)
+            adj_matrix_F = self.load_adjacency_matrix(adj_path_F, config.adj_thresh, config)
             self.plot_adj_matrix(adj_matrix_M, os.path.join(
                 self.processed_dir,
                 f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg'
@@ -548,7 +551,7 @@ class FTDDataset(InMemoryDataset):
                 filtered_data_no_sex = filtered_data_for_adj.drop(columns=[sex_col])
                 calculate_adjacency_matrix(config, filtered_data_no_sex, save_to=adj_path)
         
-            adj_matrix = self.load_adjacency_matrix(adj_path, config.adj_thresh)
+            adj_matrix = self.load_adjacency_matrix(adj_path, config.adj_thresh, config)
             # Plot and save adjacency matrix as jpg
             self.plot_adj_matrix(adj_matrix, os.path.join(
                 self.processed_dir,
@@ -569,7 +572,7 @@ class FTDDataset(InMemoryDataset):
             adj_matrices,
         )
     
-    def load_adjacency_matrix(self, path, adj_thresh):
+    def load_adjacency_matrix(self, path, adj_thresh, config):
         """
         Load and threshold an adjacency matrix.
 
@@ -584,6 +587,7 @@ class FTDDataset(InMemoryDataset):
         adj_matrix = np.array(pd.read_csv(path, header=None)).astype(float)
         adj_matrix = torch.FloatTensor(np.where(adj_matrix > adj_thresh, 1, 0))  # Thresholding
         print("Adjacency matrix shape:", adj_matrix.shape)
+        assert adj_matrix.shape == (config.num_nodes, config.num_nodes), f"Unexpected shape: {adj_matrix.shape}"
         print("Number of edges:", adj_matrix.sum())
         return adj_matrix
 
@@ -635,7 +639,7 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     soft_threshold_result = wgcna.pickSoftThreshold(r_plasma_protein,corFnc ="bicor", networkType="signed")
     soft_threshold_power = soft_threshold_result.rx2('powerEstimate')[0]  # Extract the estimated power
     if config.modality == 'csf' and all(mut in config.mutation for mut in ["C9orf72", "MAPT", "GRN", "CTL"]):
-        soft_threshold_power = 10 #went over values w Rowan and selected this.
+        soft_threshold_power = 9 #went over values w Rowan and selected this.
     print(f"Soft threshold power: {soft_threshold_power}")
 
     # Call R's `adjacency` function using the chosen power and the desired correlation function (bicor)
@@ -664,7 +668,8 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
 
     # Save the adjacency matrix to the specified file path
     adjacency_df = pd.DataFrame(adjacency_matrix)
-    adjacency_df.to_csv(save_to, header=None, index=False)
+    with open(save_to, 'w') as f:
+        adjacency_df.to_csv(f, header=None, index=False)
     print(f"Adjacency matrix saved to: {save_to}")
 
 
