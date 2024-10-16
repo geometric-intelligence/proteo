@@ -1,4 +1,5 @@
 import os
+
 os.environ["RPY2_RINTERFACE_SIGINT"] = "FALSE"
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -132,7 +133,7 @@ class FTDDataset(InMemoryDataset):
         self.hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_histogram.jpg'
         self.orig_hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_orig_histogram.jpg'
 
-        super(FTDDataset, self).__init__(root)
+        super(FTDDataset, self).__init__(root, transform=None, pre_transform=None)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = LABEL_DIM_MAP[self.config.y_val]
 
@@ -169,10 +170,12 @@ class FTDDataset(InMemoryDataset):
         --------
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
-        return [
+        files= [
             f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train.pt",
             f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test.pt",
         ]
+        print("Processed file names:", files)
+        return files
 
     def create_graph_data(
         self,
@@ -212,7 +215,7 @@ class FTDDataset(InMemoryDataset):
             test_mutation,
             train_age,
             test_age,
-            adj_matrices  # This will be a list
+            adj_matrices,  # This will be a list
         ) = self.load_csv_data(self.config)
 
         train_data_list = []
@@ -224,14 +227,18 @@ class FTDDataset(InMemoryDataset):
             adj_matrix_M, adj_matrix_F = adj_matrices
 
             # Iterate through train data and assign the correct adjacency matrix based on sex
-            for feature, label, sex, mutation, age in zip(train_features, train_labels, train_sex, train_mutation, train_age):
+            for feature, label, sex, mutation, age in zip(
+                train_features, train_labels, train_sex, train_mutation, train_age
+            ):
                 # Choose male or female adjacency matrix based on sex label (assuming 1 = Male, 0 = Female)
                 adj_matrix = adj_matrix_M if sex.item() == 1 else adj_matrix_F
                 data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
                 train_data_list.append(data)
 
             # Iterate through test data and assign the correct adjacency matrix based on sex
-            for feature, label, sex, mutation, age in zip(test_features, test_labels, test_sex, test_mutation, test_age):
+            for feature, label, sex, mutation, age in zip(
+                test_features, test_labels, test_sex, test_mutation, test_age
+            ):
                 adj_matrix = adj_matrix_M if sex.item() == 1 else adj_matrix_F
                 data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
                 test_data_list.append(data)
@@ -241,12 +248,16 @@ class FTDDataset(InMemoryDataset):
             adj_matrix = adj_matrices[0]
 
             # Iterate through train data and use the single adjacency matrix
-            for feature, label, sex, mutation, age in zip(train_features, train_labels, train_sex, train_mutation, train_age):
+            for feature, label, sex, mutation, age in zip(
+                train_features, train_labels, train_sex, train_mutation, train_age
+            ):
                 data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
                 train_data_list.append(data)
 
             # Iterate through test data and use the single adjacency matrix
-            for feature, label, sex, mutation, age in zip(test_features, test_labels, test_sex, test_mutation, test_age):
+            for feature, label, sex, mutation, age in zip(
+                test_features, test_labels, test_sex, test_mutation, test_age
+            ):
                 data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
                 test_data_list.append(data)
 
@@ -406,16 +417,24 @@ class FTDDataset(InMemoryDataset):
         if config.sex_specific_adj:
             # Ensure that both "M" and "F" are present in config.sex if sex-specific adjacency is enabled
             if "M" not in config.sex or "F" not in config.sex:
-                raise ValueError("When `sex_specific_adj` is True, `config.sex` must contain both 'M' and 'F'.")
-        filtered_data_for_adj = filtered_data #don't remove values with nfl = NaN to find corr for adj matrix.
+                raise ValueError(
+                    "When `sex_specific_adj` is True, `config.sex` must contain both 'M' and 'F'."
+                )
+        filtered_data_for_adj = (
+            filtered_data  # don't remove values with nfl = NaN to find corr for adj matrix.
+        )
         # Extract the y_val values
         y_vals, y_val_mask = self.load_y_vals(filtered_data)
         filtered_data = filtered_data[y_val_mask]  # Remove rows where y_val is NaN
         # Extract the top proteins (features) for building datasets
         top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
-        top_protein_columns = sorted(top_protein_columns) #to ensure same ordering when using all proteins 
+        #top_protein_columns = sorted(
+        #    top_protein_columns
+        #)  # to ensure same ordering when using all proteins
         top_proteins = filtered_data[top_protein_columns]
-        filtered_data_for_adj = filtered_data_for_adj[top_protein_columns + [sex_col]] #keep sex for filtering later
+        filtered_data_for_adj = filtered_data_for_adj[
+            top_protein_columns + [sex_col]
+        ]  # keep sex for filtering later
 
         # Extract column labels for sex to understand explainer results
         filtered_sex_col = filtered_data[sex_col]
@@ -457,9 +476,13 @@ class FTDDataset(InMemoryDataset):
             master_node_dict = {
                 'sex': sex_labels.reshape(-1, 1),
                 'mutation': mutation_labels.reshape(-1, 1),
-                'age': filtered_age_col.values.reshape(-1, 1)
+                'age': filtered_age_col.values.reshape(-1, 1),
             }
-            master_node_features = [master_node_dict[feature] for feature in self.config.master_nodes if feature in master_node_dict]
+            master_node_features = [
+                master_node_dict[feature]
+                for feature in self.config.master_nodes
+                if feature in master_node_dict
+            ]
             if master_node_features:
                 master_node_features = np.concatenate(master_node_features, axis=1)
                 features = np.concatenate((features, master_node_features), axis=1)
@@ -515,31 +538,41 @@ class FTDDataset(InMemoryDataset):
         if config.sex_specific_adj:
             adj_path_M = os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.csv'
-                )
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.csv',
+            )
             adj_path_F = os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.csv'
+                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.csv',
             )
             if not os.path.exists(adj_path_M) or not os.path.exists(adj_path_F):
                 print("Sex-specific adjacency matrices do not exist. Calculating now...")
-                filtered_data_M = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "M"].drop(columns=[sex_col])
+                filtered_data_M = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "M"].drop(
+                    columns=[sex_col]
+                )
                 print("Length of filtered M:", len(filtered_data_M))
-                filtered_data_F = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "F"].drop(columns=[sex_col])
+                filtered_data_F = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "F"].drop(
+                    columns=[sex_col]
+                )
                 print("Length of filtered F:", len(filtered_data_F))
-                calculate_adjacency_matrix(config, filtered_data_M, save_to= adj_path_M)
-                calculate_adjacency_matrix(config, filtered_data_F, save_to= adj_path_F)
-            
+                calculate_adjacency_matrix(config, filtered_data_M, save_to=adj_path_M)
+                calculate_adjacency_matrix(config, filtered_data_F, save_to=adj_path_F)
+
             adj_matrix_M = self.load_adjacency_matrix(adj_path_M, config.adj_thresh, config)
             adj_matrix_F = self.load_adjacency_matrix(adj_path_F, config.adj_thresh, config)
-            self.plot_adj_matrix(adj_matrix_M, os.path.join(
-                self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg'
-                ))
-            self.plot_adj_matrix(adj_matrix_F, os.path.join(
-                self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg'
-            ))
+            self.plot_adj_matrix(
+                adj_matrix_M,
+                os.path.join(
+                    self.processed_dir,
+                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg',
+                ),
+            )
+            self.plot_adj_matrix(
+                adj_matrix_F,
+                os.path.join(
+                    self.processed_dir,
+                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg',
+                ),
+            )
             adj_matrices.extend([adj_matrix_M, adj_matrix_F])
         else:
             adj_path = os.path.join(
@@ -550,13 +583,16 @@ class FTDDataset(InMemoryDataset):
             if not os.path.exists(adj_path):
                 filtered_data_no_sex = filtered_data_for_adj.drop(columns=[sex_col])
                 calculate_adjacency_matrix(config, filtered_data_no_sex, save_to=adj_path)
-        
+
             adj_matrix = self.load_adjacency_matrix(adj_path, config.adj_thresh, config)
             # Plot and save adjacency matrix as jpg
-            self.plot_adj_matrix(adj_matrix, os.path.join(
-                self.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
-            ))
+            self.plot_adj_matrix(
+                adj_matrix,
+                os.path.join(
+                    self.processed_dir,
+                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
+                ),
+            )
             adj_matrices.append(adj_matrix)
         return (
             train_features,
@@ -571,7 +607,7 @@ class FTDDataset(InMemoryDataset):
             test_age,
             adj_matrices,
         )
-    
+
     def load_adjacency_matrix(self, path, adj_thresh, config):
         """
         Load and threshold an adjacency matrix.
@@ -587,7 +623,10 @@ class FTDDataset(InMemoryDataset):
         adj_matrix = np.array(pd.read_csv(path, header=None)).astype(float)
         adj_matrix = torch.FloatTensor(np.where(adj_matrix > adj_thresh, 1, 0))  # Thresholding
         print("Adjacency matrix shape:", adj_matrix.shape)
-        assert adj_matrix.shape == (config.num_nodes, config.num_nodes), f"Unexpected shape: {adj_matrix.shape}"
+        assert adj_matrix.shape == (
+            config.num_nodes,
+            config.num_nodes,
+        ), f"Unexpected shape: {adj_matrix.shape}"
         print("Number of edges:", adj_matrix.sum())
         return adj_matrix
 
@@ -620,9 +659,11 @@ def remove_erroneous_columns(config, csv_data, raw_dir):
 
 def calculate_adjacency_matrix(config, plasma_protein, save_to):
     import rpy2.robjects as ro
-    from rpy2.robjects import pandas2ri, r
-    from rpy2.robjects.packages import importr
+    from rpy2.robjects import pandas2ri
+    from rpy2.robjects import r
     from rpy2.robjects import r as R
+    from rpy2.robjects.packages import importr
+
     pandas2ri.activate()
     wgcna = importr('WGCNA')
     """Calculate and save adjacency matrix using R's WGCNA."""
@@ -636,18 +677,24 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     r_plasma_protein = pandas2ri.py2rpy(plasma_protein_df)
 
     # Call R's `pickSoftThreshold` function to determine the soft thresholding power
-    soft_threshold_result = wgcna.pickSoftThreshold(r_plasma_protein,corFnc ="bicor", networkType="signed")
-    soft_threshold_power = soft_threshold_result.rx2('powerEstimate')[0]  # Extract the estimated power
-    if config.modality == 'csf' and all(mut in config.mutation for mut in ["C9orf72", "MAPT", "GRN", "CTL"]):
-        soft_threshold_power = 9 #went over values w Rowan and selected this.
+    soft_threshold_result = wgcna.pickSoftThreshold(
+        r_plasma_protein, corFnc="bicor", networkType="signed"
+    )
+    soft_threshold_power = soft_threshold_result.rx2('powerEstimate')[
+        0
+    ]  # Extract the estimated power
+    if config.modality == 'csf' and all(
+        mut in config.mutation for mut in ["C9orf72", "MAPT", "GRN", "CTL"]
+    ):
+        soft_threshold_power = 9  # went over values w Rowan and selected this.
     print(f"Soft threshold power: {soft_threshold_power}")
 
     # Call R's `adjacency` function using the chosen power and the desired correlation function (bicor)
     adjacency_matrix_r = wgcna.adjacency(
-        r_plasma_protein, 
-        power=soft_threshold_power, 
+        r_plasma_protein,
+        power=soft_threshold_power,
         type="signed",  # Specify network type
-        corFnc="bicor"         # Use biweight midcorrelation
+        corFnc="bicor",  # Use biweight midcorrelation
     )
 
     # Convert the resulting adjacency matrix from R back to a NumPy array

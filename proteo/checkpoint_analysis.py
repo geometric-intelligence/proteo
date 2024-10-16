@@ -108,6 +108,7 @@ def load_model_and_predict(module, config, device='cuda'):
     module.to(device)
     module.eval()
     # pl.seed_everything(config.seed)
+    print(config)
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     train_loader, test_loader = construct_loaders_eval(config, train_dataset, test_dataset)
     # Get predictions and targets for the training set
@@ -155,8 +156,8 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
     train_preds, train_targets, train_mse, val_preds, val_targets, val_mse = load_model_and_predict(
         module, config, device
     )
-    print("Train Preds:")
-    print(train_preds)
+    #print("Train Preds:")
+    #print(train_preds)
     train_preds = reverse_log_transform(train_preds, mean, std)
     train_targets = reverse_log_transform(train_targets, mean, std)
     train_mse = F.mse_loss(train_preds, train_targets)
@@ -165,7 +166,7 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
     val_targets = reverse_log_transform(val_targets, mean, std)
     val_mse = F.mse_loss(val_preds, val_targets)
     val_rmse = torch.sqrt(val_mse)
-    print(val_preds.view(-1).detach().cpu().numpy())
+    #print(val_preds.view(-1).detach().cpu().numpy())
     val_z_scores = zscore(
         val_preds.view(-1).detach().cpu().numpy() - val_targets.view(-1).detach().cpu().numpy(),
         ddof=1,
@@ -255,7 +256,7 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
     train_targets = reverse_log_transform(train_targets, mean, std)
     val_preds = reverse_log_transform(val_preds, mean, std)
     val_targets = reverse_log_transform(val_targets, mean, std)'''
-    
+
     # Get the group labels for the training and validation sets
     (
         train_sex_labels,
@@ -278,10 +279,7 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
             subgroup_name = f"{sex}_{mutation}"
 
             # Create mask for current subgroup
-            train_mask = (
-                (train_sex_labels == sex) & 
-                (train_mutation_labels == mutation)
-            )
+            train_mask = (train_sex_labels == sex) & (train_mutation_labels == mutation)
             train_mask = torch.tensor(train_mask.values, dtype=torch.bool)
 
             # Filter predictions and targets based on mask
@@ -296,10 +294,7 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
             else:
                 train_rmse_results[subgroup_name] = "No samples in subgroup"
 
-            val_mask = (
-                (test_sex_labels == sex) & 
-                (test_mutation_labels == mutation)
-            )
+            val_mask = (test_sex_labels == sex) & (test_mutation_labels == mutation)
             val_mask = torch.tensor(val_mask.values, dtype=torch.bool)
 
             # Filter predictions and targets based on mask
@@ -320,8 +315,16 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # Best run passing in sex, mutation and age before encoder
-    train_rmse_results_personalized_m, val_rmse_results_personalized_m = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006', device, 10,10)
-    
+    (
+        train_rmse_results_personalized_m,
+        val_rmse_results_personalized_m,
+    ) = predict_for_subgroups_with_labels(
+        '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006',
+        device,
+        10,
+        10,
+    )
+
     (
         train_rmse_results_personalized_f,
         val_rmse_results_personalized_f,
@@ -333,15 +336,20 @@ def main():
     )
     print("Train RMSE Results Personalized:")
     print(train_rmse_results_personalized_f)
-    #print("Val RMSE Results Personalized:")
-    #print(val_rmse_results_personalized_f)
+    # print("Val RMSE Results Personalized:")
+    # print(val_rmse_results_personalized_f)
 
-    train_rmse_results_personalized_m, val_rmse_results_personalized_m = predict_for_subgroups_with_labels('/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006', device, 2.124088581365514, 0.8733420033790319,)
+    (
+        train_rmse_results_personalized_m,
+        val_rmse_results_personalized_m,
+    ) = predict_for_subgroups_with_labels(
+        '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006',
+        device,
+        2.124088581365514,
+        0.8733420033790319,
+    )
     print("Train RMSE Results Personalized_m:")
     print(train_rmse_results_personalized_m)
-
-
-
 
     train_rmse_results, val_rmse_results = predict_for_subgroups_with_labels(
         '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-15_10-15-54/model=gat-v4,seed=4565_459_act=elu,adj_thresh=0.7000,batch_size=32,dropout=0,l1_lambda=0.0644,lr=0.0000,lr_scheduler=ReduceLROnPla_2024-08-15_12-16-06/checkpoint_000000',
@@ -351,8 +359,8 @@ def main():
     )
     print("Train RMSE Results Not personalized:")
     print(train_rmse_results)
-    #print("Val RMSE Results Not personalized:")
-    #print(val_rmse_results)
+    # print("Val RMSE Results Not personalized:")
+    # print(val_rmse_results)
     loss_difference_val_f = {
         key: (
             val_rmse_results[key][0].item() - val_rmse_results_personalized_f[key][0].item()
@@ -362,8 +370,8 @@ def main():
         )
         for key in train_rmse_results
     }
-    #print("Loss Difference Val:")
-    #print(loss_difference_val_f)
+    # print("Loss Difference Val:")
+    # print(loss_difference_val_f)
     loss_difference_train_f = {
         key: (
             train_rmse_results[key][0].item() - train_rmse_results_personalized_f[key][0].item()
@@ -387,7 +395,6 @@ def main():
     }
     print("Loss Difference Train for master nodes:")
     print(loss_difference_train_m)
-
 
 
 if __name__ == "__main__":

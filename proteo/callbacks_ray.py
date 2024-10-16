@@ -1,3 +1,4 @@
+import gc
 import math
 import os
 import shutil
@@ -5,7 +6,6 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
-import gc
 import torch
 import torch.nn.functional as F
 import wandb

@@ -349,11 +349,25 @@ def compute_focal_loss_weight(config, test_dataset, train_dataset):
 
 
 def construct_datasets(config):
-    # Load the datasets, which are InMemoryDataset objects
     root = config.data_dir
     print(f"Loading datasets from {root}")
-    train_dataset = FTDDataset(root, "train", config)
-    test_dataset = FTDDataset(root, "test", config)
+    print(f"Absolute path: {os.path.abspath(root)}")
+    print(f"Directory contents: {os.listdir(root)}")
+    
+    try:
+        train_dataset = FTDDataset(root, "train", config)
+        print("Train dataset loaded successfully")
+    except Exception as e:
+        print(f"Error loading train dataset: {str(e)}")
+        raise
+    
+    try:
+        test_dataset = FTDDataset(root, "test", config)
+        print("Test dataset loaded successfully")
+    except Exception as e:
+        print(f"Error loading test dataset: {str(e)}")
+        raise
+    
     return train_dataset, test_dataset
 
 
@@ -453,8 +467,8 @@ def main():
 
     output_dir = config.output_dir
     os.makedirs(output_dir, exist_ok=True)
-    
-    #os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.devices))
+
+    # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, config.devices))
 
     train_dataset, test_dataset = construct_datasets(config)
     train_loader, test_loader = construct_loaders(config, train_dataset, test_dataset)
@@ -487,16 +501,18 @@ def main():
     # Check if sex-specific adjacency is enabled
     if config.sex_specific_adj:
         # Load both male and female adjacency images
-        images_to_log.extend([
-            os.path.join(
-                train_dataset.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg'
-            ),
-            os.path.join(
-                train_dataset.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg'
-            ),
-        ])
+        images_to_log.extend(
+            [
+                os.path.join(
+                    train_dataset.processed_dir,
+                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg',
+                ),
+                os.path.join(
+                    train_dataset.processed_dir,
+                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg',
+                ),
+            ]
+        )
     else:
         # Load the single adjacency image if sex-specific adjacency is not enabled
         images_to_log.append(

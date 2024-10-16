@@ -48,6 +48,7 @@ focal-loss-torch = "^0.1.2"
 ucimlrepo = "^0.0.7"
 config_utils = "^0.3"
 pingouin = "^0.5.5"
+plotly = "^5.24.1"
 
 
 [[tool.poetry.source]]

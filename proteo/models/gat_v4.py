@@ -68,7 +68,7 @@ class CustomGATConv(GATv2Conv):
 
         # Initialize the attention coefficient
         self.weight_init(self.att)
-        
+
         # Initialize the bias if it exists.
         if self.bias is not None:
             nn.init.zeros_(self.bias)
@@ -81,6 +81,7 @@ class CustomGATConv(GATv2Conv):
         # Re-apply custom initialization after reset
         if self.weight_init is not None:
             self.apply_custom_initializers()
+
 
 class GATv4(nn.Module):
     ACT_MAP = {
@@ -158,9 +159,10 @@ class GATv4(nn.Module):
         self.feature_encoders = {
             'sex': self.sex_encoder,
             'mutation': self.mutation_encoder,
-            'age': lambda x: self.age_encoder(x.view(-1, 1))  # Use a lambda function to reshape age appropriately
+            'age': lambda x: self.age_encoder(
+                x.view(-1, 1)
+            ),  # Use a lambda function to reshape age appropriately
         }
-
 
         # Initialize weights
         self.reset_parameters()
@@ -171,7 +173,7 @@ class GATv4(nn.Module):
             self.convs.append(
                 CustomGATConv(
                     in_channels=input_dim,
-                    out_channels=hidden_dim, #dim of each node at the end
+                    out_channels=hidden_dim,  # dim of each node at the end
                     heads=num_heads,
                     dropout=self.dropout,
                     concat=True,
@@ -275,9 +277,11 @@ class GATv4(nn.Module):
 
         for feature, encoder in self.feature_encoders.items():
             if feature in self.which_layer:
-                feature_value = locals().get(feature)  # Get the value of the feature (e.g., sex, mutation, age)
+                feature_value = locals().get(
+                    feature
+                )  # Get the value of the feature (e.g., sex, mutation, age)
                 encoded_features.append(encoder(feature_value))
-        
+
         if encoded_features:
             demographic_features = torch.cat(encoded_features, dim=1)
             # Concatenate demographic features with multiscale features

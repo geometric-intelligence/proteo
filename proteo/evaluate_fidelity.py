@@ -2,6 +2,7 @@ import os
 import re
 from collections import Counter, defaultdict
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import train as proteo_train
@@ -9,7 +10,6 @@ from checkpoint_analysis import get_sex_mutation_age_distribution
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer
 from torch_geometric.explain.config import ExplanationType, ModelMode
 from torch_geometric.loader import DataLoader
-import matplotlib.pyplot as plt
 
 
 ############### METRICS ################
@@ -45,7 +45,7 @@ def fidelity(explainer, explanation):
     edge_mask = explanation.get('edge_mask')
     kwargs = {key: explanation[key] for key in explanation._model_args}
 
-    y = explanation.target #these are the preds from the model
+    y = explanation.target  # these are the preds from the model
 
     explain_y_hat = explainer.get_masked_prediction(
         explanation.x,
@@ -78,7 +78,7 @@ def fidelity(explainer, explanation):
         # You want pos_fidelity to be as high as possible, big difference between complement_y_hat and y when you remove the subgraph
         pos_fidelity = torch.nn.functional.mse_loss(complement_y_hat, y)
         # You want neg_fidelity to be as low as possible
-        neg_fidelity = 1/torch.nn.functional.mse_loss(explain_y_hat, y)
+        neg_fidelity = 1 / torch.nn.functional.mse_loss(explain_y_hat, y)
 
     return float(pos_fidelity), float(neg_fidelity), y
 
@@ -186,7 +186,7 @@ def run_explainer_fidelity_single_dataset(dataset, explainer):
         np.array(all_fidelity_plus),
         np.array(all_fidelity_minus),
         np.array(all_characterization_scores),
-        np.array(all_y_preds)
+        np.array(all_y_preds),
     )
 
 
@@ -197,14 +197,15 @@ def compute_subgroup_metrics(mask, fidelity_plus, fidelity_minus, y_true, y_pred
     y = y_true[mask]
     y_preds = y_preds[mask]
     squared_error = (y - y_preds) ** 2
-    
+
     mse = np.mean(squared_error) if len(y) > 0 else float('nan')
     return fid_plus, fid_minus, squared_error, mse
+
 
 def fidelity_per_subgroup_train_and_test(checkpoint_path):
     module = load_checkpoint(checkpoint_path)
     config = load_config(module)
-    
+
     # Load datasets
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
 
@@ -221,13 +222,13 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
         explanation_type='model',
         model_config=dict(
             mode='regression',
-            task_level='graph',  
+            task_level='graph',
             return_type='raw',
         ),
         node_mask_type='attributes',
         edge_mask_type=None,
         threshold_config=dict(
-            threshold_type='hard', 
+            threshold_type='hard',
             value=0.1,
         ),
     )
@@ -237,13 +238,13 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
         train_fidelity_plus,
         train_fidelity_minus,
         train_characterization_scores,
-        train_y_preds
+        train_y_preds,
     ) = run_explainer_fidelity_single_dataset(train_dataset, explainer)
     (
         test_fidelity_plus,
         test_fidelity_minus,
         test_characterization_scores,
-        test_y_preds
+        test_y_preds,
     ) = run_explainer_fidelity_single_dataset(test_dataset, explainer)
 
     # Define subgroups
@@ -259,10 +260,14 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
         _,  # Removing age labels
         _,
     ) = get_sex_mutation_age_distribution(config)
-    
+
     # Simplify mutation labels
-    train_mutation_labels = np.where(np.isin(train_mutation_labels, ["C9orf72", "MAPT", "GRN"]), "Carrier", train_mutation_labels)
-    test_mutation_labels = np.where(np.isin(test_mutation_labels, ["C9orf72", "MAPT", "GRN"]), "Carrier", test_mutation_labels)
+    train_mutation_labels = np.where(
+        np.isin(train_mutation_labels, ["C9orf72", "MAPT", "GRN"]), "Carrier", train_mutation_labels
+    )
+    test_mutation_labels = np.where(
+        np.isin(test_mutation_labels, ["C9orf72", "MAPT", "GRN"]), "Carrier", test_mutation_labels
+    )
 
     train_fidelity_results = {}
     test_fidelity_results = {}
@@ -276,7 +281,12 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
             test_mask = (test_sex_labels == sex) & (test_mutation_labels == mutation)
 
             # Compute metrics for training and testing subgroups
-            train_fid_plus, train_fid_minus, train_squared_error, train_mse = compute_subgroup_metrics(
+            (
+                train_fid_plus,
+                train_fid_minus,
+                train_squared_error,
+                train_mse,
+            ) = compute_subgroup_metrics(
                 train_mask, train_fidelity_plus, train_fidelity_minus, train_y, train_y_preds
             )
             test_fid_plus, test_fid_minus, test_squared_error, test_mse = compute_subgroup_metrics(
@@ -285,26 +295,35 @@ def fidelity_per_subgroup_train_and_test(checkpoint_path):
 
             # Store results
             train_fidelity_results[subgroup_name] = (
-                np.sum(train_mask),
-                np.mean(train_fid_plus),
-                train_fid_plus,
-                np.mean(train_fid_minus),
-                train_fid_minus,
-                train_mse,
-                train_squared_error
-            ) if len(train_fid_plus) > 0 else "No samples in subgroup"
+                (
+                    np.sum(train_mask),
+                    np.mean(train_fid_plus),
+                    train_fid_plus,
+                    np.mean(train_fid_minus),
+                    train_fid_minus,
+                    train_mse,
+                    train_squared_error,
+                )
+                if len(train_fid_plus) > 0
+                else "No samples in subgroup"
+            )
 
             test_fidelity_results[subgroup_name] = (
-                np.sum(test_mask),
-                np.mean(test_fid_plus),
-                test_fid_plus,
-                np.mean(test_fid_minus),
-                test_fid_minus,
-                test_mse,
-                test_squared_error
-            ) if len(test_fid_plus) > 0 else "No samples in subgroup"
+                (
+                    np.sum(test_mask),
+                    np.mean(test_fid_plus),
+                    test_fid_plus,
+                    np.mean(test_fid_minus),
+                    test_fid_minus,
+                    test_mse,
+                    test_squared_error,
+                )
+                if len(test_fid_plus) > 0
+                else "No samples in subgroup"
+            )
 
     return train_fidelity_results, test_fidelity_results
+
 
 def plot_histogram(ax, data, title, xlabel, color, std_value):
     """Helper function to plot histograms and annotate standard deviations."""
@@ -314,23 +333,33 @@ def plot_histogram(ax, data, title, xlabel, color, std_value):
     ax.set_ylabel('Frequency')
     ax.text(0.8, 0.9, f'Std: {std_value:.2f}', transform=ax.transAxes)
 
-def plot_difference_histograms(train_fidelity_results_personalized, train_fidelity_results_non_personalized):
+
+def plot_difference_histograms(
+    train_fidelity_results_personalized, train_fidelity_results_non_personalized
+):
     # Create a new figure
-    fig, axes = plt.subplots(len(train_fidelity_results_personalized), 3, figsize=(18, 8 * len(train_fidelity_results_personalized)))
-    
+    fig, axes = plt.subplots(
+        len(train_fidelity_results_personalized),
+        3,
+        figsize=(18, 8 * len(train_fidelity_results_personalized)),
+    )
+
     # Iterate through the subgroups to plot histograms of the differences
     for idx, key in enumerate(train_fidelity_results_personalized):
-        if train_fidelity_results_personalized[key] != "No samples in subgroup" and train_fidelity_results_non_personalized[key] != "No samples in subgroup":
+        if (
+            train_fidelity_results_personalized[key] != "No samples in subgroup"
+            and train_fidelity_results_non_personalized[key] != "No samples in subgroup"
+        ):
             # Extract the arrays from both results
             personalized_fid_plus = train_fidelity_results_personalized[key][2]
             non_personalized_fid_plus = train_fidelity_results_non_personalized[key][2]
-            
+
             personalized_fid_minus = train_fidelity_results_personalized[key][4]
             non_personalized_fid_minus = train_fidelity_results_non_personalized[key][4]
-            
+
             personalized_squared_error = train_fidelity_results_personalized[key][6]
             non_personalized_squared_error = train_fidelity_results_non_personalized[key][6]
-            
+
             # Compute the element-wise differences
             fid_plus_diff = non_personalized_fid_plus - personalized_fid_plus
             fid_minus_diff = non_personalized_fid_minus - personalized_fid_minus
@@ -355,25 +384,47 @@ def plot_difference_histograms(train_fidelity_results_personalized, train_fideli
             row = idx
 
             # Incomprehensiveness Difference Histogram
-            plot_histogram(axes[row, 0], fid_plus_diff, f'{key} Incomprehensiveness Difference', 'Difference', f'C{row}', std_fid_plus_diff)
+            plot_histogram(
+                axes[row, 0],
+                fid_plus_diff,
+                f'{key} Incomprehensiveness Difference',
+                'Difference',
+                f'C{row}',
+                std_fid_plus_diff,
+            )
 
             # Sufficiency Difference Histogram
-            plot_histogram(axes[row, 1], fid_minus_diff, f'{key} Sufficiency Difference', 'Difference', f'C{row}', std_fid_minus_diff)
+            plot_histogram(
+                axes[row, 1],
+                fid_minus_diff,
+                f'{key} Sufficiency Difference',
+                'Difference',
+                f'C{row}',
+                std_fid_minus_diff,
+            )
 
             # Squared Error Difference Histogram
-            plot_histogram(axes[row, 2], squared_error_diff, f'{key} Squared Error Difference', 'Difference', f'C{row}', std_squared_error_diff)
+            plot_histogram(
+                axes[row, 2],
+                squared_error_diff,
+                f'{key} Squared Error Difference',
+                'Difference',
+                f'C{row}',
+                std_squared_error_diff,
+            )
 
     plt.tight_layout()
     plt.savefig("differences_histograms_with_std.png")
     plt.show()
 
-    
+
 def main():
     # Load and compute fidelity for personalized model
     checkpoint_path_personalized = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-08-23_13-20-08/model=gat-v4,seed=44609_31_act=relu,adj_thresh=0.9000,batch_size=50,dropout=0,l1_lambda=0.0104,lr=0.0034,lr_scheduler=ReduceLROnPl_2024-08-23_13-20-08/checkpoint_000006'
-    train_fidelity_results_personalized, test_fidelity_results_personalized = fidelity_per_subgroup_train_and_test(
-        checkpoint_path_personalized
-    )
+    (
+        train_fidelity_results_personalized,
+        test_fidelity_results_personalized,
+    ) = fidelity_per_subgroup_train_and_test(checkpoint_path_personalized)
 
     # Load and compute fidelity for non-personalized model
     checkpoint_path_non_personalized = '/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-09-26_14-59-55/model=gat-v4,seed=32248_160_act=elu,adj_thresh=0.5000,batch_size=50,dropout=0.0500,l1_lambda=0.0001,lr=0.0017,lr_scheduler=CosineA_2024-09-26_14-59-56/checkpoint_000047'
@@ -384,12 +435,19 @@ def main():
     # Compute the differences between the personalized and non-personalized test results
     test_fidelity_differences = {}
     for key in test_fidelity_results_personalized:
-        if key in test_fidelity_results and test_fidelity_results_personalized[key] != "No samples in subgroup" and test_fidelity_results[key] != "No samples in subgroup":
+        if (
+            key in test_fidelity_results
+            and test_fidelity_results_personalized[key] != "No samples in subgroup"
+            and test_fidelity_results[key] != "No samples in subgroup"
+        ):
             # Subtract element-wise for fidelity_plus, fidelity_minus, and squared_error
             test_fidelity_differences[key] = {
-                'fidelity_plus_diff': test_fidelity_results[key][1] - test_fidelity_results_personalized[key][1],
-                'fidelity_minus_diff': test_fidelity_results[key][3] - test_fidelity_results_personalized[key][3],
-                'squared_error_diff': test_fidelity_results[key][5] - test_fidelity_results_personalized[key][5]
+                'fidelity_plus_diff': test_fidelity_results[key][1]
+                - test_fidelity_results_personalized[key][1],
+                'fidelity_minus_diff': test_fidelity_results[key][3]
+                - test_fidelity_results_personalized[key][3],
+                'squared_error_diff': test_fidelity_results[key][5]
+                - test_fidelity_results_personalized[key][5],
             }
 
     print("Differences between personalized and non-personalized test sets:")
@@ -398,6 +456,6 @@ def main():
     # Plot the differences
     plot_difference_histograms(train_fidelity_results_personalized, train_fidelity_results)
 
-    
+
 if __name__ == "__main__":
     main()
