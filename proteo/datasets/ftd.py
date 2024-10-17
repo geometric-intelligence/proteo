@@ -9,6 +9,7 @@ import PyWGCNA
 import torch
 from scipy.stats import chi2_contingency, kendalltau, ks_2samp, ttest_ind
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data, InMemoryDataset
 
@@ -509,6 +510,12 @@ class FTDDataset(InMemoryDataset):
             test_size=0.20,
             random_state=42,
         )
+        scaler = StandardScaler()
+        train_features = scaler.fit_transform(train_features)
+        test_features = scaler.transform(test_features) 
+        train_age = scaler.fit_transform(train_age.values.reshape(-1, 1)).reshape(-1)
+        test_age = scaler.transform(test_age.values.reshape(-1, 1)).reshape(-1)
+
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
         train_labels = torch.FloatTensor(train_labels)
@@ -517,8 +524,8 @@ class FTDDataset(InMemoryDataset):
         test_sex = torch.IntTensor(test_sex)
         train_mutation = torch.IntTensor(train_mutation)
         test_mutation = torch.IntTensor(test_mutation)
-        train_age = torch.FloatTensor(train_age.values)
-        test_age = torch.FloatTensor(test_age.values)
+        train_age = torch.FloatTensor(train_age)
+        test_age = torch.FloatTensor(test_age)
         print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
         print("--> Total features and labels:", features.shape, labels.shape)
