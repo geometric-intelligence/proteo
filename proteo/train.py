@@ -141,11 +141,14 @@ class Proteo(pl.LightningModule):
                 act=self.config.act,
             )
         elif config.model == "mlp":
+            dropout = self.config.dropout
+            dropout = [dropout] * (len(self.config_model.channel_list) - 1) #repeat same dropout for all layers
             self.model = MLP(
                 channel_list = self.config_model.channel_list,
-                dropout = self.config.dropout,
+                dropout = dropout,
                 act=self.config.act,
-                norm = self.config_model.norm
+                norm = self.config_model.norm,
+                plain_last = self.config_model.plain_last
             )
         else:
             raise NotImplementedError('Model not implemented yet')
@@ -177,6 +180,12 @@ class Proteo(pl.LightningModule):
             pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
             return global_mean_pool(pred_nodes, batch.batch)
         if self.config.model == 'mlp':
+            if self.config.use_master_nodes:
+                input_dim = self.config.num_nodes + len(self.config.master_nodes)
+            else:
+                input_dim = self.config.num_nodes
+            batch_size = batch.x.shape[0]//input_dim
+            batch.x = batch.x.view(batch_size, input_dim)
             return self.model(batch.x)
         raise NotImplementedError('Model not implemented yet')
 

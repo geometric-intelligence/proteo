@@ -257,6 +257,7 @@ def main():
             'gat-v4': [None],  # Unused. Here for compatibility.
             'gat': config.gat_num_layers,
             'gcn': config.gcn_num_layers,
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(num_layers_map[model])
@@ -266,6 +267,7 @@ def main():
             'gat-v4': config.gat_v4_hidden_channels,
             'gat': config.gat_hidden_channels,
             'gcn': config.gcn_hidden_channels,
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(hidden_channels_map[model])
@@ -275,6 +277,7 @@ def main():
             'gat-v4': config.gat_v4_heads,
             'gat': config.gat_heads,
             'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(heads_map[model])
@@ -284,6 +287,7 @@ def main():
             'gat-v4': config.gat_v4_fc_dim,
             'gat': [None],  # Unused. Here for compatibility.
             'gcn': [None],
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(fc_dim_map[model])
@@ -293,6 +297,7 @@ def main():
             'gat-v4': config.gat_v4_fc_dropout,
             'gat': [None],  # Unused. Here for compatibility.
             'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(fc_dropout_map[model])
@@ -302,6 +307,7 @@ def main():
             'gat-v4': config.gat_v4_fc_act,
             'gat': [None],  # Unused. Here for compatibility.
             'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(fc_act_map[model])
@@ -311,9 +317,40 @@ def main():
             'gat-v4': config.gat_v4_weight_initializer,
             'gat': [None],  # Unused. Here for compatibility.
             'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': [None]
         }
         model = trial_config['train_loop_config']['model']
         return random.choice(weight_initializer_map[model])
+    
+    def channel_list(trial_config):
+        channel_list_map = {
+            'gat-v4':[None],
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': config.mlp_channel_lists,
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(channel_list_map[model])
+    
+    def norm(trial_config):
+        norm_map = {
+            'gat-v4':[None],
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': config.mlp_norms,
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(norm_map[model])
+    
+    def plain_last(trial_config):
+        plain_last_map = {
+            'gat-v4':[None],
+            'gat': [None],  # Unused. Here for compatibility.
+            'gcn': [None],  # Unused. Here for compatibility.
+            'mlp': config.mlp_plain_last,
+        }
+        model = trial_config['train_loop_config']['model']
+        return random.choice(plain_last_map[model])   
 
     def trial_str_creator(trial):
         train_loop_config = trial.config['train_loop_config']
@@ -331,6 +368,9 @@ def main():
         'fc_dropout': tune.sample_from(fc_dropout),
         'fc_act': tune.sample_from(fc_act),
         'weight_initializer': tune.sample_from(weight_initializer),
+        'channel_list': tune.sample_from(channel_list),
+        'norm': tune.sample_from(norm),
+        'plain_last': tune.sample_from(plain_last),
         # Shared parameters
         'seed': tune.randint(0, MAX_SEED),
         'lr': tune.loguniform(config.lr_min, config.lr_max),
@@ -368,7 +408,6 @@ def main():
     results.get_dataframe(filter_metric="val_loss", filter_mode="min").to_csv(
         'ray_results_search_hyperparameters.csv'
     )
-
 
 if __name__ == '__main__':
     main()

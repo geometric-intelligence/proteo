@@ -132,6 +132,7 @@ class GATv4(nn.Module):
         # Conditionally define fc_input_dim based on config.use_master_nodes
         if use_master_nodes:
             self.fc_input_dim = (num_nodes + len(master_nodes)) * len(which_layer)
+            print("INPUT DIM", self.fc_input_dim)
         else:
             self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]

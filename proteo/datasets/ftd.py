@@ -630,10 +630,12 @@ class FTDDataset(InMemoryDataset):
         adj_matrix = np.array(pd.read_csv(path, header=None)).astype(float)
         adj_matrix = torch.FloatTensor(np.where(adj_matrix > adj_thresh, 1, 0))  # Thresholding
         print("Adjacency matrix shape:", adj_matrix.shape)
-        assert adj_matrix.shape == (
-            config.num_nodes,
-            config.num_nodes,
-        ), f"Unexpected shape: {adj_matrix.shape}"
+        expected_shape = (
+            config.num_nodes + len(config.master_nodes) if config.use_master_nodes else config.num_nodes,
+            config.num_nodes + len(config.master_nodes) if config.use_master_nodes else config.num_nodes,
+        )
+        # Assert the shape matches the expected shape
+        assert adj_matrix.shape == expected_shape, f"Unexpected shape: {adj_matrix.shape}. Expected shape: {expected_shape}"
         print("Number of edges:", adj_matrix.sum())
         return adj_matrix
 
