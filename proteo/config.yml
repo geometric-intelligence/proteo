@@ -79,6 +79,9 @@ gcn:
   num_layers: 3
   hidden_channels: 32
 
+mlp:
+  channel_list: [7258, 32, 64, 128, 1]
+  norm: 'batch_norm'
 
 # Training
 batch_size: 8 #for one off training
@@ -121,7 +124,7 @@ model_grid_search: ['gat-v4']
 # Choices
 batch_size_choices: [8, 16, 32, 50]  # note: 352 train and 89 val --> 3 val batch for bs = 32
 lr_scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
-dropout_choices: [0, 0.05, 0.1, 0.2, 0.3]
+dropout_choices: [0, 0.05, 0.1, 0.2, 0.3, 0.5]
 l1_lambda_min: 0.00001
 l1_lambda_max: 0.1
 act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
@@ -147,3 +150,6 @@ gat_heads: [1, 2, 4, 8]
 # GCN
 gcn_num_layers: [2, 3, 4]  # only for GAT and GCN
 gcn_hidden_channels: [8, 32, 128]
+#MLP:
+mlp_channel_lists: [[]]
+mlp_norms: 

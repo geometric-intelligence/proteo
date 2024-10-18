@@ -43,6 +43,7 @@ from torch.optim.lr_scheduler import (
 )
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
+from torch_geometric.nn.models import MLP
 
 import proteo.callbacks as proteo_callbacks
 from proteo.datasets.ftd import (
@@ -139,6 +140,13 @@ class Proteo(pl.LightningModule):
                 dropout=self.config.dropout,
                 act=self.config.act,
             )
+        elif config.model == "mlp":
+            self.model = MLP(
+                channel_list = self.config_model.channel_list,
+                dropout = self.config.dropout,
+                act=self.config.act,
+                norm = self.config_model.norm
+            )
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -168,6 +176,8 @@ class Proteo(pl.LightningModule):
         if self.config.model == 'gcn':
             pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
             return global_mean_pool(pred_nodes, batch.batch)
+        if self.config.model == 'mlp':
+            return self.model(batch.x)
         raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
