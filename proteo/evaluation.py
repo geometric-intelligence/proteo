@@ -84,11 +84,13 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
     all_labels = []
     all_explanations = []
     all_top_proteins = []
-    i = 0
-    for data in dataset:
+    
+    for i, data in enumerate(dataset):
         # Ensure data.x and data.edge_index are tensors
         if not isinstance(data.x, torch.Tensor) or not isinstance(data.edge_index, torch.Tensor):
             raise TypeError("data.x and data.edge_index must be torch.Tensor")
+
+        # Get the explanation
         explanation = explainer(
             data.x,
             data.edge_index,
@@ -96,32 +98,42 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
             target=None,
             index=None
         )
-        # Node_importance is of format [[0], [0],[0],...,[.5]] with length equal to the number of nodes
+
+        # Node importance is of format [[0], [0],[0],...,[.5]] with length equal to the number of nodes
         node_importance = explanation.node_mask.cpu().detach().numpy()
-        # Construct large list of all node_importance explanations to run pca
-        # Convert to a flat array
-        flat_node_importance = np.array(node_importance).flatten()
+        flat_node_importance = node_importance.flatten()
+
+        # Calculate the total importance per person and the importance as percentage
+        total_importance = np.sum(np.abs(flat_node_importance))
+        importance_percentages = (np.abs(flat_node_importance) / total_importance) * 100
+
         all_explanations.append(flat_node_importance)
-        #Note: this is not going to show the same proteins, it will just show them sorted for all people
-        sorted_indices = np.argsort(node_importance[:, 0])[::-1] #Get indices for sorting
-        # Get the top 5 indices
+
+        # Sort indices by raw importance
+        sorted_indices = np.argsort(node_importance[:, 0])[::-1]
+
+        # Get the top 5 indices and corresponding protein IDs
         top_5_indices = sorted_indices[:5]
-        # Extract the corresponding protein IDs
         top_5_proteins = [protein_ids[index] for index in top_5_indices]
+
+        # Store the top proteins for each person
         top_proteins = [protein_ids[index] for index in sorted_indices]
         all_top_proteins.append(top_proteins)
-        plt.plot(sorted(node_importance, reverse=True), label='Node Importance')
-        # Create a legend with the top 5 protein IDs
+
+        # Plot the raw importance scores for each person
+        plt.plot(sorted(flat_node_importance, reverse=True), label=f'Raw Importance for Person {i}')
+
+        # Add top 5 protein information to the legend
         all_labels.append(f'Top 5 Proteins for person {i}: {", ".join(top_5_proteins)}')
-        plt.tight_layout(rect=[0, 0, 0.85, 1]) 
 
         # Find row indices of non-zero elements in node_importance
         indv_important_proteins_indices = np.nonzero(node_importance)[0]
+
         # Get the protein names of the important proteins
         indv_important_proteins = protein_ids[indv_important_proteins_indices]
         
         # Append the important proteins to the list of all important proteins
-        all_proteins.append(indv_important_proteins) #array holding all the important proteins for each person
+        all_proteins.append(indv_important_proteins)
 
         # Update sum_node_importance dictionary using protein_ids as keys
         for idx, importance in enumerate(node_importance):
@@ -129,20 +141,40 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
                 continue
             protein_id = protein_ids[idx]
             sum_node_importance[protein_id] += importance[0]
-        i += 1
-            
+
+    # Plot all the raw importance scores on the same graph
     plt.legend(all_labels, loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small', ncol=1)
     plt.xlabel('Protein')
     plt.ylabel('Importance')
-    plt.title('Sorted Node Importance with Top 5 Protein IDs')
-    filename = os.path.join('explainer_plots', filename)
-    #plt.savefig(filename)
+    plt.title('Sorted Raw Node Importance with Top 5 Protein IDs')
+    raw_filename = os.path.join('explainer_plots', f'{filename}_raw.png')
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    #plt.savefig(raw_filename)
     plt.show()
+
+    # --- New Plot for Percentages ---
+    plt.figure()  # Start a new figure for percentages
+    for i, data in enumerate(dataset):
+        # Plot the importance percentages for each person
+        importance_percentages = (np.abs(all_explanations[i]) / np.sum(np.abs(all_explanations[i]))) * 100
+        plt.plot(sorted(importance_percentages, reverse=True), label=f'Importance % for Person {i}')
+
+    # Create a legend with the same top 5 protein information
+    plt.legend(all_labels, loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small', ncol=1)
+    plt.xlabel('Protein')
+    plt.ylabel('Importance (%)')
+    plt.title('Sorted Node Importance as Percentage of Total with Top 5 Protein IDs')
+    percent_filename = os.path.join('explainer_plots', f'{filename}_percent.png')
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    #plt.savefig(percent_filename)
+    plt.show()
+
     # Flatten the list of lists into a single list
     full_count = [item for sublist in all_proteins for item in sublist]
 
     # Use Counter to count the occurrences of each element
     protein_count = Counter(full_count)
+    
     return sum_node_importance, protein_count, all_explanations, all_top_proteins
 
 def run_explainer_train_and_test(checkpoint_path):
