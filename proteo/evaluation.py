@@ -100,8 +100,8 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
         )
 
         # Node importance is of format [[0], [0],[0],...,[.5]] with length equal to the number of nodes
-        node_importance = explanation.node_mask.cpu().detach().numpy()
-        flat_node_importance = node_importance.flatten()
+        node_importance = np.array(explanation.node_mask.cpu().detach().numpy().tolist())
+        flat_node_importance = np.array(node_importance.flatten().tolist())
 
         # Calculate the total importance per person and the importance as percentage
         total_importance = np.sum(np.abs(flat_node_importance))
@@ -109,8 +109,8 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
 
         all_explanations.append(flat_node_importance)
 
-        # Sort indices by raw importance
-        sorted_indices = np.argsort(node_importance[:, 0])[::-1]
+        # Sort indices by raw importance 
+        sorted_indices = np.argsort(flat_node_importance)[::-1] #np.argsort(node_importance[:, 0])[::-1]
 
         # Get the top 5 indices and corresponding protein IDs
         top_5_indices = sorted_indices[:5]
@@ -193,20 +193,20 @@ def run_explainer_train_and_test(checkpoint_path):
 
     # Construct Explainer and set parameters
     explainer = Explainer(
-    model=module.model.to(device),
-    algorithm=CaptumExplainer('IntegratedGradients'),
-    explanation_type='model',
-    model_config=dict(
-        mode='regression',
-        task_level='graph',  # Explain why the model predicts a certain property or label for the entire graph (nodes + edges)
-        return_type='raw'
-    ),
-    node_mask_type= 'attributes', #'object', # Generate masks that indicate the importance of individual node features
-    edge_mask_type=None,
-    threshold_config=dict( #keep only the top 300 most important proteins and set the rest to 0
-        threshold_type='topk',
-        value=7000,
-    ),
+        model=module.model.to(device),
+        algorithm=CaptumExplainer('IntegratedGradients'),
+        explanation_type='model',
+        model_config=dict(
+            mode='regression',
+            task_level='graph',  # Explain why the model predicts a certain property or label for the entire graph (nodes + edges)
+            return_type='raw'
+        ),
+        node_mask_type= 'attributes', #'object', # Generate masks that indicate the importance of individual node features
+        edge_mask_type=None,
+        threshold_config=dict( #keep only the top 300 most important proteins and set the rest to 0
+            threshold_type='topk',
+            value=7000,
+        ),
     )
     protein_ids = get_protein_ids(config)
 

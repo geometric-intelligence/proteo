@@ -42,21 +42,22 @@ class CustomWandbCallback(Callback):
         for name, param in pl_module.named_parameters():
             if param.requires_grad:
                 gradients = param.grad.detach().cpu()
-                pl_module.logger.experiment.log({"gradients": wandb.Histogram(gradients)})
+                pl_module.logger.experiment.log({"gradients": wandb.Histogram(gradients.numpy())})
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
-        if not trainer.sanity_checking:
-            loss = outputs
-            pl_module.log(
-                'val_loss',
-                loss,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-                prog_bar=True,
-                batch_size=pl_module.config.batch_size,
-            )
-            pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+    # def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+    #     if not trainer.sanity_checking:
+    #         loss = outputs
+    #         pl_module.log(
+    #             'val_loss',
+    #             loss,
+    #             on_step=False,
+    #             on_epoch=True,
+    #             sync_dist=True,
+    #             prog_bar=True,
+    #             batch_size=1,
+    #         )
+    #         pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
+            
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -80,13 +81,13 @@ class CustomWandbCallback(Callback):
             x2 = torch.vstack(pl_module.x2).detach().cpu()[0, :]
             multiscale = torch.vstack(pl_module.multiscale).detach().cpu()
             multiscale = (
-                torch.norm(multiscale, dim=1).detach().cpu()
+                torch.norm(multiscale, dim=1).detach().cpu().numpy()
             )  # Average the features across the 3 layers per person to get one value per person
             pl_module.logger.experiment.log(
             {
-                "x0 oversmoothing 1 person": wandb.Histogram(x0),
-                "x1 oversmoothing 1 person": wandb.Histogram(x1),
-                "x2 oversmoothing 1 person": wandb.Histogram(x2),
+                "x0 oversmoothing 1 person": wandb.Histogram(x0.numpy()),
+                "x1 oversmoothing 1 person": wandb.Histogram(x1.numpy()),
+                "x2 oversmoothing 1 person": wandb.Histogram(x2.numpy()),
                 "multiscale norm for all people": wandb.Histogram(multiscale),
             }
             )
@@ -96,9 +97,9 @@ class CustomWandbCallback(Callback):
             pl_module.multiscale.clear()
         pl_module.logger.experiment.log(
             {
-                "train_preds": wandb.Histogram(train_preds),
-                "train_targets": wandb.Histogram(train_targets),
-                "parameters (weights + biases)": wandb.Histogram(params),
+                "train_preds": wandb.Histogram(train_preds.numpy()),
+                "train_targets": wandb.Histogram(train_targets.numpy()),
+                "parameters (weights + biases)": wandb.Histogram(params.numpy()),
                 "epoch": pl_module.current_epoch,
             }
         )
@@ -115,7 +116,7 @@ class CustomWandbCallback(Callback):
             )
             pl_module.logger.experiment.log(
                 {
-                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds)),
+                    "train_preds_sigmoid": wandb.Histogram(torch.sigmoid(train_preds).numpy()),
                     "train_accuracy": get_accuracy(train_preds_binary, train_targets),
                     "confusion_matrix train": wandb.Table(dataframe=conf_matrix_df),
                     "epoch": pl_module.current_epoch,
@@ -132,8 +133,8 @@ class CustomWandbCallback(Callback):
             )
             pl_module.logger.experiment.log(
                 {
-                    "train_preds_softmax": wandb.Histogram(softmax_probs),
-                    "train_preds_class": wandb.Histogram(class_preds),
+                    "train_preds_softmax": wandb.Histogram(softmax_probs.numpy()),
+                    "train_preds_class": wandb.Histogram(class_preds.numpy()),
                     "train_accuracy": get_accuracy(class_preds, train_targets),
                     "confusion_matrix train": wandb.Table(dataframe=conf_matrix_df),
                     "epoch": pl_module.current_epoch,
@@ -153,6 +154,16 @@ class CustomWandbCallback(Callback):
             Lightning's module for training.
         """
         if not trainer.sanity_checking:
+            loss = torch.vstack(pl_module.val_losses).detach().cpu().mean()
+            pl_module.log(
+                'val_loss',
+                loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
+            pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True)
+            
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
             if pl_module.config.y_val == "clinical_dementia_rating_global":
                 pl_module.val_targets = reshape_targets(pl_module.val_targets)
@@ -160,8 +171,8 @@ class CustomWandbCallback(Callback):
 
             pl_module.logger.experiment.log(
                 {
-                    "val_preds": wandb.Histogram(val_preds),
-                    "val_targets": wandb.Histogram(val_targets),
+                    "val_preds": wandb.Histogram(val_preds.numpy()),
+                    "val_targets": wandb.Histogram(val_targets.numpy()),
                     "epoch": pl_module.current_epoch,
                 }
             )
@@ -179,7 +190,7 @@ class CustomWandbCallback(Callback):
                 # Log the confusion matrix plot
                 pl_module.logger.experiment.log(
                     {
-                        "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds)),
+                        "val_preds_sigmoid": wandb.Histogram(torch.sigmoid(val_preds).numpy()),
                         "val_accuracy": get_accuracy(val_preds_binary, val_targets),
                         "epoch": pl_module.current_epoch,
                         "confusion_matrix val": wandb.Table(dataframe=conf_matrix_df),
@@ -196,8 +207,8 @@ class CustomWandbCallback(Callback):
                 )
                 pl_module.logger.experiment.log(
                     {
-                        "val_preds_softmax": wandb.Histogram(softmax_probs),
-                        "val_preds_class": wandb.Histogram(class_preds),
+                        "val_preds_softmax": wandb.Histogram(softmax_probs.numpy()),
+                        "val_preds_class": wandb.Histogram(class_preds.numpy()),
                         "val_accuracy": get_accuracy(class_preds, val_targets),
                         "confusion_matrix val": wandb.Table(dataframe=conf_matrix_df),
                         "epoch": pl_module.current_epoch,
@@ -205,6 +216,7 @@ class CustomWandbCallback(Callback):
                 )
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
+        pl_module.val_losses.clear()
 
 
 def progress_bar():

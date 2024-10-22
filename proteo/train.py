@@ -93,6 +93,7 @@ class Proteo(pl.LightningModule):
         self.val_preds = []
         self.train_targets = []
         self.val_targets = []
+        self.val_losses = []
         self.x0 = []
         self.x1 = []
         self.x2 = []
@@ -278,22 +279,30 @@ class Proteo(pl.LightningModule):
             device = pred.device
             self.pos_weight = self.pos_weight.to(device)
             loss_fn = self.LOSS_MAP["binary_classification"](
-                pos_weight=self.pos_weight, reduction="mean"
+                pos_weight=self.pos_weight, reduction='none'
             )
         elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
             device = pred.device
             self.focal_loss_weight = self.focal_loss_weight.to(device)
             loss_fn = self.LOSS_MAP["multiclass_classification"](
-                weights=self.focal_loss_weight, gamma=2, reduction="mean"
+                weights=self.focal_loss_weight, gamma=2, reduction='none'
             )
             # Convert targets to ints for the loss function
             target = target.long()
             # Convert to probabilites before taking loss
             pred = torch.nn.Softmax(dim=-1)(pred)
         else:
-            loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
+            loss_fn = self.LOSS_MAP["mse_regression"](reduction='none')
         loss = loss_fn(pred, target)
-        return loss
+        self.val_losses.append(loss)
+        #self.log("val_loss", loss, on_epoch=True)
+        #return loss
+    
+    # def on_validation_epoch_end(self):
+    #     # outs is a list of whatever you returned in `validation_step`
+    #     loss = torch.stack(self.val_losses).mean()
+    #     self.log("val_loss", loss)
+    #     return loss
 
     def configure_optimizers(self):
         assert self.config.optimizer == 'Adam'

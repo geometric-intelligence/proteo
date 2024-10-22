@@ -11,9 +11,9 @@ checkpoint_dir: "/home/lcornelis/code/proteo/outputs/checkpoints"  # only when u
 
 # When main.py is run, wandb logs in wandb_tmp_dir
 # Logs
-ray_tmp_dir: "/home/lcornelis/code/proteo/outputs/ray_tmp" 
+ray_tmp_dir: "/data/lcornelis/outputs/ray_tmp" 
 # Results with checkpoints:
-ray_results_dir: "/home/lcornelis/code/proteo/outputs/ray_results"
+ray_results_dir: "/data/lcornelis/outputs/ray_results"
 
 # Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"
