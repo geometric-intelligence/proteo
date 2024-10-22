@@ -220,6 +220,62 @@ def run_explainer_train_and_test(checkpoint_path):
     return combined_sum_node_importance_raw, combined_sum_node_importance_percent, combined_protein_count, config, all_raw_importances, all_percent_importances, all_top_proteins, protein_ids
 
 ##############FUNCTIONS TO PLOT AND VISUALIZE RESULTS############################
+### CLUSTERING FUNCTIONS ###
+def get_sex_per_cluster(clusters, config):
+    participant_sex, _, _ = get_sex_mutation_age_distribution(config)
+    # Group sex by clusters
+    cluster_sex = defaultdict(list)
+    for i, cluster in enumerate(clusters):
+        cluster_sex[cluster].append(participant_sex[i])
+    
+    return cluster_sex
+
+def create_protein_matrix(participant_top_proteins, all_proteins):
+    num_participants = len(participant_top_proteins)
+    num_proteins = len(all_proteins)
+    
+    # Create an empty matrix of zeros
+    protein_matrix = np.zeros((num_participants, num_proteins), dtype=int)
+    
+    # Fill the matrix
+    for i, top_proteins in enumerate(participant_top_proteins):
+        for protein in top_proteins:
+            protein_indices = np.where(all_proteins == protein)[0]
+            if protein_indices.size > 0:
+                protein_index = protein_indices[0]
+                protein_matrix[i, protein_index] = 1
+
+    return protein_matrix
+
+def visualize_sex_distribution(cluster_sex_dict):
+    # Convert the dictionary into a DataFrame
+    data = []
+    for cluster, sex_list in cluster_sex_dict.items():
+        for sex in sex_list:
+            data.append({'Cluster': f"Cluster {cluster}", 'Sex': sex})
+    
+    df = pd.DataFrame(data)
+    
+    # Create a bar plot
+    sns.countplot(x='Cluster', hue='Sex', data=df)
+    plt.title("Sex Distribution in Clusters")
+    plt.xlabel("Cluster")
+    plt.ylabel("Count")
+    plt.show()
+
+def cluster_protein_matrix(all_top_proteins, protein_ids, config, num_clusters=2):
+    # Apply KMeans clustering
+    protein_matrix = create_protein_matrix(all_top_proteins, protein_ids)
+    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+    clusters = kmeans.fit_predict(protein_matrix)
+    
+
+    sex_clusters = get_sex_per_cluster(clusters, config)
+    visualize_sex_distribution(sex_clusters)
+    print("clusters", clusters)
+    print("sex clusters", sex_clusters)
+    return clusters, sex_clusters
+
 
 ### PCA PLOTTING FUNCTIONS ###
 def perform_pca(all_explanations, n_components=10):
