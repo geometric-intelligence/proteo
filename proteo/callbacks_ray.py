@@ -98,7 +98,7 @@ class CustomRayWandbCallback(Callback):
         for name, param in pl_module.named_parameters():
             if param.requires_grad:
                 gradients = param.grad.detach().cpu()
-                wandb.log({"gradients": wandb.Histogram(gradients)})
+                wandb.log({"gradients": wandb.Histogram(gradients.numpy())})
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
@@ -110,9 +110,9 @@ class CustomRayWandbCallback(Callback):
         pl_module : Proteo LightningModule
             Lightning's module for training.
         """
-        train_preds = torch.vstack(pl_module.train_preds).detach().cpu()
-        train_targets = torch.vstack(pl_module.train_targets).detach().cpu()
-        params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu()
+        train_preds = torch.vstack(pl_module.train_preds).detach().cpu().numpy().tolist()
+        train_targets = torch.vstack(pl_module.train_targets).detach().cpu().numpy().tolist()
+        params = torch.concat([p.flatten() for p in pl_module.parameters()]).detach().cpu().numpy()
         train_loss = pl_module.trainer.callback_metrics["train_loss"]
         train_RMSE = math.sqrt(train_loss)
         if pl_module.config.model == "gat-v4":
@@ -221,8 +221,8 @@ class CustomRayWandbCallback(Callback):
             Lightning's module for training.
         """
         if not trainer.sanity_checking:
-            val_preds = torch.vstack(pl_module.val_preds).detach().cpu()
-            val_targets = torch.vstack(pl_module.val_targets).detach().cpu()
+            val_preds = torch.vstack(pl_module.val_preds).detach().cpu().numpy().tolist()
+            val_targets = torch.vstack(pl_module.val_targets).detach().cpu().numpy().tolist()
             val_loss = pl_module.trainer.callback_metrics["val_loss"]
 
             # Log histograms and metrics
@@ -323,7 +323,7 @@ class CustomRayReportLossCallback(Callback):
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
         if not trainer.sanity_checking:
-            loss = outputs
+            loss = torch.vstack(pl_module.val_losses).mean()
             pl_module.log(
                 'val_loss',
                 loss,

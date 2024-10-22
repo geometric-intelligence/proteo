@@ -134,6 +134,7 @@ def load_model_and_predict(module, config, device='cuda'):
         batch.to(device)
         # Forward pass
         pred = module(batch)
+        print(pred.shape)
         target = batch.y.view(pred.shape)
 
         # Store predictions and targets
@@ -156,6 +157,7 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
     train_preds, train_targets, train_mse, val_preds, val_targets, val_mse = load_model_and_predict(
         module, config, device
     )
+    return module, config, train_preds, train_targets, train_mse, val_preds, val_targets, val_mse
     #print("Train Preds:")
     #print(train_preds)
     train_preds = reverse_log_transform(train_preds, mean, std)
