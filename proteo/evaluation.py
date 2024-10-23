@@ -121,12 +121,12 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
         explanation = explainer(data.x, data.edge_index, data=data, target=None, index=None)
 
         # Flatten and store node importance
-        node_importance = np.array(explanation.node_mask.cpu().detach().numpy()).flatten()
+        node_importance = np.array(explanation.node_mask.cpu().detach().numpy()).flatten().to_list()
         all_raw_importances.append(node_importance)
 
         # Convert raw scores to percentage importance (preserving the sign)
-        total_importance = np.sum(node_importance)  # Sum of original importance (with signs)
-        importance_percentages = (node_importance / total_importance) * 100  # No abs(), preserve sign
+        total_importance = np.sum(np.abs(node_importance))  # Sum of original importance (with signs)
+        importance_percentages = (node_importance / total_importance) * 100 
         all_percent_importances.append(importance_percentages)
 
         # Sort indices by raw importance
@@ -413,28 +413,49 @@ def plot_pca_loadings_line(loadings, protein_ids, threshold=0.04):
 
 ### General Plotting Functions ###
 
-def plot_bar_chart(protein_dict, title, x_label, y_label, filename=None, top_n=100):
-    """Creates a bar chart for the top N values from a dictionary."""
-    # Sort the dictionary by values in descending order and select the top N items
-    sorted_items = dict(sorted(protein_dict.items(), key=lambda item: item[1], reverse=True))
-    top_items = dict(list(sorted_items.items())[:top_n])
-    
-    # Separate the items into x and y lists for plotting
-    x = list(top_items.keys())
-    y = list(top_items.values())
 
-    # Plot the top N values
+def plot_bar_chart(protein_dict, title, x_label, y_label, filename=None, top_n=100):
+    """Creates two bar charts: one for the top N highest values and one for the top N lowest values from a dictionary."""
+    
+    # Sort the dictionary by values in descending order for highest and ascending order for lowest
+    sorted_items_desc = dict(sorted(protein_dict.items(), key=lambda item: item[1], reverse=True))
+    sorted_items_asc = dict(sorted(protein_dict.items(), key=lambda item: item[1]))
+
+    # Get the top N highest and lowest items
+    top_highest = dict(list(sorted_items_desc.items())[:top_n])
+    top_lowest = dict(list(sorted_items_asc.items())[:top_n])
+    
+    # Plot top N highest values
+    x_highest = list(top_highest.keys())
+    y_highest = list(top_highest.values())
+
     plt.figure(figsize=(28, 10))
     bar_width = 0.6
-    plt.bar(x, y, color='skyblue', width=bar_width)
+    plt.bar(x_highest, y_highest, color='skyblue', width=bar_width)
     plt.xlabel(x_label, fontsize=18)
     plt.ylabel(y_label, fontsize=18)
-    plt.title(title, fontsize=24)
+    plt.title(f"Top {top_n} Highest - {title}", fontsize=24)
     plt.xticks(rotation=90, ha='right', fontsize=12)
     plt.yticks(fontsize=14)
     plt.tight_layout()
     if filename:
-        plt.savefig(filename)
+        plt.savefig(f"{filename}_highest.png")
+    plt.show()
+    
+    # Plot top N lowest values
+    x_lowest = list(top_lowest.keys())
+    y_lowest = list(top_lowest.values())
+
+    plt.figure(figsize=(28, 10))
+    plt.bar(x_lowest, y_lowest, color='lightcoral', width=bar_width)
+    plt.xlabel(x_label, fontsize=18)
+    plt.ylabel(y_label, fontsize=18)
+    plt.title(f"Top {top_n} Lowest - {title}", fontsize=24)
+    plt.xticks(rotation=90, ha='right', fontsize=12)
+    plt.yticks(fontsize=14)
+    plt.tight_layout()
+    if filename:
+        plt.savefig(f"{filename}_lowest.png")
     plt.show()
 
 def divide_dict_values(dict1, dict2):
