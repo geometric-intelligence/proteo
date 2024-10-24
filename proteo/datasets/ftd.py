@@ -362,7 +362,8 @@ class FTDDataset(InMemoryDataset):
         if self.config.y_val in Y_VALS_TO_NORMALIZE:
             hist_path = os.path.join(self.processed_dir, self.orig_hist_path_str)
             plot_histogram(pd.DataFrame(y_vals), f'original {self.config.y_val}', save_to=hist_path)
-            y_vals, mean, std = log_transform(y_vals)
+            y_train, y_test = train_test_split(y_vals, test_size=0.20, random_state=42)
+            y_vals, mean, std = log_transform(y_train, y_vals)
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
 
@@ -738,14 +739,14 @@ def plot_histogram(data, x_label, save_to):
     plt.close()
 
 
-def log_transform(data, log=False):
+def log_transform(train_data, data, log=False):
     if log:
     # Log transformation
         data = np.log(data)
-    mean = np.mean(data)
-    std = np.std(data)
-    print("mean log", mean)
-    print("std log", std)
+    mean = np.mean(train_data)
+    std = np.std(train_data)
+    print("mean log train", mean)
+    print("std log train", std)
     standardized_log_data = (data - mean) / std
     return standardized_log_data, mean, std
 
