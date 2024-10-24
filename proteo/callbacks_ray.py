@@ -346,22 +346,3 @@ class CustomRayReportLossCallback(Callback):
     #             batch_size=pl_module.config.batch_size,
     #         )
 
-
-class CSVLoggerCallback(Callback):
-    def __init__(self, output_file="ray_results_search_hyperparameters.csv"):
-        self.output_file = output_file
-        self.results = []
-
-    def on_trial_result(self, iteration, trials, trial, result, **info):
-        # Append the current result to the list
-        self.results.append(result)
-
-        # Convert the list of results to a DataFrame
-        df = pd.DataFrame(self.results)
-
-        # Save the DataFrame to CSV, updating the file
-        df.to_csv(self.output_file, index=False)
-
-        # Optionally, print or log the progress (e.g., every 10 trials)
-        if len(self.results) % 10 == 0:
-            print(f"Saved {len(self.results)} results to {self.output_file}")
