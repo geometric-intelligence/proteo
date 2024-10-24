@@ -17,7 +17,6 @@ from ray.train import Checkpoint
 
 from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
 
-
 # TODO: not using below function
 class CustomRayCheckpointCallback(Callback):
     """Callback that reports checkpoints to Ray on train epoch end.
@@ -126,10 +125,10 @@ class CustomRayWandbCallback(Callback):
             )  # Average the features across the 3 layers per person to get one value per person
             wandb.log(
                 {
-                "x0": wandb.Histogram(x0),
-                "x1": wandb.Histogram(x1),
-                "x2": wandb.Histogram(x2),
-                "multiscale norm for all people": wandb.Histogram(multiscale),    
+                "x0": wandb.Histogram(x0.numpy()),
+                "x1": wandb.Histogram(x1.numpy()),
+                "x2": wandb.Histogram(x2.numpy()),
+                "multiscale norm for all people": wandb.Histogram(multiscale.numpy()),    
                 }
             )
             pl_module.x0.clear()
@@ -221,6 +220,17 @@ class CustomRayWandbCallback(Callback):
             Lightning's module for training.
         """
         if not trainer.sanity_checking:
+            
+            loss = torch.vstack(pl_module.val_losses).detach().cpu().mean()
+            pl_module.log(
+                'val_loss',
+                loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
+            pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True)
+            
             val_preds = torch.vstack(pl_module.val_preds).detach().cpu().numpy().tolist()
             val_targets = torch.vstack(pl_module.val_targets).detach().cpu().numpy().tolist()
             val_loss = pl_module.trainer.callback_metrics["val_loss"]
@@ -240,6 +250,7 @@ class CustomRayWandbCallback(Callback):
                     scatter_plot_data = [
                         [pred, target] for (pred, target) in zip(val_preds, val_targets)
                     ]
+                    print("First 10 of scatterplot data", scatter_plot_data[:10])
                     table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
                     wandb.log(
                         {
@@ -300,6 +311,7 @@ class CustomRayWandbCallback(Callback):
 
         pl_module.val_preds.clear()  # free memory
         pl_module.val_targets.clear()
+        pl_module.val_losses.clear()
 
         gc.collect()  # Clean up Python's garbage
         torch.cuda.empty_cache()  # Clear any GPU memory cache
@@ -321,15 +333,35 @@ class CustomRayReportLossCallback(Callback):
             batch_size=pl_module.config.batch_size,
         )
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
-        if not trainer.sanity_checking:
-            loss = torch.vstack(pl_module.val_losses).mean()
-            pl_module.log(
-                'val_loss',
-                loss,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-                prog_bar=True,
-                batch_size=pl_module.config.batch_size,
-            )
+    # def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
+    #     if not trainer.sanity_checking:
+    #         loss = torch.vstack(pl_module.val_losses).mean()
+    #         pl_module.log(
+    #             'val_loss',
+    #             loss,
+    #             on_step=False,
+    #             on_epoch=True,
+    #             sync_dist=True,
+    #             prog_bar=True,
+    #             batch_size=pl_module.config.batch_size,
+    #         )
+
+
+class CSVLoggerCallback(Callback):
+    def __init__(self, output_file="ray_results_search_hyperparameters.csv"):
+        self.output_file = output_file
+        self.results = []
+
+    def on_trial_result(self, iteration, trials, trial, result, **info):
+        # Append the current result to the list
+        self.results.append(result)
+
+        # Convert the list of results to a DataFrame
+        df = pd.DataFrame(self.results)
+
+        # Save the DataFrame to CSV, updating the file
+        df.to_csv(self.output_file, index=False)
+
+        # Optionally, print or log the progress (e.g., every 10 trials)
+        if len(self.results) % 10 == 0:
+            print(f"Saved {len(self.results)} results to {self.output_file}")

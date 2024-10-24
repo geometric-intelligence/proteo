@@ -140,7 +140,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_{split}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_{split}_nolog.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -172,8 +172,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         files= [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train_nolog.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test_nolog.pt",
         ]
         print("Processed file names:", files)
         return files
@@ -738,19 +738,21 @@ def plot_histogram(data, x_label, save_to):
     plt.close()
 
 
-def log_transform(data):
+def log_transform(data, log=False):
+    if log:
     # Log transformation
-    log_data = np.log(data)
-    mean = np.mean(log_data)
-    std = np.std(log_data)
+        data = np.log(data)
+    mean = np.mean(data)
+    std = np.std(data)
     print("mean log", mean)
     print("std log", std)
-    standardized_log_data = (log_data - mean) / std
+    standardized_log_data = (data - mean) / std
     return standardized_log_data, mean, std
 
 
-def reverse_log_transform(standardized_log_data, mean, std):
+def reverse_log_transform(standardized_log_data, mean, std, log=False):
     # De-standardize the data
-    log_data = standardized_log_data * std + mean
-    original_data = torch.exp(log_data)
-    return original_data
+    data = standardized_log_data * std + mean
+    if log:
+        data = torch.exp(data)
+    return data

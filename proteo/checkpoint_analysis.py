@@ -130,12 +130,15 @@ def load_model_and_predict(module, config, device='cuda'):
 
     # Get predictions and targets for the validation set
     val_preds, val_targets = [], []
+    val_losses = []
+    loss_fn = torch.nn.MSELoss(reduction='none')
     for batch in test_loader:
         batch.to(device)
         # Forward pass
         pred = module(batch)
         print(pred.shape)
         target = batch.y.view(pred.shape)
+        val_losses.append(loss_fn(pred, target))
 
         # Store predictions and targets
         val_preds.append(pred.cpu())
@@ -144,8 +147,10 @@ def load_model_and_predict(module, config, device='cuda'):
     val_targets = torch.cat(val_targets)
 
     # Calculate MSE for validation set
-    val_mse = F.mse_loss(val_preds, val_targets).item()
+    val_mse = F.mse_loss(val_preds, val_targets).mean()
+    val_mse2 = torch.vstack(val_losses).detach().cpu().mean()
     print("Normalized Val MSE:", val_mse)
+    print("Normalized Val MSE2:", val_mse2)
     print("Normalized train MSE:", train_mse)
     return train_preds, train_targets, train_mse, val_preds, val_targets, val_mse
 
@@ -157,7 +162,7 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
     train_preds, train_targets, train_mse, val_preds, val_targets, val_mse = load_model_and_predict(
         module, config, device
     )
-    return module, config, train_preds, train_targets, train_mse, val_preds, val_targets, val_mse
+    #return module, config, train_preds, train_targets, train_mse, val_preds, val_targets, val_mse
     #print("Train Preds:")
     #print(train_preds)
     train_preds = reverse_log_transform(train_preds, mean, std)
@@ -187,7 +192,6 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
         val_targets,
         val_mse,
         val_rmse,
-        val_z_scores,
     ]
 
 

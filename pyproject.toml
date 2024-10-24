@@ -6,7 +6,7 @@ build-backend = "poetry.core.masonry.api"
 name = "proteo"
 version = "0.0.1"
 description = ""
-authors = ["Geometric Intellince Lab"]
+authors = ["Geometric Intelligence Lab"]
 readme = "README.md"
 repository = "https://github.com/geometry-intellince/proteo"
 

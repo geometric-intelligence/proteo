@@ -402,6 +402,8 @@ def main():
             num_samples=config.num_samples,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
             scheduler=scheduler,
+            run_config=tune.RunConfig(callbacks=[proteo_callbacks_ray.CSVLoggerCallback(output_file="ray_results_search_hyperparameters.csv")]
+    )
         ),
     )
     results = tuner.fit()

@@ -18,6 +18,9 @@ ray_results_dir: "/data/lcornelis/outputs/ray_results"
 # Paths below are relative to root_dir
 wandb_api_key_path: "wandb_api_key.txt"
 
+# GPU
+use_gpu: true
+
 
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
@@ -34,7 +37,7 @@ sex: ['M', 'F']
 
 # WandB
 project: "proteo"
-wandb_offline: true
+wandb_offline: false
 # Controls the frequency of logging within training, 
 # by specifying how many training steps should occur between each logging event.
 log_every_n_steps: 10
@@ -45,7 +48,7 @@ use_master_nodes: false # USE THESE FOR MASTER NODES
 master_nodes: ['sex', 'mutation', 'age'] #Note: You can pick which attributes of sex, mutation and age you want here
 #SET THIS TO TRUE TO HAVE SEX SPECIFIC ADJ MATRICES
 sex_specific_adj: true
-adj_thresh: 0.165  #0.08 
+adj_thresh: 0.166  #0.08 
 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
@@ -80,13 +83,13 @@ gcn:
   hidden_channels: 32
 
 mlp:
-  channel_list: [7258, 32, 64, 128, 1]
+  channel_list: [7261, 32, 64, 128, 1]
   norm: 'batch_norm'
   plain_last: True
 
 # Training
 batch_size: 8 #for one off training
-epochs: 30
+epochs: 1000
 num_workers: 16
 sync_batchnorm: false
 precision: "32-true"
@@ -98,7 +101,7 @@ optimizer: Adam
 lr_scheduler: LambdaLR
 
 # GPUs
-devices: [0] #[0, 1] #' #[0, 1, 2, 3, 4, 5, 6, 7]
+devices: [0, 1] #' #[0, 1, 2, 3, 4, 5, 6, 7]
 trainer_accelerator: "gpu"
 seed: 42
 
@@ -109,19 +112,19 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
-num_samples: 300
+num_samples: 1000
 grace_period: 30  # Each training is run at least this nb of epochs.
 reduction_factor: 6
 num_to_keep: 3  # Nb of checkpoints to keep. High value -> checkpoints overwritten less often.
 checkpoint_every_n_epochs_train: 1  # Nb of iterations between checkpoints. If 0: no checkpointing. This is for one off training so should be one to save absolute min val_loss checkpoint
 # Nb of trainings run in parallel is the maximum amount 
 # possible with this distribution of resources, knowing that there are 128 CPUs and 8 GPUs total
-use_gpu: True
+q_gpu: True
 cpu_per_worker: 1
 gpu_per_worker: 1
 lr_min: 0.000001
 lr_max: 0.1
-model_grid_search: ['mlp']
+model_grid_search: ['gat-v4']
 # Choices
 batch_size_choices: [8, 16, 32, 50]  # note: 352 train and 89 val --> 3 val batch for bs = 32
 lr_scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
@@ -152,6 +155,6 @@ gat_heads: [1, 2, 4, 8]
 gcn_num_layers: [2, 3, 4]  # only for GAT and GCN
 gcn_hidden_channels: [8, 32, 128]
 #MLP:
-mlp_channel_lists: [[7258,1], [7258,1028,1], [7258,128,64,1], [7258,1028,128,1], [7258,1028,256,64,1], [7258,1028,512,128,1], [7258,1028,256,128,64,1]]
+mlp_channel_lists: [[7261,1], [7261,1028,1], [7261,128,64,1], [7261,1028,128,1], [7261,1028,256,64,1], [7261,1028,512,128,1], [7261,1028,256,128,64,1]]
 mlp_norms: ["batch_norm", "layer_norm"]
 mlp_plain_last: [True, False]
