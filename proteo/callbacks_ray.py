@@ -129,6 +129,7 @@ class CustomRayWandbCallback(Callback):
                 "x1": wandb.Histogram(x1.numpy()),
                 "x2": wandb.Histogram(x2.numpy()),
                 "multiscale norm for all people": wandb.Histogram(multiscale.numpy()),    
+                "epoch": pl_module.current_epoch,
                 }
             )
             pl_module.x0.clear()
@@ -149,7 +150,7 @@ class CustomRayWandbCallback(Callback):
             if train_loss < pl_module.min_train_loss:
                 pl_module.min_train_loss = train_loss
                 scatter_plot_data = [
-                    [pred, target] for (pred, target) in zip(train_preds, train_targets)
+                    [pred[0], target[0]] for (pred, target) in zip(train_preds, train_targets)
                 ]
                 table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
                 wandb.log(
@@ -248,9 +249,11 @@ class CustomRayWandbCallback(Callback):
                 if val_loss < pl_module.min_val_loss:
                     pl_module.min_val_loss = val_loss
                     scatter_plot_data = [
-                        [pred, target] for (pred, target) in zip(val_preds, val_targets)
+                        [pred[0], target[0]] for (pred, target) in zip(val_preds, val_targets)
                     ]
-                    print("First 10 of scatterplot data", scatter_plot_data[:10])
+                    print("First 10 of scatter_plot_data", scatter_plot_data[:10])
+                    print(f"val_preds shape: {torch.vstack(pl_module.val_preds).shape}")
+                    print(f"val_targets shape: {torch.vstack(pl_module.val_targets).shape}")
                     table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
                     wandb.log(
                         {

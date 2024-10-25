@@ -89,6 +89,7 @@ class CustomWandbCallback(Callback):
                 "x1 oversmoothing 1 person": wandb.Histogram(x1.numpy()),
                 "x2 oversmoothing 1 person": wandb.Histogram(x2.numpy()),
                 "multiscale norm for all people": wandb.Histogram(multiscale),
+                "epoch": pl_module.current_epoch,
             }
             )
             pl_module.x0.clear()
