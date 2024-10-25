@@ -72,6 +72,8 @@ def train_func(train_loop_config):
         'fc_dropout': train_loop_config['fc_dropout'],
         'fc_act': train_loop_config['fc_act'],
         'weight_initializer': train_loop_config['weight_initializer'],
+        'channel_list': train_loop_config['channel_list'],
+        'norm': train_loop_config['norm'],
     }
     config[model].update(train_loop_config_model)
     # Remove keys that were already updated in nested configuration
@@ -350,7 +352,7 @@ def main():
             'mlp': config.mlp_plain_last,
         }
         model = trial_config['train_loop_config']['model']
-        return random.choice(plain_last_map[model])   
+        return random.choice(plain_last_map[model])
 
     def trial_str_creator(trial):
         train_loop_config = trial.config['train_loop_config']
@@ -385,6 +387,7 @@ def main():
         'sex': tune.grid_search(config.sex_choices),
         'modality': tune.grid_search(config.modality_choices),
         'y_val': tune.grid_search(config.y_val_choices),
+        'sex_specific_adj': tune.grid_search(config.sex_specific_adj_choices)
     }
 
     scheduler = ASHAScheduler(
