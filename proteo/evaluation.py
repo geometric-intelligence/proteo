@@ -111,6 +111,8 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
     
     sum_node_importance_raw = {protein_id: 0 for protein_id in protein_ids}
     sum_node_importance_percent = {protein_id: 0 for protein_id in protein_ids}
+    positive_percent_by_protein = {protein_id: 0 for protein_id in protein_ids}
+    negative_percent_by_protein = {protein_id: 0 for protein_id in protein_ids}
     all_raw_importances = []
     all_percent_importances = []
     all_top_proteins = []
@@ -133,6 +135,11 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
         importance_percentages = (node_importance / total_importance) * 100 
         all_percent_importances.append(importance_percentages)
 
+        # Finding percentage of negative and positive
+        node_importance = np.array(node_importance)
+        total_positive_importance = np.sum(node_importance[node_importance > 0])
+        total_negative_importance = np.sum(np.abs(node_importance[node_importance < 0]))
+
         # Sort indices by raw importance
         sorted_indices = np.argsort(node_importance)[::-1]  # Sort by original value
 
@@ -147,6 +154,10 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
         for idx, importance in enumerate(node_importance):
             sum_node_importance_raw[protein_ids[idx]] += importance
             sum_node_importance_percent[protein_ids[idx]] += importance_percentages[idx]
+            if importance > 0:
+                positive_percent_by_protein[protein_ids[idx]] = (importance / total_positive_importance) * 100 if total_positive_importance != 0 else 0
+            elif importance < 0:    
+                negative_percent_by_protein[protein_ids[idx]] = (np.abs(importance) / total_negative_importance) * 100 if total_negative_importance != 0 else 0
 
     # Plot raw importance scores
     plot_importance_scores(all_raw_importances, all_labels, f'{filename}_raw.png',
@@ -161,7 +172,7 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
     protein_count = Counter(all_important_proteins)
 
     # Return both raw and percent importance scores, along with other info
-    return sum_node_importance_raw, sum_node_importance_percent, protein_count, all_raw_importances, all_percent_importances, all_top_proteins
+    return sum_node_importance_raw, sum_node_importance_percent, positive_percent_by_protein, negative_percent_by_protein, protein_count, all_raw_importances, all_percent_importances, all_top_proteins
 
 def run_explainer_train_and_test(checkpoint_path):
     module = load_checkpoint(checkpoint_path)
@@ -199,8 +210,8 @@ def run_explainer_train_and_test(checkpoint_path):
     model_name = re.search(pattern, checkpoint_path).group(1)
     
     # Run explainer for both training and testing datasets
-    train_sum_node_importance_raw, train_sum_node_importance_percent, train_protein_count, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train = run_explainer_single_dataset(train_dataset, explainer, protein_ids, filename=model_name + "_train.png")
-    test_sum_node_importance_raw, test_sum_node_importance_percent, test_protein_count, all_raw_importances_test, all_percent_importances_test, all_top_proteins_test = run_explainer_single_dataset(test_dataset, explainer, protein_ids, filename=model_name + "_test.png")
+    train_sum_node_importance_raw, train_sum_node_importance_percent, train_positive_percent, train_negative_percent, train_protein_count, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train = run_explainer_single_dataset(train_dataset, explainer, protein_ids, filename=model_name + "_train.png")
+    test_sum_node_importance_raw, test_sum_node_importance_percent,  test_positive_percent, test_negative_percent, test_protein_count, all_raw_importances_test, all_percent_importances_test, all_top_proteins_test = run_explainer_single_dataset(test_dataset, explainer, protein_ids, filename=model_name + "_test.png")
 
     # Combine sum_node_importance for train and test datasets
     combined_sum_node_importance_raw = {key: train_sum_node_importance_raw.get(key, 0) + test_sum_node_importance_raw.get(key, 0)
@@ -208,6 +219,13 @@ def run_explainer_train_and_test(checkpoint_path):
     
     combined_sum_node_importance_percent = {key: train_sum_node_importance_percent.get(key, 0) + test_sum_node_importance_percent.get(key, 0)
                                     for key in set(train_sum_node_importance_percent) | set(test_sum_node_importance_percent)}
+    
+    combined_sum_node_importance_positive = {key: train_positive_percent.get(key, 0) + test_positive_percent.get(key, 0)
+                                    for key in set(train_positive_percent) | set(test_positive_percent)}
+    
+    combined_sum_node_importance_negative = {key: train_negative_percent.get(key, 0) + test_negative_percent.get(key, 0)
+                                    for key in set(train_negative_percent) | set(test_negative_percent)}
+
     
     # Combine protein_count for train and test datasets
     combined_protein_count = train_protein_count + test_protein_count
@@ -221,7 +239,7 @@ def run_explainer_train_and_test(checkpoint_path):
     # Combine top proteins for both train and test datasets
     all_top_proteins = all_top_proteins_train + all_top_proteins_test
     
-    return combined_sum_node_importance_raw, combined_sum_node_importance_percent, combined_protein_count, config, all_raw_importances, all_percent_importances, all_top_proteins, protein_ids
+    return combined_sum_node_importance_raw, combined_sum_node_importance_percent, combined_sum_node_importance_positive, combined_sum_node_importance_negative, combined_protein_count, config, all_raw_importances, all_percent_importances, all_top_proteins, protein_ids
 
 ##############FUNCTIONS TO PLOT AND VISUALIZE RESULTS############################
 ### CLUSTERING FUNCTIONS ###
@@ -462,6 +480,33 @@ def plot_bar_chart(protein_dict, title, x_label, y_label, filename=None, top_n=1
         plt.savefig(f"{filename}_lowest.png")
     plt.show()
 
+def plot_top_bar_chart(protein_dict, title, x_label, y_label, filename=None, top_n=100):
+    """Creates a bar chart for the top N highest values from a dictionary."""
+
+    # Sort the dictionary by values in descending order for the highest values
+    sorted_items_desc = dict(sorted(protein_dict.items(), key=lambda item: item[1], reverse=True))
+
+    # Get the top N highest items
+    top_highest = dict(list(sorted_items_desc.items())[:top_n])
+
+    # Extract keys and values for plotting
+    x_highest = list(top_highest.keys())
+    y_highest = list(top_highest.values())
+
+    # Plot top N highest values
+    plt.figure(figsize=(28, 10))
+    bar_width = 0.6
+    plt.bar(x_highest, y_highest, color='skyblue', width=bar_width)
+    plt.xlabel(x_label, fontsize=18)
+    plt.ylabel(y_label, fontsize=18)
+    plt.title(f"Top {top_n} - {title}", fontsize=24)
+    plt.xticks(rotation=90, ha='right', fontsize=12)
+    plt.yticks(fontsize=14)
+    plt.tight_layout()
+    if filename:
+        plt.savefig(f"{filename}_top_{top_n}.png")
+    plt.show()
+
 def divide_dict_values(dict1, dict2):
     """Divides values of dict2 by dict1 for matching keys, ensuring both values are numerical."""
     result = {}
@@ -546,17 +591,28 @@ def plot_explainer_results(config, all_explanations_percent, protein_ids, filena
 
 ### Protein Importance Plotting ###
 
-def create_protein_plots(combined_sum_node_importance_raw, combined_sum_node_importance_percent, combined_protein_count, all_percent_importances, protein_ids, config, checkpoint_path):
+def create_protein_plots(combined_sum_node_importance_raw, combined_sum_node_importance_percent, combined_positive_percent, combined_negative_percent, combined_protein_count, all_percent_importances, protein_ids, config, checkpoint_path):
     """Creates a set of plots for protein importance and PCA analysis."""
     pattern = r'/(model=.*?)(/checkpoint_\d+)?$'
     model_name = re.search(pattern, checkpoint_path).group(1)
     sum_node_importance_avg_percent = divide_dict_values(combined_protein_count, combined_sum_node_importance_percent)
-    print(combined_protein_count)
-    print(combined_sum_node_importance_percent)
-    print(sum_node_importance_avg_percent)
     plot_bar_chart(
         sum_node_importance_avg_percent,
         f'Top Proteins Average Percentage Importance for {config.y_val} {config.sex} {config.mutation} {config.modality}',
+        'Protein ID', 'Importance Value (%)',
+    )
+    # Most positive proteins
+    combined_positive_avg_percent = divide_dict_values(combined_protein_count, combined_positive_percent)
+    plot_top_bar_chart(
+        combined_positive_avg_percent,
+        f'Top Positive Proteins Average Percentage Importance for {config.y_val} {config.sex} {config.mutation} {config.modality}',
+        'Protein ID', 'Importance Value (%)',
+    )
+    # Most Negative Proteins
+    combined_negative_avg_percent = divide_dict_values(combined_protein_count, combined_negative_percent)
+    plot_top_bar_chart(
+        combined_negative_avg_percent,
+        f'Top Negative Proteins Average Percentage Importance for {config.y_val} {config.sex} {config.mutation} {config.modality}',
         'Protein ID', 'Importance Value (%)',
     )
     # Plot the sum of node importance for each protein (top 300)
