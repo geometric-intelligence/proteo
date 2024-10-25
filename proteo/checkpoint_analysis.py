@@ -8,6 +8,7 @@ import train as proteo_train
 from scipy.stats import zscore
 from sklearn.model_selection import train_test_split
 from torch_geometric.loader import DataLoader
+import matplotlib.pyplot as plt
 
 from proteo.datasets.ftd import FTDDataset, reverse_log_transform
 
@@ -183,6 +184,27 @@ def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
     print("Original Units Val MSE:", val_mse)
     print("Original Units Val RMSE:", val_rmse)
     print("Val Z scores:", val_z_scores)
+
+    # Plot Train and Validation Predictions vs. Targets side-by-side
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot Train Predictions vs. Targets
+    axes[0].scatter(train_targets.cpu().numpy(), train_preds.cpu().numpy(), color='blue', alpha=0.6)
+    axes[0].plot([min(train_targets), max(train_targets)], [min(train_targets), max(train_targets)], 'r--', lw=2)
+    axes[0].set_title("Train Predictions vs Targets")
+    axes[0].set_xlabel("True Train Targets")
+    axes[0].set_ylabel("Predicted Train Targets")
+    
+    # Plot Validation Predictions vs. Targets
+    axes[1].scatter(val_targets.cpu().detach().numpy(), val_preds.cpu().detach().numpy(), color='green', alpha=0.6)
+    axes[1].plot([min(val_targets), max(val_targets)], [min(val_targets), max(val_targets)], 'r--', lw=2)
+    axes[1].set_title("Validation Predictions vs Targets")
+    axes[1].set_xlabel("True Validation Targets")
+    axes[1].set_ylabel("Predicted Validation Targets")
+    
+    plt.tight_layout()
+    plt.show()
+
     return [
         train_preds,
         train_targets,

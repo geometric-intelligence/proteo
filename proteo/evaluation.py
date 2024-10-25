@@ -121,7 +121,11 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
         explanation = explainer(data.x, data.edge_index, data=data, target=None, index=None)
 
         # Flatten and store node importance
-        node_importance = np.array(explanation.node_mask.cpu().detach().numpy()).flatten().to_list()
+        node_importance = np.array(explanation.node_mask.cpu().detach().numpy()).flatten().tolist()
+        # Check if node_importance is all zeros
+        if all(importance == 0 for importance in node_importance):
+            print(f"Warning: Person {i} has a node importance list with all zeros.")
+
         all_raw_importances.append(node_importance)
 
         # Convert raw scores to percentage importance (preserving the sign)
@@ -547,6 +551,9 @@ def create_protein_plots(combined_sum_node_importance_raw, combined_sum_node_imp
     pattern = r'/(model=.*?)(/checkpoint_\d+)?$'
     model_name = re.search(pattern, checkpoint_path).group(1)
     sum_node_importance_avg_percent = divide_dict_values(combined_protein_count, combined_sum_node_importance_percent)
+    print(combined_protein_count)
+    print(combined_sum_node_importance_percent)
+    print(sum_node_importance_avg_percent)
     plot_bar_chart(
         sum_node_importance_avg_percent,
         f'Top Proteins Average Percentage Importance for {config.y_val} {config.sex} {config.mutation} {config.modality}',
