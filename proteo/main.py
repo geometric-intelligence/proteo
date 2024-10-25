@@ -74,6 +74,7 @@ def train_func(train_loop_config):
         'weight_initializer': train_loop_config['weight_initializer'],
         'channel_list': train_loop_config['channel_list'],
         'norm': train_loop_config['norm'],
+        'plain_last': train_loop_config['plain_last'],
     }
     config[model].update(train_loop_config_model)
     # Remove keys that were already updated in nested configuration
