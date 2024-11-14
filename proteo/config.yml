@@ -26,7 +26,7 @@ use_gpu: true
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
-# Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
+# Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "cog_z_score", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
 modality: "csf"

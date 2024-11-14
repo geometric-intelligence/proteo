@@ -33,6 +33,7 @@ CONTINOUS_Y_VALS = [
     "executive_function",
     "memory",
     "clinical_dementia_rating",
+    "cog_z_score"
 ]
 BINARY_Y_VALS_MAP = {
     "clinical_dementia_rating_binary": {0: 0, 0.5: 1, 1: 1, 2: 1, 3: 1},
@@ -57,6 +58,7 @@ Y_VAL_COL_MAP = {
     'clinical_dementia_rating_global': "CDRGLOB",
     'clinical_dementia_rating_binary': "CDRGLOB",
     'carrier': "Carrier.Status",
+    'cog_z_score': "GLOBALCOG.ZSCORE"
 }
 
 mutation_col = "Mutation"
