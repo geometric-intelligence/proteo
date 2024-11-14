@@ -251,9 +251,9 @@ class CustomRayWandbCallback(Callback):
                     scatter_plot_data = [
                         [pred[0], target[0]] for (pred, target) in zip(val_preds, val_targets)
                     ]
-                    print("First 10 of scatter_plot_data", scatter_plot_data[:10])
-                    print(f"val_preds shape: {torch.vstack(pl_module.val_preds).shape}")
-                    print(f"val_targets shape: {torch.vstack(pl_module.val_targets).shape}")
+                    #print("First 10 of scatter_plot_data", scatter_plot_data[:10])
+                    #print(f"val_preds shape: {torch.vstack(pl_module.val_preds).shape}")
+                    #print(f"val_targets shape: {torch.vstack(pl_module.val_targets).shape}")
                     table = wandb.Table(data=scatter_plot_data, columns=["pred", "target"])
                     wandb.log(
                         {

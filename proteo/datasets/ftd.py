@@ -62,6 +62,7 @@ Y_VAL_COL_MAP = {
 mutation_col = "Mutation"
 sex_col = "SEX_AT_BIRTH"
 age_col = "AGE_AT_VISIT"
+did_col = "DID"
 
 
 class FTDDataset(InMemoryDataset):
@@ -443,6 +444,7 @@ class FTDDataset(InMemoryDataset):
         print("Dimensions of filtered sex col", filtered_sex_col.shape)
         filtered_mutation_col = filtered_data[mutation_col]
         filtered_age_col = filtered_data[age_col]
+        filtered_did_col = filtered_data[did_col]
 
         features = np.array(top_proteins)
         print("Features shape before master nodes:", features.shape)
@@ -457,6 +459,7 @@ class FTDDataset(InMemoryDataset):
             filtered_sex_col,
             filtered_mutation_col,
             filtered_age_col,
+            filtered_did_col
         )  # NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
 
     def load_csv_data(self, config):
@@ -468,6 +471,7 @@ class FTDDataset(InMemoryDataset):
             filtered_sex_col,
             filtered_mutation_col,
             filtered_age_col,
+            filtered_did_col
         ) = self.load_csv_data_pre_pt_files(config)
 
         # Convert sex and mutation to categorical labels

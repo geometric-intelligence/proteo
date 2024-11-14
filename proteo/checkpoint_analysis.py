@@ -249,6 +249,7 @@ def get_sex_mutation_age_distribution(config):
         filtered_sex_col,
         filtered_mutation_col,
         filtered_age_col,
+        filtered_did_col
     ) = train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
     (
@@ -258,9 +259,13 @@ def get_sex_mutation_age_distribution(config):
         test_mutation_labels,
         train_age_labels,
         test_age_labels,
+        train_did_labels, 
+        test_did_labels
     ) = train_test_split(
-        filtered_sex_col, filtered_mutation_col, filtered_age_col, test_size=0.20, random_state=42
+        filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=42
     )
+    print("train did labels", train_did_labels)
+    print("test did labels", test_did_labels )
     return (
         train_sex_labels,
         test_sex_labels,
@@ -268,6 +273,8 @@ def get_sex_mutation_age_distribution(config):
         test_mutation_labels,
         train_age_labels,
         test_age_labels,
+        train_did_labels,
+        test_did_labels
     )
 
 
@@ -293,6 +300,8 @@ def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, st
         test_mutation_labels,
         _,  # Removing age labels
         _,
+        train_did_labels,
+        train_did_labels,
     ) = get_sex_mutation_age_distribution(config)
 
     # Define subgroups

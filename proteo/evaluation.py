@@ -68,7 +68,7 @@ def get_protein_ids(config):
     # Make an instance of the FTDDataset class to get the top proteins
     root = config.data_dir
     train_dataset = FTDDataset(root, "train", config)
-    _, _, _, top_protein_columns, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
+    _, _, _, top_protein_columns, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
     top_protein_columns.extend(['sex', 'mutation', 'age'])
     return np.array(top_protein_columns)
 
@@ -76,13 +76,14 @@ def get_sex_mutation_age_distribution(config):
     # Make an instance of the FTDDataset class to get the top proteins
     root = config.data_dir
     train_dataset = FTDDataset(root, "train", config)
-    _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col= train_dataset.load_csv_data_pre_pt_files(config)
+    _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col= train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
-    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, test_size=0.20, random_state=42)
+    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=42)
     total_sex_labels = np.concatenate((train_sex_labels, test_sex_labels))
     total_mutation_labels = np.concatenate((train_mutation_labels, test_mutation_labels))
     total_age_labels = np.concatenate((train_age_labels, test_age_labels))
-    return total_sex_labels, total_mutation_labels, total_age_labels
+    total_did_labels = np.concatenate((train_did_labels, test_did_labels))
+    return total_sex_labels, total_mutation_labels, total_age_labels, total_did_labels, train_did_labels, test_did_labels
 
 # Helper function to plot importance values
 def plot_importance_scores(explanations, labels, filename, title, ylabel):
@@ -104,7 +105,7 @@ def plot_importance_scores(explanations, labels, filename, title, ylabel):
     plt.show()
 
 # Main explainer function
-def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
+def run_explainer_single_dataset(dataset, explainer, protein_ids, dids, filename):
     n_people = len(dataset)
     n_nodes = len(dataset[0].x)
     print(f"n_people = {n_people}, n_nodes = {n_nodes}")
@@ -117,6 +118,7 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
     all_percent_importances = []
     all_top_proteins = []
     all_labels = []
+
     
     for i, data in enumerate(dataset):
         # Run the explainer
@@ -148,7 +150,9 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, filename):
         all_top_proteins.append([protein_ids[idx] for idx in sorted_indices])
 
         # Add label for legend
-        all_labels.append(f'Top 5 for person {i}: {", ".join(top_5_proteins)}')
+        dids = dids.reset_index(drop=True)
+        patient_id = dids[i] if i < len(dids) else f"unknown_{i}"
+        all_labels.append(f'Top 5 for person {patient_id}: {", ".join(top_5_proteins)}')
 
         # Update cumulative importance for each protein
         for idx, importance in enumerate(node_importance):
@@ -178,7 +182,8 @@ def run_explainer_train_and_test(checkpoint_path):
     module = load_checkpoint(checkpoint_path)
     config = load_config(module)
     print(config)
-    # Load datasets
+    # Load datasets and labels
+    total_sex_labels, total_mutation_labels, total_age_labels, total_did_labels, train_did, test_did= get_sex_mutation_age_distribution(config)
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     print("dim train_dataset", len(train_dataset))
     print("dim test_dataset", len(test_dataset))
@@ -199,9 +204,9 @@ def run_explainer_train_and_test(checkpoint_path):
         ),
         node_mask_type= 'attributes', #'object', # Generate masks that indicate the importance of individual node features
         edge_mask_type=None,
-        threshold_config=dict( #keep only the top 300 most important proteins and set the rest to 0
+        threshold_config=dict( #keep only the top 7258 most important proteins and set the rest to 0
             threshold_type='topk',
-            value=7000,
+            value=7258,
         ),
     )
     protein_ids = get_protein_ids(config)
@@ -210,8 +215,8 @@ def run_explainer_train_and_test(checkpoint_path):
     model_name = re.search(pattern, checkpoint_path).group(1)
     
     # Run explainer for both training and testing datasets
-    train_sum_node_importance_raw, train_sum_node_importance_percent, train_positive_percent, train_negative_percent, train_protein_count, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train = run_explainer_single_dataset(train_dataset, explainer, protein_ids, filename=model_name + "_train.png")
-    test_sum_node_importance_raw, test_sum_node_importance_percent,  test_positive_percent, test_negative_percent, test_protein_count, all_raw_importances_test, all_percent_importances_test, all_top_proteins_test = run_explainer_single_dataset(test_dataset, explainer, protein_ids, filename=model_name + "_test.png")
+    train_sum_node_importance_raw, train_sum_node_importance_percent, train_positive_percent, train_negative_percent, train_protein_count, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train = run_explainer_single_dataset(train_dataset, explainer, protein_ids, train_did,  filename=model_name + "_train.png")
+    test_sum_node_importance_raw, test_sum_node_importance_percent,  test_positive_percent, test_negative_percent, test_protein_count, all_raw_importances_test, all_percent_importances_test, all_top_proteins_test = run_explainer_single_dataset(test_dataset, explainer, protein_ids, test_did, filename=model_name + "_test.png")
 
     # Combine sum_node_importance for train and test datasets
     combined_sum_node_importance_raw = {key: train_sum_node_importance_raw.get(key, 0) + test_sum_node_importance_raw.get(key, 0)
@@ -235,7 +240,14 @@ def run_explainer_train_and_test(checkpoint_path):
     all_percent_importances = all_percent_importances_train + all_percent_importances_test
     print("all_explanations shape (raw importance):", np.array(all_raw_importances).shape)
     print("all_explanations shape (percent importance):", np.array(all_percent_importances).shape)
-    
+
+    #save to a csv
+    df = pd.DataFrame(all_percent_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
+    df.insert(0, "SEX", total_sex_labels)
+    df.insert(1, "AGE", total_age_labels)
+    df.insert(2, "Mutation", total_mutation_labels)
+    df.to_csv("percent_importances.csv")
+
     # Combine top proteins for both train and test datasets
     all_top_proteins = all_top_proteins_train + all_top_proteins_test
     
@@ -244,7 +256,7 @@ def run_explainer_train_and_test(checkpoint_path):
 ##############FUNCTIONS TO PLOT AND VISUALIZE RESULTS############################
 ### CLUSTERING FUNCTIONS ###
 def get_sex_per_cluster(clusters, config):
-    participant_sex, _, _ = get_sex_mutation_age_distribution(config)
+    participant_sex, _, _, _, _, _= get_sex_mutation_age_distribution(config)
     # Group sex by clusters
     cluster_sex = defaultdict(list)
     for i, cluster in enumerate(clusters):
@@ -525,6 +537,7 @@ def divide_dict_values(dict1, dict2):
                     print(type(dict1[key]))
                     print(type(dict2[key]))
                     result[key] = None  # Handle non-numeric values
+
             except TypeError:
                 print("I am in type error loop", key)
                 result[key] = None  # Handle potential type errors gracefully
@@ -534,7 +547,7 @@ def divide_dict_values(dict1, dict2):
 
 def plot_importance_comparison_men_vs_women(all_explanations_percent, protein_ids, config):
     """Compares feature importance between men and women."""
-    total_sex_labels, _, _ = get_sex_mutation_age_distribution(config)
+    total_sex_labels, _, _, _, _, _ = get_sex_mutation_age_distribution(config)
     all_explanations_percent = np.array(all_explanations_percent)
     # Get indices for men and women
     men_indices = np.where(total_sex_labels == 'M')[0]
@@ -548,18 +561,32 @@ def plot_importance_comparison_men_vs_women(all_explanations_percent, protein_id
     plt.figure(figsize=(8, 8))
     plt.scatter(mean_importance_men, mean_importance_women, alpha=0.6, color='gray')
     min_len = min(len(mean_importance_men), len(mean_importance_women), len(protein_ids))
-    
+    # Define threshold for labeling
+    threshold = 0.05 * max(max(mean_importance_men), max(mean_importance_women))
     # Annotate proteins
     for i in range(min_len):
-        plt.annotate(protein_ids[i], (mean_importance_men[i], mean_importance_women[i]), 
-                     textcoords="offset points", xytext=(0, 5), ha='center', fontsize=8)
+        # Extract the part before the first '|' in protein_ids
+        protein_id_x = protein_ids[i].split('|')[0]
+        x, y = mean_importance_men[i], mean_importance_women[i]
+        
+        # Check if point is within threshold of the line y = x
+        if abs(x - y) > threshold:
+            plt.annotate(protein_id_x, (x, y), textcoords="offset points", xytext=(0, 5), 
+                         ha='center', fontsize=6)
+
+    # Determine the common axis limits based on the data in both axes
+    min_value = min(min(mean_importance_men), min(mean_importance_women))
+    max_value = max(max(mean_importance_men), max(mean_importance_women))
+
+    # Set the same range for both x and y axes
+    plt.xlim(min_value - 0.001, max_value + 0.001)
+    plt.ylim(min_value - 0.001, max_value + 0.001)
 
     # Add labels and reference line
     plt.xlabel('Mean Importance Score (%) - Men')
     plt.ylabel('Mean Importance Score (%) - Women')
     plt.title('Feature Importance Scores Comparison: Men vs Women (Percentages)')
-    plt.plot([min(mean_importance_men), max(mean_importance_men)], 
-             [min(mean_importance_men), max(mean_importance_men)], 
+    plt.plot([min_value, max_value], [min_value, max_value], 
              color='red', linestyle='--', label='Equal Importance')
 
     # Show plot
@@ -575,7 +602,7 @@ def plot_explainer_results(config, all_explanations_percent, protein_ids, filena
     reduced_vectors, explained_variance, loadings = perform_pca(np.array(all_explanations_percent))
     
     # Get labels for sex, mutation, and age from config
-    total_sex_labels, total_mutation_labels, total_age_labels = get_sex_mutation_age_distribution(config)
+    total_sex_labels, total_mutation_labels, total_age_labels, _, _, _ = get_sex_mutation_age_distribution(config)
 
     # Plot the first 3 PCA components in 2D
     plot_pca_all_components_2d(reduced_vectors, explained_variance, total_sex_labels, total_mutation_labels, total_age_labels)
@@ -596,6 +623,7 @@ def create_protein_plots(combined_sum_node_importance_raw, combined_sum_node_imp
     pattern = r'/(model=.*?)(/checkpoint_\d+)?$'
     model_name = re.search(pattern, checkpoint_path).group(1)
     sum_node_importance_avg_percent = divide_dict_values(combined_protein_count, combined_sum_node_importance_percent)
+
     plot_bar_chart(
         sum_node_importance_avg_percent,
         f'Top Proteins Average Percentage Importance for {config.y_val} {config.sex} {config.mutation} {config.modality}',
