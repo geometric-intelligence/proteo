@@ -3,8 +3,12 @@ from rpy2.robjects import r, pandas2ri
 from rpy2.robjects.packages import importr
 from rpy2.robjects import numpy2ri
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 
-def find_modules():
+
+def find_modules_wgcna():
     pandas2ri.activate()
     numpy2ri.activate()
     # Import WGCNA package
@@ -112,6 +116,65 @@ def find_modules():
         print(f"Module {int(module)}: {percentage:.2f}%")
     return MEs, kME_table, module_colors
 
+def find_modules_kmeans():
+    # Load your data
+    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
+    
+    # Step 1: Select only protein columns (assuming they start from the 4th column onward)
+    pids = df.iloc[:, 0]  # First column assumed to be person IDs
+    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
+    
+    # Select top 150 proteins by summed values
+    top_150_proteins = protein_data.sum(axis=0).nlargest(100).index
+    print("Top 150 proteins by summed value across samples:", top_150_proteins.tolist())
+    
+    # Subset the data to include only the top proteins
+    df_top_proteins = protein_data[top_150_proteins]
+    df_top_proteins.index = pids  # Set person IDs as index
+    print("Shape of data for clustering (people x proteins):", df_top_proteins.shape)
+
+    # Plot the elbow graph to determine the optimal number of clusters
+    distortions = []
+    K = range(1, 30)
+    for k in K:
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        kmeans.fit(df_top_proteins)
+        distortions.append(kmeans.inertia_)
+
+    # Elbow method visualization
+    plt.figure(figsize=(8, 5))
+    plt.plot(K, distortions, 'bx-')
+    plt.xlabel('Number of Clusters (k)')
+    plt.ylabel('Distortion')
+    plt.title('Elbow Method for Optimal k')
+    plt.savefig('plot.png')
+    plt.show()
+
+    # Define the optimal number of clusters (adjust based on the elbow plot)
+    optimal_k = 7  # Replace with the actual elbow point
+
+    # Perform KMeans clustering
+    kmeans = KMeans(n_clusters=optimal_k, random_state=42)
+    clusters = kmeans.fit_predict(df_top_proteins)
+
+    # Add cluster assignments to the original DataFrame
+    df['Cluster'] = clusters
+
+    # Calculate the percentage of total people in each cluster
+    cluster_counts = df['Cluster'].value_counts()
+    cluster_percentages = cluster_counts / len(df) * 100
+
+    # Print cluster assignments for each person
+    print("Cluster assignments for each person:")
+    print(df[['Cluster']])
+
+    # Print percentage of total people in each cluster
+    print("\nPercentage of total people in each cluster:")
+    for cluster, percentage in cluster_percentages.items():
+        print(f"Cluster {cluster}: {percentage:.2f}%")
+
+    # Save cluster assignments to a CSV file
+    df.to_csv("people_cluster_assignments.csv", index=False)
 
 if __name__ == '__main__':
-    find_modules()
+    find_modules_kmeans()

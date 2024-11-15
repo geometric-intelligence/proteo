@@ -22,11 +22,12 @@ LABEL_DIM_MAP = {
     "executive_function": 1,
     "memory": 1,
     "nfl": 1,
+    "cog_z_score": 1,
 }
 SEXES = [["M"], ["F"], ["M", "F"], ["F", "M"]]
 MODALITIES = ["plasma", "csf"]
 
-Y_VALS_TO_NORMALIZE = ["nfl"]
+Y_VALS_TO_NORMALIZE = ["nfl", "cog_z_score", "clinical_dementia_rating"]
 CONTINOUS_Y_VALS = [
     "nfl",
     "disease_age",

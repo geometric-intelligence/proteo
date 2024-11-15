@@ -5,7 +5,7 @@ output_dir: "/scratch/lcornelis/outputs"
 
 # When train.py is run
 # Logs
-wandb_tmp_dir: "/tmp"
+wandb_tmp_dir: "/scratch/lcornelis/tmp"
 # Results with checkpoints:
 checkpoint_dir: "/scratch/lcornelis/outputs/checkpoints"  # only when using train
 
@@ -27,7 +27,7 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "cog_z_score", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
-y_val: "nfl"
+y_val: "cog_z_score"
 # Plasma or CSF
 modality: "csf"
 # List of all the mutations you want included in the dataset
@@ -47,7 +47,7 @@ num_nodes: 7258  # Every graph has same num_nodes. FIXME: This should not be har
 use_master_nodes: false # USE THESE FOR MASTER NODES
 master_nodes: ['sex', 'mutation', 'age'] #Note: You can pick which attributes of sex, mutation and age you want here
 #SET THIS TO TRUE TO HAVE SEX SPECIFIC ADJ MATRICES
-sex_specific_adj: true
+sex_specific_adj: false
 adj_thresh: 0.167  #0.08 
 
 # Only used for WGCNA analysis, not dataset creation:
@@ -66,7 +66,7 @@ gat-v4:
   heads: [2, 3]
   use_layer_norm: true
   # Note - if you want to encode sex, mutation and age at the graph level, they need to be included in which_layer
-  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
+  which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation', 'age'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
   fc_dim: [64, 128, 128, 32]
   fc_dropout: 0.1
   fc_act: relu
@@ -137,8 +137,8 @@ adj_thresh_choices: [0.2, 0.35, 0.5, 0.7, 0.9]
 mutation_choices: [['GRN', 'MAPT','C9orf72','CTL']] #,['MAPT'], ['C9orf72']],['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: [['M', 'F']]
 modality_choices: ['csf']
-y_val_choices: ['nfl'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
-sex_specific_adj_choices: [true, false]
+y_val_choices: ['cog_z_score', 'clinical_dementia_rating'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
+sex_specific_adj_choices: [false]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]
