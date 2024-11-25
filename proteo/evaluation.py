@@ -15,10 +15,11 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 # Custom imports from proteo
-from proteo.datasets.ftd import FTDDataset
+from proteo.datasets.ftd import FTDDataset, remove_erroneous_columns
 import train as proteo_train
 import plotly.graph_objs as go
 from matplotlib.lines import Line2D
+from sklearn.preprocessing import StandardScaler
 
 #############FUNCTIONS TO GET EXPLANATIONS AND COMPILE RESULTS####################
 def load_config(module):
@@ -62,6 +63,32 @@ def load_checkpoint(relative_checkpoint_path):
     
     module.model.forward = new_forward.__get__(module.model)
     return module
+
+
+def get_explainer_baseline(config):
+    '''Function to get the baseline normal expression data to use for explainer results'''
+    # Get the Scaler we use to transform all the data
+    root = config.data_dir
+    train_dataset = FTDDataset(root, "train", config)
+    features, _, _, top_protein_columns, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
+    train_features, test_features = train_test_split(features, test_size=0.20, random_state=42)
+    scaler = StandardScaler()
+    scaler.fit(train_features)
+
+    #Get the CTL Data to transform and get mean
+    csv_data = pd.read_csv(train_dataset.raw_paths[0])
+    csv_data = remove_erroneous_columns(config, csv_data, train_dataset.raw_dir)
+    condition_ctl = csv_data["Mutation"].isin(["CTL"])
+    ctl_data = csv_data[condition_ctl]
+
+    # Extract relevant protein columns and scale
+    proteins_ctl = ctl_data[top_protein_columns]
+    proteins_ctl_scaled = scaler.transform(proteins_ctl)
+    # Calculate the mean for each protein
+    baseline_mean = proteins_ctl_scaled.mean(axis=0)
+    return baseline_mean
+
+
 
 #Load protein ids
 def get_protein_ids(config):
@@ -195,7 +222,7 @@ def run_explainer_train_and_test(checkpoint_path):
     # Construct Explainer and set parameters
     explainer = Explainer(
         model=module.model.to(device),
-        algorithm=CaptumExplainer('IntegratedGradients'),
+        algorithm=CaptumExplainer('IntegratedGradients', baseline),
         explanation_type='model',
         model_config=dict(
             mode='regression',

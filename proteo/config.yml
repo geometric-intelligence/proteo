@@ -27,7 +27,7 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "cog_z_score", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
-y_val: "cog_z_score"
+y_val: "clinical_dementia_rating"
 # Plasma or CSF
 modality: "csf"
 # List of all the mutations you want included in the dataset
@@ -48,7 +48,7 @@ use_master_nodes: false # USE THESE FOR MASTER NODES
 master_nodes: ['sex', 'mutation', 'age'] #Note: You can pick which attributes of sex, mutation and age you want here
 #SET THIS TO TRUE TO HAVE SEX SPECIFIC ADJ MATRICES
 sex_specific_adj: false
-adj_thresh: 0.167  #0.08 
+adj_thresh: 0.168  #0.08 
 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
