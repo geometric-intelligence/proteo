@@ -31,7 +31,7 @@ y_val: "clinical_dementia_rating"
 # Plasma or CSF
 modality: "csf"
 # List of all the mutations you want included in the dataset
-mutation: ["MAPT","C9orf72", "GRN", "CTL"]  
+mutation: ["CTL"] #["MAPT","C9orf72", "GRN", "CTL"]  
 # ['M'], ['F'],['M', 'F'] 
 sex: ['M', 'F']
 
@@ -48,7 +48,7 @@ use_master_nodes: false # USE THESE FOR MASTER NODES
 master_nodes: ['sex', 'mutation', 'age'] #Note: You can pick which attributes of sex, mutation and age you want here
 #SET THIS TO TRUE TO HAVE SEX SPECIFIC ADJ MATRICES
 sex_specific_adj: false
-adj_thresh: 0.168  #0.08 
+adj_thresh: 0.170  #0.08 
 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10

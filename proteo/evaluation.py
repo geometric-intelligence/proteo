@@ -82,7 +82,7 @@ def get_explainer_baseline(config):
     ctl_data = csv_data[condition_ctl]
 
     # Extract relevant protein columns and scale
-    proteins_ctl = ctl_data[top_protein_columns]
+    proteins_ctl = ctl_data[top_protein_columns].dropna()
     proteins_ctl_scaled = scaler.transform(proteins_ctl)
     # Calculate the mean for each protein
     baseline_mean = proteins_ctl_scaled.mean(axis=0)
@@ -219,10 +219,13 @@ def run_explainer_train_and_test(checkpoint_path):
     train_dataset.to(device)
     test_dataset.to(device)
 
+    baseline_mean = get_explainer_baseline(config)
+    baseline_mean_tensor = torch.tensor(baseline_mean, dtype=torch.float32).to(device)
+    baseline_mean_tensor = baseline_mean_tensor.unsqueeze(0).unsqueeze(2)
     # Construct Explainer and set parameters
     explainer = Explainer(
         model=module.model.to(device),
-        algorithm=CaptumExplainer('IntegratedGradients', baseline),
+        algorithm=CaptumExplainer('Saliency'), #),
         explanation_type='model',
         model_config=dict(
             mode='regression',
