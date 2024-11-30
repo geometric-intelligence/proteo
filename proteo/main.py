@@ -116,6 +116,7 @@ def train_func(train_loop_config):
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
+        use_LDS = True,
     )
     if config.y_val in Y_VALS_TO_NORMALIZE:
         wandb.log(
