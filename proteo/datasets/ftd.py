@@ -366,7 +366,7 @@ class FTDDataset(InMemoryDataset):
         if self.config.y_val in Y_VALS_TO_NORMALIZE:
             hist_path = os.path.join(self.processed_dir, self.orig_hist_path_str)
             plot_histogram(pd.DataFrame(y_vals), f'original {self.config.y_val}', save_to=hist_path)
-            y_train, y_test = train_test_split(y_vals, test_size=0.20, random_state=42)
+            y_train, y_test = train_test_split(y_vals, test_size=0.20, random_state=30)
             y_vals, mean, std = log_transform(y_train, y_vals)
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
@@ -516,7 +516,7 @@ class FTDDataset(InMemoryDataset):
             mutation_labels,
             filtered_age_col,
             test_size=0.20,
-            random_state=42,
+            random_state=30,
         )
         scaler = StandardScaler()
         train_features = scaler.fit_transform(train_features)

@@ -71,7 +71,7 @@ def get_explainer_baseline(config):
     root = config.data_dir
     train_dataset = FTDDataset(root, "train", config)
     features, _, _, top_protein_columns, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
-    train_features, test_features = train_test_split(features, test_size=0.20, random_state=42)
+    train_features, test_features = train_test_split(features, test_size=0.20, random_state=30)
     scaler = StandardScaler()
     scaler.fit(train_features)
 
@@ -105,7 +105,7 @@ def get_sex_mutation_age_distribution(config):
     train_dataset = FTDDataset(root, "train", config)
     _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col= train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
-    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=42)
+    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=30)
     total_sex_labels = np.concatenate((train_sex_labels, test_sex_labels))
     total_mutation_labels = np.concatenate((train_mutation_labels, test_mutation_labels))
     total_age_labels = np.concatenate((train_age_labels, test_age_labels))

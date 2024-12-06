@@ -262,7 +262,7 @@ def get_sex_mutation_age_distribution(config):
         train_did_labels, 
         test_did_labels
     ) = train_test_split(
-        filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=42
+        filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=30
     )
     print("train did labels", train_did_labels)
     print("test did labels", test_did_labels )

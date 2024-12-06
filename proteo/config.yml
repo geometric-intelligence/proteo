@@ -27,11 +27,11 @@ dataset_name: "ftd"  # 352 subjects in train, 89 in val
 raw_file_name: "ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv"
 error_protein_file_name: "bimodal_aptamers_for_removal.xlsx"
 # Y Value ("carrier", "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", "cog_z_score", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
-y_val: "clinical_dementia_rating"
+y_val: "cog_z_score"
 # Plasma or CSF
 modality: "csf"
 # List of all the mutations you want included in the dataset
-mutation: ["CTL"] #["MAPT","C9orf72", "GRN", "CTL"]  
+mutation: ["MAPT","C9orf72", "GRN", "CTL"]  
 # ['M'], ['F'],['M', 'F'] 
 sex: ['M', 'F']
 
@@ -137,7 +137,7 @@ adj_thresh_choices: [0.2, 0.35, 0.5, 0.7, 0.9]
 mutation_choices: [['GRN', 'MAPT','C9orf72','CTL']] #,['MAPT'], ['C9orf72']],['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: [['M', 'F']]
 modality_choices: ['csf']
-y_val_choices: ['cog_z_score', 'clinical_dementia_rating'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
+y_val_choices: ['cog_z_score'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
 sex_specific_adj_choices: [false]
 
 # GAT-v4
