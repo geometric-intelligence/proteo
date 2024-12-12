@@ -55,6 +55,13 @@ from proteo.datasets.ftd import (
 )
 
 
+def weighted_mse_loss(inputs, targets, weights=None):
+    loss = (inputs - targets) ** 2
+    if weights is not None:
+        loss *= weights.unsqueeze(1).expand_as(loss)
+    loss = torch.mean(loss)
+    return loss
+
 class Proteo(pl.LightningModule):
     """Proteo Lightning Module that handles batching the graphs in training and validation.
 
@@ -72,6 +79,7 @@ class Proteo(pl.LightningModule):
         "multiclass_classification": FocalLoss,
         "l1_regression": torch.nn.L1Loss,
         "mse_regression": torch.nn.MSELoss,
+        "mse_regression_weighted": weighted_mse_loss,
     }
 
     def __init__(
@@ -82,6 +90,7 @@ class Proteo(pl.LightningModule):
         avg_node_degree,
         pos_weight,
         focal_loss_weight,
+        use_weights = True,
     ):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
@@ -103,6 +112,7 @@ class Proteo(pl.LightningModule):
         self.focal_loss_weight = focal_loss_weight
         self.min_val_loss = 1000
         self.min_train_loss = 1000
+        self.use_weights = use_weights
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -239,8 +249,13 @@ class Proteo(pl.LightningModule):
             # Convert to probabilites before taking loss
             pred = torch.nn.Softmax(dim=-1)(pred)
         else:
-            loss_fn = self.LOSS_MAP["mse_regression"](reduction="mean")
-        loss = loss_fn(pred, target)
+            loss_fn = self.LOSS_MAP["mse_regression_weighted"]
+        if self.use_weights:
+            assert self.config.y_val not in MULTICLASS_Y_VALS_MAP, "Can only use LDS for regression tasks, not for multiclass tasks."
+            assert self.config.y_val not in BINARY_Y_VALS_MAP, "Can only use LDS for regression tasks, not for binary classification tasks."
+            loss = loss_fn(pred, target, batch.weight)
+        else:
+            loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
         # FIXME: With L1 regularization, the train_RMSE is not the RMSE
@@ -492,121 +507,6 @@ def main():
     """Training and evaluation script for experiments."""
     torch.set_float32_matmul_precision('medium')  # for performance
     config = read_config_from_file(CONFIG_FILE)
-    '''
-    yaml_string = """
-    wgcna_minModuleSize: 10
-    gpu_per_worker: 1
-    checkpoint_dir: '/scratch/lcornelis/outputs/checkpoints'
-    wandb_api_key_path: 'wandb_api_key.txt'
-    l1_lambda_max: 0.1
-    gat_v4_fc_dropout: [0.1, 0.2, 0.5]
-    devices: [0]
-    gat_v4_weight_initializer: ['xavier', 'kaiming', 'orthogonal', 'truncated_normal', 'uniform']
-    gcn_hidden_channels: [8, 32, 128]
-    wandb_offline: false
-    l1_lambda: 0.00013885569041041751
-    num_samples: 1000
-    mlp_channel_lists: [[7261, 1], [7261, 1028, 1], [7261, 128, 64, 1], [7261, 1028, 128, 1], [7261, 1028, 256, 64, 1], [7261, 1028, 512, 128, 1], [7261, 1028, 256, 128, 64, 1]]
-    pin_memory: true
-    model: 'gat-v4'
-    seed: 59012
-    use_master_nodes: false
-    lr_scheduler_choices: ['LambdaLR', 'ReduceLROnPlateau', 'ExponentialLR', 'StepLR', 'CosineAnnealingLR']
-    gat_v4_fc_act: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
-    epochs: 1000
-    lr: 0.006193218418598052
-    master_nodes: ['sex', 'mutation', 'age']
-    project: 'proteo'
-    batch_size: 8
-    sync_batchnorm: false
-    mutation_choices: [['GRN', 'MAPT', 'C9orf72', 'CTL']]
-    l1_lambda_min: 1e-05
-    precision: '32-true'
-    weight_decay: 0
-    sex: ['M', 'F']
-    adj_thresh: 0.35
-    y_val: 'nfl'
-    y_val_choices: ['nfl']
-    output_dir: '/scratch/lcornelis/outputs'
-    use_progress_bar: true
-    gcn_num_layers: [2, 3, 4]
-    ray_results_dir: '/scratch/lcornelis/outputs/ray_results'
-    reduction_factor: 6
-    trainer_accelerator: 'gpu'
-    gat_v4_fc_dim: [[64, 128, 128, 32], [128, 256, 256, 64], [256, 512, 512, 128]]
-    act_choices: ['relu', 'tanh', 'sigmoid', 'leaky_relu', 'elu']
-    model_grid_search: ['gat-v4']
-    optimizer: 'Adam'
-    mlp:
-        channel_list: [7261, 32, 64, 128, 1]
-        norm: 'batch_norm'
-        plain_last: true
-    data_dir: '/scratch/lcornelis/data/data_louisa'
-    gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]
-    gat_heads: [1, 2, 4, 8]
-    dropout_choices: [0, 0.05, 0.1, 0.2, 0.3, 0.5]
-    num_to_keep: 3
-    checkpoint_every_n_epochs_train: 1
-    num_nodes_choices: [7258]
-    mutation: ['GRN', 'MAPT', 'C9orf72', 'CTL']
-    error_protein_file_name: 'bimodal_aptamers_for_removal.xlsx'
-    wandb_tmp_dir: '/tmp'
-    log_every_n_steps: 10
-    wgcna_mergeCutHeight: 0.25
-    raw_file_name: 'ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv'
-    sex_choices: [['M', 'F']]
-    modality_choices: ['csf']
-    accumulate_grad_batches: 1
-    gat_hidden_channels: [8, 32, 128, 256]
-    q_gpu: true
-    gcn:
-        num_layers: 3
-        hidden_channels: 32
-    gat_v4_heads: [[2, 3], [2, 2], [4, 4]]
-    act: 'tanh'
-    gat_num_layers: [2, 4, 6, 12]
-    grace_period: 30
-    lr_max: 0.1
-    dataset_name: 'ftd'
-    mlp_norms: ['batch_norm', 'layer_norm']
-    lr_min: 1e-06
-    num_nodes: 7258
-    mlp_plain_last: [true, false]
-    lr_scheduler: 'CosineAnnealingLR'
-    batch_size_choices: [8, 16, 32, 50]
-    dropout: 0.1
-    ray_tmp_dir: '/scratch/lcornelis/tmp'
-    modality: 'csf'
-    use_gpu: true
-    sex_specific_adj: true
-    gat-v4:
-        hidden_channels: [32, 64]
-        heads: [2, 2]
-        use_layer_norm: true
-        which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation', 'age']
-        fc_dim: [256, 512, 512, 128]
-        fc_dropout: 0.1
-        fc_act: 'elu'
-        weight_initializer: 'xavier'
-        num_layers: null
-    nodes_count: 1
-    gat:
-        num_layers: 2
-        hidden_channels: 256
-        heads: 4
-        v2: true
-    cpu_per_worker: 1
-    adj_thresh_choices: [0.1, 0.2, 0.35, 0.5, 0.7, 0.9]
-    root_dir: '/home/lcornelis/code/proteo'
-    num_workers: 16
-    channel_list: null
-    norm: null
-    plain_last: null
-    """
-    config_dict = yaml.safe_load(yaml_string)
-    config = config_instance = Config(**config_dict)
-    print(config.model)
-    '''
     pl.seed_everything(config.seed)
     output_dir = config.output_dir
     os.makedirs(output_dir, exist_ok=True)
@@ -632,6 +532,7 @@ def main():
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
+        use_weights = config.use_weights
     )
 
     logger = get_wandb_logger(config)
