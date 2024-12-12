@@ -10,7 +10,8 @@ from rpy2.robjects.packages import importr
 # Scikit-learn preprocessing and clustering
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.cluster import KMeans, DBSCAN
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
+from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.decomposition import PCA, NMF
 from sklearn.mixture import GaussianMixture
 
@@ -19,6 +20,8 @@ from scipy.stats import pearsonr
 
 # UMAP dimensionality reduction
 import umap.umap_ as umap
+import os
+import itertools
 
 
 
@@ -30,11 +33,12 @@ def find_modules_wgcna():
     base = importr('base')
 
     # Load your data (assuming it is a pandas DataFrame)
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
+    df = pd.read_csv("raw_expression.csv")  # Replace with your data file
+    df = df[df["Mutation"] != "CTL"]
     # Step 1: Select only protein columns (assuming they start from the 4th column onward)
     pids = df.iloc[:, 0]
-    protein_data = df.iloc[:, 4:]
-    top_300_proteins = protein_data.sum(axis=0).nlargest(7258).index
+    protein_data = df.iloc[:, 5:]
+    top_300_proteins = protein_data.var(axis=0).nlargest(7258).index
     print("Top 300 proteins by summed value across samples:", top_300_proteins.tolist())
     df_top_proteins = protein_data[top_300_proteins].transpose()
     df_top_proteins.columns = pids
@@ -47,7 +51,7 @@ def find_modules_wgcna():
     # Set parameters, TODO: iterate on these 
     # PICK SOFT THRESHOLD TO GET POWEr, mean k below 100, r sq above .8
     power = 12.5
-    deepSplit = 2
+    deepSplit = 4
     minModuleSize = 10
     mergeCutHeight = 0.15
 
@@ -79,7 +83,7 @@ def find_modules_wgcna():
     kME_table = wgcna.signedKME(r_data, MEs, corFnc="bicor")
     print(kME_table)
         # Post-hoc Cleanup (iteratively reassign proteins as needed)
-    max_iterations = 100
+    max_iterations = 30
     for iteration in range(max_iterations):
         changed = False  # Track changes for convergence
         
@@ -168,205 +172,6 @@ def visualize_wgcna_results(MEs, module_colors, protein_data):
     plt.savefig("module_eigengenes.png")
     plt.show()
 
-def find_modules_kmeans_umap():
-    # Load your data
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
-    
-    # Step 1: Select only protein columns (assuming they start from the 4th column onward)
-    pids = df.iloc[:, 0]  # First column assumed to be person IDs
-    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
-    
-    # Select top 150 proteins by summed values
-    top_300_proteins = protein_data.sum(axis=0).nlargest(1000).index
-    print("Top 300 proteins by summed value across samples:", top_300_proteins.tolist())
-
-    # Subset the data to include only the top proteins
-    df_top_proteins = protein_data[top_300_proteins]
-    df_top_proteins.index = pids  # Set person IDs as index
-    print("Shape of data for clustering (people x proteins):", df_top_proteins.shape)
-    
-    # Scale the data using MinMaxScaler
-    #scaler = MinMaxScaler()
-    #df_top_proteins = scaler.fit_transform(df_top_proteins)
-    #print("Data successfully scaled using MinMaxScaler.")
-
-    # Plot the elbow graph to determine the optimal number of clusters
-    distortions = []
-    K = range(1, 30)
-    for k in K:
-        kmeans = KMeans(n_clusters=k, random_state=100)
-        kmeans.fit(df_top_proteins)
-        distortions.append(kmeans.inertia_)
-
-    # Elbow method visualization
-    plt.figure(figsize=(8, 5))
-    plt.plot(K, distortions, 'bx-')
-    plt.xlabel('Number of Clusters (k)')
-    plt.ylabel('Distortion')
-    plt.title('Elbow Method for Optimal k')
-    plt.savefig('elbow_plot.png')
-    plt.show()
-
-    # Define the optimal number of clusters (adjust based on the elbow plot)
-    optimal_k = 5  # Replace with the actual elbow point
-
-    # Perform KMeans clustering
-    kmeans = KMeans(n_clusters=optimal_k, random_state=42)
-    clusters = kmeans.fit_predict(df_top_proteins)
-
-    # Add cluster assignments to the original DataFrame
-    df['Cluster'] = clusters
-
-    # UMAP for 2D visualization
-    reducer = umap.UMAP(n_components=2, random_state=42)
-    reduced_data_2d = reducer.fit_transform(df_top_proteins)
-
-    # Plot UMAP visualization
-    plt.figure(figsize=(8, 6))
-    for cluster in range(optimal_k):
-        cluster_points = reduced_data_2d[clusters == cluster]
-        plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {cluster}')
-    
-    plt.title('KMeans Clustering Visualization (UMAP - 2D)')
-    plt.xlabel('UMAP Dimension 1')
-    plt.ylabel('UMAP Dimension 2')
-    plt.legend()
-    plt.savefig('umap_2d_visualization.png')
-    plt.show()
-
-    # Calculate the breakdown metrics
-    cluster_stats = {}
-
-    for cluster in range(optimal_k):
-        cluster_data = df[df['Cluster'] == cluster]
-        
-        # Count of each sex
-        sex_counts = cluster_data['SEX'].value_counts().to_dict()
-        
-        # Mean age
-        mean_age = cluster_data['AGE'].mean()
-        
-        # Count of each mutation
-        mutation_counts = cluster_data['Mutation'].value_counts().to_dict()
-        
-        # Store the metrics
-        cluster_stats[cluster] = {
-            'Sex Counts': sex_counts,
-            'Mean Age': mean_age,
-            'Mutation Counts': mutation_counts,
-            'Total Members': len(cluster_data)
-        }
-
-    # Print the cluster statistics
-    print("\nCluster Statistics:")
-    for cluster, stats in cluster_stats.items():
-        print(f"\nCluster {cluster}:")
-        print(f"  Total Members: {stats['Total Members']}")
-        print(f"  Sex Counts: {stats['Sex Counts']}")
-        print(f"  Mean Age: {stats['Mean Age']:.2f}")
-        print(f"  Mutation Counts: {stats['Mutation Counts']}")
-
-    # Save cluster assignments to a CSV file
-    df.to_csv("people_cluster_assignments.csv", index=False)
-
-
-def find_modules_kmeans_with_multiple_increments_variance():
-    # Load your data
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
-    
-    # Step 1: Select only protein columns (assuming they start from the 4th column onward)
-    pids = df.iloc[:, 0]  # First column assumed to be person IDs
-    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
-
-    # Compute variance for each protein
-    protein_variances = protein_data.var(axis=0)
-    max_proteins = protein_variances.shape[0]
-    increments = range(100, max_proteins + 1, 100)  # Steps of 100 proteins
-
-    # Determine grid layout for subplots
-    num_increments = len(increments)
-    rows = int(np.ceil(num_increments / 4))  # 4 columns per row
-    cols = min(4, num_increments)
-
-    # Prepare subplots for elbow plots
-    fig_elbow, axes_elbow = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
-    fig_umap, axes_umap = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
-
-    # Flatten axes for easier indexing
-    axes_elbow = axes_elbow.flatten()
-    axes_umap = axes_umap.flatten()
-
-    # Loop through each increment of top proteins
-    for idx, num_proteins in enumerate(increments):
-        print(f"Clustering with top {num_proteins} proteins...")
-
-        # Select the top `num_proteins` by variance
-        top_proteins = protein_variances.nlargest(num_proteins).index
-        df_top_proteins = protein_data[top_proteins]
-        df_top_proteins.index = pids  # Set person IDs as index
-
-        # Scale the data using MinMaxScaler
-        #scaler = MinMaxScaler()
-        #df_top_proteins_scaled = scaler.fit_transform(df_top_proteins)
-
-        # Calculate distortions for the Elbow Method
-        distortions = []
-        K = range(1, 30)
-        for k in K:
-            kmeans = KMeans(n_clusters=k, random_state=42)
-            kmeans.fit(df_top_proteins)
-            distortions.append(kmeans.inertia_)
-
-        # Plot the elbow graph for the current increment
-        ax_elbow = axes_elbow[idx]
-        ax_elbow.plot(K, distortions, 'bx-')
-        ax_elbow.set_title(f'Top {num_proteins} Proteins')
-        ax_elbow.set_xlabel('Number of Clusters (k)')
-        if idx % cols == 0:
-            ax_elbow.set_ylabel('Distortion')
-
-        # Perform KMeans clustering with an optimal k (hardcoded or inferred)
-        optimal_k = 6  # Replace with the actual elbow point or a dynamic method
-        kmeans = KMeans(n_clusters=optimal_k, random_state=42)
-        clusters = kmeans.fit_predict(df_top_proteins)
-
-        # Add cluster assignments to the original DataFrame
-        df[f'Cluster_{num_proteins}'] = clusters
-
-        # UMAP for 2D visualization
-        reducer = umap.UMAP(n_components=2, random_state=42)
-        print(df_top_proteins[:0])
-        reduced_data_2d = reducer.fit_transform(df_top_proteins)
-
-        # Plot UMAP with cluster colors
-        ax_umap = axes_umap[idx]
-        for cluster in range(optimal_k):
-            cluster_points = reduced_data_2d[clusters == cluster]
-            ax_umap.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {cluster}', alpha=0.7)
-        ax_umap.set_title(f'Top {num_proteins} Proteins')
-        ax_umap.set_xlabel('UMAP Dimension 1')
-        if idx % cols == 0:
-            ax_umap.set_ylabel('UMAP Dimension 2')
-
-    # Hide unused subplots
-    for ax in axes_elbow[num_increments:]:
-        ax.axis('off')
-    for ax in axes_umap[num_increments:]:
-        ax.axis('off')
-
-    # Finalize and display all elbow plots
-    fig_elbow.tight_layout()
-    fig_elbow.suptitle('Elbow Plots for Different Protein Increments', fontsize=16)
-    fig_elbow.savefig('elbow_plots_comparison.png')
-    plt.show()
-
-    # Finalize and display all UMAP plots
-    fig_umap.tight_layout()
-    fig_umap.suptitle('UMAP Visualizations for Different Protein Increments', fontsize=16)
-    fig_umap.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), title="Clusters")
-    fig_umap.savefig('umap_plots_comparison.png')
-    plt.show()
-
 def find_modules_dbscan():
     # Load your data
     df = pd.read_csv("percent_importances.csv")  # Replace with your data file
@@ -441,106 +246,6 @@ def find_modules_dbscan():
     plt.legend()
     plt.savefig('dbscan_clustering_pca.png')
     plt.show()
-
-def find_modules_kmeans_with_pca_and_umap():
-    # Load your data
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
-    
-    # Step 1: Select only protein columns (assuming they start from the 4th column onward)
-    pids = df.iloc[:, 0]  # First column assumed to be person IDs
-    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
-    print("Shape of original protein data (people x proteins):", protein_data.shape)
-    
-    # Step 2: Scale the data using MinMaxScaler
-    scaler = MinMaxScaler()
-    scaled_protein_data = scaler.fit_transform(protein_data)
-    print("Minimum value after scaling:", scaled_protein_data.min())
-    print("Maximum value after scaling:", scaled_protein_data.max())
-    print("Data successfully scaled using MinMaxScaler.")
-
-    # Step 3: Perform PCA to preserve 95% variance
-    pca = PCA(n_components=0.95, random_state=42)  # Automatically choose components to preserve 95% variance
-    pca_components = pca.fit_transform(scaled_protein_data)
-    print(f"PCA reduced data to {pca_components.shape[1]} dimensions, preserving 95% variance.")
-
-    # Step 4: Plot the elbow graph to determine the optimal number of clusters
-    distortions = []
-    K = range(1, 30)
-    for k in K:
-        kmeans = KMeans(n_clusters=k, random_state=42)
-        kmeans.fit(pca_components)
-        distortions.append(kmeans.inertia_)
-
-    # Elbow method visualization
-    plt.figure(figsize=(8, 5))
-    plt.plot(K, distortions, 'bx-')
-    plt.xlabel('Number of Clusters (k)')
-    plt.ylabel('Distortion')
-    plt.title('Elbow Method for Optimal k')
-    plt.savefig('pca_elbow_plot.png')
-    plt.show()
-
-    # Step 5: Define the optimal number of clusters (adjust based on the elbow plot)
-    optimal_k = 7  # Replace with the actual elbow point
-
-    # Perform KMeans clustering
-    kmeans = KMeans(n_clusters=optimal_k, random_state=42)
-    clusters = kmeans.fit_predict(pca_components)
-
-    # Add cluster assignments to the original DataFrame
-    df['Cluster'] = clusters
-
-    # Step 6: UMAP for 2D visualization
-    reducer = umap.UMAP(n_components=2, random_state=42)
-    reduced_data_2d = reducer.fit_transform(pca_components)
-
-    # Plot UMAP with cluster colors
-    plt.figure(figsize=(8, 6))
-    for cluster in range(optimal_k):
-        cluster_points = reduced_data_2d[clusters == cluster]
-        plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {cluster}')
-    
-    plt.title('KMeans Clustering Visualization (UMAP - 2D)')
-    plt.xlabel('UMAP Dimension 1')
-    plt.ylabel('UMAP Dimension 2')
-    plt.legend()
-    plt.savefig('umap_2d_visualization.png')
-    plt.show()
-
-    # Step 7: Calculate the breakdown metrics
-    cluster_stats = {}
-
-    for cluster in range(optimal_k):
-        cluster_data = df[df['Cluster'] == cluster]
-        
-        # Count of each sex
-        sex_counts = cluster_data['SEX'].value_counts().to_dict()
-        
-        # Mean age
-        mean_age = cluster_data['AGE'].mean()
-        
-        # Count of each mutation
-        mutation_counts = cluster_data['Mutation'].value_counts().to_dict()
-        
-        # Store the metrics
-        cluster_stats[cluster] = {
-            'Sex Counts': sex_counts,
-            'Mean Age': mean_age,
-            'Mutation Counts': mutation_counts,
-            'Total Members': len(cluster_data)
-        }
-
-    # Print the cluster statistics
-    print("\nCluster Statistics:")
-    for cluster, stats in cluster_stats.items():
-        print(f"\nCluster {cluster}:")
-        print(f"  Total Members: {stats['Total Members']}")
-        print(f"  Sex Counts: {stats['Sex Counts']}")
-        print(f"  Mean Age: {stats['Mean Age']:.2f}")
-        print(f"  Mutation Counts: {stats['Mutation Counts']}")
-
-    # Save cluster assignments to a CSV file
-    df.to_csv("people_cluster_assignments_with_pca.csv", index=False)
 
 def find_modules_nmf_with_multiple_increments_and_visualizations():
     # Load your data
@@ -654,110 +359,15 @@ def find_modules_nmf_with_multiple_increments_and_visualizations():
     fig_umap.savefig('umap_plots_nmf_comparison.png')
     plt.show()
 
-def find_modules_kmeans_with_pca_and_multiple_increments():
-    # Load your data
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
-
-    # Step 1: Select only protein columns (assuming they start from the 4th column onward)
-    pids = df.iloc[:, 0]  # First column assumed to be person IDs
-    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
-
-    # Compute variance for each protein
-    protein_variances = protein_data.var(axis=0)
-    max_proteins = protein_variances.shape[0]
-    increments = range(100, max_proteins + 1, 100)  # Steps of 100 proteins
-
-    # Determine grid layout for subplots
-    num_increments = len(increments)
-    rows = int(np.ceil(num_increments / 4))  # 4 columns per row
-    cols = min(4, num_increments)
-
-    # Prepare subplots for elbow plots and PCA visualizations
-    fig_elbow, axes_elbow = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
-    fig_pca, axes_pca = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
-
-    # Flatten axes for easier indexing
-    axes_elbow = axes_elbow.flatten()
-    axes_pca = axes_pca.flatten()
-
-    # Loop through each increment of top proteins
-    for idx, num_proteins in enumerate(increments):
-        print(f"Clustering with top {num_proteins} proteins...")
-
-        # Select the top `num_proteins` by variance
-        top_proteins = protein_variances.nlargest(num_proteins).index
-        df_top_proteins = protein_data[top_proteins]
-        df_top_proteins.index = pids  # Set person IDs as index
-
-        # Scale the data using MinMaxScaler
-        scaler = MinMaxScaler()
-        df_top_proteins_scaled = scaler.fit_transform(df_top_proteins)
-
-        # Calculate distortions for the Elbow Method
-        distortions = []
-        K = range(1, 30)
-        for k in K:
-            kmeans = KMeans(n_clusters=k, random_state=42)
-            kmeans.fit(df_top_proteins_scaled)
-            distortions.append(kmeans.inertia_)
-
-        # Plot the elbow graph for the current increment
-        ax_elbow = axes_elbow[idx]
-        ax_elbow.plot(K, distortions, 'bx-')
-        ax_elbow.set_title(f'Top {num_proteins} Proteins')
-        ax_elbow.set_xlabel('Number of Clusters (k)')
-        if idx % cols == 0:
-            ax_elbow.set_ylabel('Distortion')
-
-        # Perform KMeans clustering with an optimal k (hardcoded or inferred)
-        optimal_k = 4  # Replace with the actual elbow point or a dynamic method
-        kmeans = KMeans(n_clusters=optimal_k, random_state=42)
-        clusters = kmeans.fit_predict(df_top_proteins_scaled)
-
-        # Add cluster assignments to the original DataFrame
-        df[f'Cluster_{num_proteins}'] = clusters
-
-        # PCA for 2D visualization
-        pca = PCA(n_components=2)
-        pca_data_2d = pca.fit_transform(df_top_proteins_scaled)
-        explained_variance = pca.explained_variance_ratio_ * 100  # Convert to percentages
-
-        # Plot PCA with cluster colors
-        ax_pca = axes_pca[idx]
-        for cluster in range(optimal_k):
-            cluster_points = pca_data_2d[clusters == cluster]
-            ax_pca.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {cluster}', alpha=0.7)
-        ax_pca.set_title(f'Top {num_proteins} Proteins')
-        ax_pca.set_xlabel(f'PC1 ({explained_variance[0]:.2f}% Variance)')
-        if idx % cols == 0:
-            ax_pca.set_ylabel(f'PC2 ({explained_variance[1]:.2f}% Variance)')
-        ax_pca.legend(loc='upper right', fontsize='small')
-
-    # Hide unused subplots
-    for ax in axes_elbow[num_increments:]:
-        ax.axis('off')
-    for ax in axes_pca[num_increments:]:
-        ax.axis('off')
-
-    # Finalize and display all elbow plots
-    fig_elbow.tight_layout()
-    fig_elbow.suptitle('Elbow Plots for Different Protein Increments', fontsize=16)
-    fig_elbow.savefig('elbow_plots_comparison.png')
-    plt.show()
-
-    # Finalize and display all PCA plots
-    fig_pca.tight_layout()
-    fig_pca.suptitle('PCA Visualizations for Different Protein Increments', fontsize=16)
-    fig_pca.savefig('pca_plots_comparison.png')
-    plt.show()
-
 def nmf_clustering_stability_analysis():
     # Load your data
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
-    
+    df = pd.read_csv("raw_expression.csv")  # Replace with your data file
+    df = df[df["Mutation"] != "CTL"]
     # Step 1: Select only protein columns (assuming they start from the 4th column onward)
-    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
+    protein_data = df.iloc[:, 5:]  # Proteins as columns, people as rows
     print("Shape of original protein data (people x proteins):", protein_data.shape)
+    top_proteins = protein_data.sum(axis=0).nlargest(1000).index
+    protein_data = protein_data[top_proteins]
     
     # Step 2: Scale the data using MinMaxScaler
     scaler = MinMaxScaler()
@@ -780,7 +390,7 @@ def nmf_clustering_stability_analysis():
         W_all = []  # Store W matrices for co-phonetic coefficient calculation
 
         for i in range(runs):
-            nmf = NMF(n_components=n_clusters, init='random', random_state=i, max_iter=1000)
+            nmf = NMF(n_components=n_clusters, init='random', random_state=i, max_iter=2000)
             W = nmf.fit_transform(scaled_protein_data)
             H = nmf.components_
             reconstruction_errors.append(nmf.reconstruction_err_)
@@ -846,103 +456,336 @@ def nmf_clustering_stability_analysis():
     return metrics_df
 
 
-def find_modules_kmeans_with_multiple_increments_sum():
-    # Load your data
-    df = pd.read_csv("percent_importances.csv")  # Replace with your data file
-    
-    # Step 1: Select only protein columns (assuming they start from the 4th column onward)
-    pids = df.iloc[:, 0]  # First column assumed to be person IDs
-    protein_data = df.iloc[:, 4:]  # Proteins as columns, people as rows
+def analyze_cluster_makeup(cluster_labels, original_df):
+    """
+    Analyzes the makeup of each cluster.
 
-    # Compute sums for each protein
-    protein_sums = protein_data.sum(axis=0)
-    max_proteins = protein_sums.shape[0]
-    increments = list(range(100, max_proteins + 1, 100))  # Steps of 100 proteins
-    increments.append(7258)
+    Parameters:
+    - cluster_labels: Array-like, cluster assignments for each data point.
+    - original_df: DataFrame, the original data containing metadata like SEX, Gene.Dx, and Mutation.
+
+    Returns:
+    - breakdown: A dictionary containing the cluster makeup for each attribute.
+    """
+    breakdown = {}
+
+    # Add cluster labels to the original DataFrame
+    original_df = original_df.copy()
+    original_df['Cluster'] = cluster_labels
+
+    # Get unique clusters
+    clusters = np.unique(cluster_labels)
+
+    for cluster in clusters:
+        cluster_data = original_df[original_df['Cluster'] == cluster]
+        cluster_size = len(cluster_data)
+
+        # Calculate percentages for SEX
+        sex_counts = cluster_data['SEX'].value_counts(normalize=True) * 100
+        sex_breakdown = {sex: round(percent, 2) for sex, percent in sex_counts.items()}
+
+        # Calculate percentages for Gene.Dx (Sx/PreSx)
+        dx_counts = cluster_data['Gene.Dx'].apply(lambda x: x.split('.')[-1]).value_counts(normalize=True) * 100
+        dx_breakdown = {dx: round(percent, 2) for dx, percent in dx_counts.items()}
+
+        # Calculate percentages for Mutation
+        mutation_counts = cluster_data['Mutation'].value_counts(normalize=True) * 100
+        mutation_breakdown = {mutation: round(percent, 2) for mutation, percent in mutation_counts.items()}
+
+                # Calculate age statistics
+        age_mean = cluster_data['AGE'].mean()
+        age_median = cluster_data['AGE'].median()
+        age_std = cluster_data['AGE'].std()
+
+        # Store in breakdown dictionary
+        breakdown[cluster] = {
+            'Cluster Size': cluster_size,
+            'Sex Breakdown': sex_breakdown,
+            'Symptomatic Breakdown': dx_breakdown,
+            'Mutation Breakdown': mutation_breakdown,
+            'Age Breakdown': {
+                'Mean': round(age_mean, 2),
+                'Median': round(age_median, 2),
+                'Std': round(age_std, 2)
+            },
+        }
+
+    return breakdown
+
+
+def find_modules_kmeans_importances(
+    csv_file="percent_importances.csv",  # Choose the CSV file
+    scale=False,                     # Whether to scale the data
+    visualization="pca",             # Visualization method: "umap" or "pca"
+    max_k=30,                        # Max number of clusters for Elbow method
+    optimal_k=4,                     # Fixed number of clusters for visualization
+    pca_95=True,                    # Whether to apply PCA to retain 95% variance
+    top_n_by="sum",             # How to select top proteins: "sum" or "variance"
+    filter_sex=None,                 # Filter by sex: "M", "F", or None
+    filter_symptomatic=None,          # Filter by symptomatic or not: "Sx", "PreSx", None
+    output_dir="clustering",          # Directory to save the plots
+    exclude_pid = None, #203860577
+):
+    """
+    Perform KMeans clustering on the top proteins and visualize with UMAP or PCA.
+    Saves unique plots for every configuration in a specific folder.
+
+    Parameters:
+    - csv_file: str, the CSV file to load ("raw_importances.csv" or "percent_importances.csv").
+    - scale: bool, whether to scale the data using MinMaxScaler.
+    - visualization: str, choose between "umap" or "pca" for visualization.
+    - max_k: int, the maximum number of clusters for the elbow method.
+    - optimal_k: int, the fixed number of clusters for visualization.
+    - pca_95: bool, whether to apply PCA to retain 95% variance after selecting top proteins.
+    - top_n_by: str, how to select top proteins ("sum" or "variance").
+    - filter_sex: str, filter by sex ("M", "F", or None for no filtering).
+    - output_dir: str, directory to save the generated plots.
+    """
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Generate a unique identifier for this configuration
+    config_name = (
+        f"{os.path.splitext(os.path.basename(csv_file))[0]}_"
+        f"scale-{scale}_"
+        f"vis-{visualization}_"
+        f"top-{top_n_by}_"
+        f"pca95-{pca_95}_"
+        f"sex-{filter_sex or 'all'}_"
+        f"symptomatic-{filter_symptomatic or 'all'}"
+    )
+
+    # Load your data
+    df = pd.read_csv(csv_file)
+
+    # Filter by Mutation
+    df = df[df["Mutation"] != "CTL"]
+    # Remove the specific outlier ID before processing WATCH THIS LINE
+    #df = df[df.iloc[:, 0] != 203860577]
+
+    # Filter by Sex if specified
+    if filter_sex in ["M", "F"]:
+        df = df[df["SEX"] == filter_sex]
+        print(f"Filtered by SEX={filter_sex}. Remaining rows: {len(df)}")
+    
+    if filter_symptomatic in ["Sx", "PreSx"]:
+        df = df[df['Gene.Dx'].str.endswith(filter_symptomatic)]
+        print(f"Filtered by symptomatic={filter_symptomatic}. Remaining rows: {len(df)}")
+
+    # Select only protein columns (assuming they start from the 4th column onward)
+    pids = df.iloc[:, 0]  # First column assumed to be person IDs
+    protein_data = df.iloc[:, 5:]  # Proteins as columns, people as rows
+    protein_data_index = protein_data
+    # If clustering on the expression data, take the top proteins from the importance data
+    if csv_file == "raw_expression.csv":
+        percent_importance = pd.read_csv("percent_importances.csv")
+        percent_importance = percent_importance[percent_importance["Mutation"] != "CTL"]
+        protein_data_index = percent_importance.iloc[:, 5:]
+
+    # Compute the metric for selecting top proteins
+    if top_n_by == "sum":
+        metric = protein_data_index.sum(axis=0)
+    elif top_n_by == "variance":
+        metric = protein_data_index.var(axis=0)
+    else:
+        raise ValueError("Invalid value for 'top_n_by'. Choose 'sum' or 'variance'.")
+
+    # Determine increments of top proteins
+    max_proteins = metric.shape[0]
+    increments = list(range(20, max_proteins + 1, 100))  # Steps of 100 proteins
+    increments.append(min(max_proteins, 7258))
 
     # Determine grid layout for subplots
     num_increments = len(increments)
-    rows = int(np.ceil(num_increments / 4))  # 4 columns per row
-    cols = min(4, num_increments)
+    cols = 4  # Fixed number of columns
+    rows = int(np.ceil(num_increments / cols))  # Adjust rows dynamically
 
-    # Prepare subplots for elbow plots
+    # Prepare subplots for elbow plots and visualizations
     fig_elbow, axes_elbow = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
-    fig_umap, axes_umap = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
+    fig_vis, axes_vis = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
 
     # Flatten axes for easier indexing
     axes_elbow = axes_elbow.flatten()
-    axes_umap = axes_umap.flatten()
+    axes_vis = axes_vis.flatten()
 
     # Loop through each increment of top proteins
     for idx, num_proteins in enumerate(increments):
-        print(f"Clustering with top {num_proteins} proteins...")
+        print(f"Processing top {num_proteins} proteins by {top_n_by}...")
 
-        # Select the top `num_proteins` by sum
-        top_proteins = protein_sums.nlargest(num_proteins).index
+        # Select the top num_proteins based on the chosen metric
+        top_proteins = metric.nlargest(num_proteins).index
         df_top_proteins = protein_data[top_proteins]
         df_top_proteins.index = pids  # Set person IDs as index
 
-        # Scale the data using MinMaxScaler
-        #scaler = MinMaxScaler()
-        #df_top_proteins_scaled = scaler.fit_transform(df_top_proteins)
+        # Scale the data if the scale parameter is True
+        if scale:
+            scaler = StandardScaler()
+            df_top_proteins = scaler.fit_transform(df_top_proteins)
+            print(f"Data scaled for top {num_proteins} proteins.")
+
+        # Apply PCA to reduce dimensions to capture 95% variance
+        if pca_95:
+            pca = PCA(n_components=0.95)  # Retain 95% of variance
+            df_top_proteins = pca.fit_transform(df_top_proteins)
+            print(f"Reduced to {df_top_proteins.shape[1]} components to capture 95% variance.")
+
 
         # Calculate distortions for the Elbow Method
         distortions = []
-        K = range(1, 30)
+        silhouette_scores = []
+        calinski_harabasz_scores = []
+        davies_bouldin_scores = []
+        K = range(2, max_k + 1)
         for k in K:
             kmeans = KMeans(n_clusters=k, random_state=42)
             kmeans.fit(df_top_proteins)
+            labels = kmeans.labels_
             distortions.append(kmeans.inertia_)
+            silhouette_scores.append(silhouette_score(df_top_proteins, labels))
+            calinski_harabasz_scores.append(calinski_harabasz_score(df_top_proteins, labels))
+            davies_bouldin_scores.append(davies_bouldin_score(df_top_proteins, labels))
 
         # Plot the elbow graph for the current increment
         ax_elbow = axes_elbow[idx]
         ax_elbow.plot(K, distortions, 'bx-')
-        ax_elbow.set_title(f'Top {num_proteins} Proteins')
+        ax_elbow.set_title(f'Elbow: Top {num_proteins} Proteins ({top_n_by})')
         ax_elbow.set_xlabel('Number of Clusters (k)')
-        if idx % cols == 0:
-            ax_elbow.set_ylabel('Distortion')
+        ax_elbow.set_ylabel('Distortions')
 
-        # Perform KMeans clustering with an optimal k (hardcoded or inferred)
-        optimal_k = 6  # Replace with the actual elbow point or a dynamic method
+        # Perform KMeans clustering with an optimal k
         kmeans = KMeans(n_clusters=optimal_k, random_state=42)
         clusters = kmeans.fit_predict(df_top_proteins)
 
-        # Add cluster assignments to the original DataFrame
-        df[f'Cluster_{num_proteins}'] = clusters
+        # Analyze cluster makeup
+        cluster_makeup = analyze_cluster_makeup(clusters, df)
 
-        # UMAP for 2D visualization
-        reducer = umap.UMAP(n_components=2, random_state=42)
-        reduced_data_2d = reducer.fit_transform(df_top_proteins)
+        # Print cluster makeup analysis
+        print("\nCluster Makeup Analysis:")
+        for cluster, makeup in cluster_makeup.items():
+            print(f"\nCluster {cluster}:")
+            print(f"  Size: {makeup['Cluster Size']}")
+            print(f"  Sex Breakdown: {makeup['Sex Breakdown']}")
+            print(f"  Symptomatic Breakdown: {makeup['Symptomatic Breakdown']}")
+            print(f"  Mutation Breakdown: {makeup['Mutation Breakdown']}")
+            print(f"  Age Breakdown:")
+            for stat, value in makeup['Age Breakdown'].items():
+                print(f"    {stat}: {value}")
 
-        # Plot UMAP with cluster colors
-        ax_umap = axes_umap[idx]
-        for cluster in range(optimal_k):
+
+
+        # Visualization: UMAP or PCA
+        if visualization == "umap":
+            reducer = umap.UMAP(n_components=2, random_state=42)
+            reduced_data_2d = reducer.fit_transform(df_top_proteins)
+            explained_variance = None  # UMAP doesn't have explained variance
+        elif visualization == "pca":
+            pca = PCA(n_components=2)
+            reduced_data_2d = pca.fit_transform(df_top_proteins)
+            explained_variance = pca.explained_variance_ratio_
+            print(f"Variance captured by PCA axes for top {num_proteins} proteins: {explained_variance}")
+
+
+        if exclude_pid is not None:
+            # Find the row index corresponding to the patient ID in the current data
+            exclude_index = df[df.iloc[:, 0] == exclude_pid].index
+            # Map it to the position in the reduced dataset
+            exclude_index = df.index.get_loc(exclude_index[0])
+            reduced_data_2d = np.delete(reduced_data_2d, exclude_index, axis=0)
+            clusters = np.delete(clusters, exclude_index, axis=0)
+
+        # Plot the visualization with cluster colors
+        ax_vis = axes_vis[idx]
+        for cluster in np.unique(clusters):
             cluster_points = reduced_data_2d[clusters == cluster]
-            ax_umap.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {cluster}', alpha=0.7)
-        ax_umap.set_title(f'Top {num_proteins} Proteins')
-        ax_umap.set_xlabel('UMAP Dimension 1')
-        if idx % cols == 0:
-            ax_umap.set_ylabel('UMAP Dimension 2')
+            ax_vis.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {cluster}', alpha=0.7)
+        ax_vis.set_title(f'{visualization.upper()}: Top {num_proteins} Proteins ({top_n_by})')
+        if visualization == "umap":
+            ax_vis.set_xlabel('Dimension 1')
+            ax_vis.set_ylabel('Dimension 2')
+        else:
+            ax_vis.set_xlabel(
+                f'PCA 1 ({explained_variance[0]:.2%} variance)' 
+                if explained_variance is not None and len(explained_variance) > 0 
+                else 'Dimension 1'
+            )
+            ax_vis.set_ylabel(
+                f'PCA 2 ({explained_variance[1]:.2%} variance)' 
+                if explained_variance is not None and len(explained_variance) > 1 
+                else 'Dimension 2'
+            )
 
     # Hide unused subplots
     for ax in axes_elbow[num_increments:]:
         ax.axis('off')
-    for ax in axes_umap[num_increments:]:
+    for ax in axes_vis[num_increments:]:
         ax.axis('off')
 
-    # Finalize and display all elbow plots
+    # Save the plots
+    elbow_path = os.path.join(output_dir, f"{config_name}_elbow.png")
+    vis_path = os.path.join(output_dir, f"{config_name}_vis.png")
     fig_elbow.tight_layout()
-    fig_elbow.suptitle('Elbow Plots for Different Protein Increments', fontsize=16)
-    fig_elbow.savefig('elbow_plots_comparison.png')
-    plt.show()
+    fig_elbow.savefig(elbow_path)
+    fig_vis.tight_layout()
+    fig_vis.savefig(vis_path)
 
-    # Finalize and display all UMAP plots
-    fig_umap.tight_layout()
-    fig_umap.suptitle('UMAP Visualizations for Different Protein Increments', fontsize=16)
-    fig_umap.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), title="Clusters")
-    fig_umap.savefig('umap_plots_comparison.png')
-    plt.show()
+    print(f"Saved Elbow Plot: {elbow_path}")
+    print(f"Saved Visualization Plot: {vis_path}")
+
+    plt.close(fig_elbow)
+    plt.close(fig_vis)
+    
 
 
 if __name__ == '__main__':
-    find_modules_kmeans_with_multiple_increments_sum()
+
+    '''
+    # Define the possible values for each parameter
+    csv_files = ["raw_importances.csv", "percent_importances.csv"]
+    scales = [True, False]
+    visualizations = ["pca", "umap"]
+    pca_95_options = [True, False]
+    top_n_by_options = ["sum", "variance"]
+    filter_sexes = [None]
+
+    # Generate all combinations of parameters
+    all_combinations = list(itertools.product(
+        csv_files, 
+        scales, 
+        visualizations, 
+        pca_95_options, 
+        top_n_by_options, 
+        filter_sexes
+    ))
+
+    # Ensure output directory exists
+    output_dir = "clustering"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Call the function for each combination
+    for combination in all_combinations:
+        # Unpack the combination into corresponding variables
+        csv_file, scale, visualization, pca_95, top_n_by, filter_sex = combination
+
+        # Prepare the configuration dictionary
+        config = {
+            "csv_file": csv_file,
+            "scale": scale,
+            "visualization": visualization,
+            "max_k": 30,
+            "optimal_k": 4,
+            "pca_95": pca_95,
+            "top_n_by": top_n_by,
+            "filter_sex": filter_sex,
+            "output_dir": output_dir
+        }
+
+        # Print the configuration for logging purposes
+        print(f"Running configuration: {config}")
+
+        # Call the function with the generated configuration
+        find_modules_kmeans(**config)
+
+        # Confirm completion of the configuration
+        print(f"Completed configuration: {config}")'''
+
+find_modules_kmeans_importances()
