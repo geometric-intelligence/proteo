@@ -16,7 +16,6 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal.windows import triang
 from scipy.ndimage import convolve1d
 
-RANDOM_STATE = 30
 
 LABEL_DIM_MAP = {
     "clinical_dementia_rating_global": 5,
@@ -150,7 +149,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_{split}_nolog.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_{split}_nolog_random_state_{self.config.random_state}.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -182,8 +181,8 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         files= [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train_nolog.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test_nolog.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train_nolog_random_state_{self.config.random_state}.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test_nolog_random_state_{self.config.random_state}.pt",
         ]
         print("Processed file names:", files)
         return files
@@ -395,7 +394,7 @@ class FTDDataset(InMemoryDataset):
         if self.config.y_val in Y_VALS_TO_NORMALIZE:
             hist_path = os.path.join(self.processed_dir, self.orig_hist_path_str)
             plot_histogram(pd.DataFrame(y_vals), f'original {self.config.y_val}', save_to=hist_path)
-            y_train, y_test = train_test_split(y_vals, test_size=0.20, random_state=RANDOM_STATE)
+            y_train, y_test = train_test_split(y_vals, test_size=0.20, random_state=self.config.random_state)
             y_vals, mean, std = log_transform(y_train, y_vals)
         y_vals_mask = ~y_vals.isna()
         y_vals = y_vals[y_vals_mask]
@@ -483,8 +482,21 @@ class FTDDataset(InMemoryDataset):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
+        
+        # Load the additional CSV file
+        numeric_meta_path = os.path.join(self.raw_dir, "numericMetaLouisa.csv")
+        numeric_meta_data = pd.read_csv(numeric_meta_path)
+        
+        # Merge the global.ageadj.slope into csv_data based on DID
+        csv_data = csv_data.merge(
+            numeric_meta_data[['DID', 'global.ageadj.slope']],
+            on='DID',
+            how='left'  # Use 'left' to keep all rows from csv_data
+        )
+        
         # Remove bimodal columns
         csv_data = remove_erroneous_columns(config, csv_data, self.raw_dir)
+        
         # Get the correct subset of proteins based on the mutation, if they have the correct modality measurements, and sex and then use those to find the top proteins and labels
         condition_sex = csv_data[sex_col].isin(self.config.sex)
         condition_modality = csv_data[HAS_MODALITY_COL[self.config.modality]]
@@ -561,7 +573,7 @@ class FTDDataset(InMemoryDataset):
             filtered_did_col, 
             filtered_gene_col
         ) = self.load_csv_data_pre_pt_files(config)
-
+        random_state = config.random_state
         # Convert sex and mutation to categorical labels
         sex_labels = np.array(filtered_sex_col.astype('category').cat.codes)
         mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
@@ -601,7 +613,7 @@ class FTDDataset(InMemoryDataset):
             mutation_labels,
             filtered_age_col,
             test_size=0.20,
-            random_state=RANDOM_STATE,
+            random_state=random_state,
         )
         scaler = StandardScaler()
         train_features = scaler.fit_transform(train_features)

@@ -50,6 +50,9 @@ def load_checkpoint(relative_checkpoint_path):
         checkpoint['hyper_parameters']['config'].use_master_nodes = False  # Add default value
         checkpoint['hyper_parameters']['config'].master_nodes = []
     
+    if not hasattr(checkpoint['hyper_parameters']['config'], 'random_state'):
+        checkpoint['hyper_parameters']['config'].random_state = 42
+        
     torch.save(checkpoint, checkpoint_path)
     checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     module = proteo_train.Proteo.load_from_checkpoint(checkpoint_path)
@@ -69,9 +72,10 @@ def get_explainer_baseline(config):
     '''Function to get the baseline normal expression data to use for explainer results'''
     # Get the Scaler we use to transform all the data
     root = config.data_dir
+    random_state = config.random_state
     train_dataset = FTDDataset(root, "train", config)
     features, _, _, top_protein_columns, _, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
-    train_features, test_features = train_test_split(features, test_size=0.20, random_state=42)
+    train_features, test_features = train_test_split(features, test_size=0.20, random_state=random_state)
     combined_features = np.concatenate((train_features, test_features), axis=0)
     scaler = StandardScaler()
     scaler.fit(train_features)
@@ -103,10 +107,11 @@ def get_protein_ids(config):
 def get_sex_mutation_age_distribution(config):
     # Make an instance of the FTDDataset class to get the top proteins
     root = config.data_dir
+    random_state = config.random_state
     train_dataset = FTDDataset(root, "train", config)
     _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
-    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels, train_gene_col, test_gene_col = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=42)
+    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels, train_gene_col, test_gene_col = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=random_state)
     total_sex_labels = np.concatenate((train_sex_labels, test_sex_labels))
     total_mutation_labels = np.concatenate((train_mutation_labels, test_mutation_labels))
     total_age_labels = np.concatenate((train_age_labels, test_age_labels))
@@ -593,10 +598,19 @@ def divide_dict_values(dict1, dict2):
     return result
 ### Comparison Function ###
 
-def plot_importance_comparison_men_vs_women(all_explanations_percent, protein_ids, config):
+def plot_importance_comparison_men_vs_women(all_explanations_percent, protein_ids, config, exclude_ctl=False):
     """Compares feature importance between men and women."""
-    total_sex_labels, _, _, _, _, _, _ = get_sex_mutation_age_distribution(config)
+    total_sex_labels, total_mutation_labels, _, _, _, _, _ = get_sex_mutation_age_distribution(config)
     all_explanations_percent = np.array(all_explanations_percent)
+
+
+    # Optionally exclude individuals with mutation = 'CTL'
+    if exclude_ctl:
+        ctl_indices = np.where(total_mutation_labels == 'CTL')[0]
+        keep_indices = np.setdiff1d(np.arange(len(total_mutation_labels)), ctl_indices)
+        total_sex_labels = total_sex_labels[keep_indices]
+        all_explanations_percent = all_explanations_percent[keep_indices]
+    
     # Get indices for men and women
     men_indices = np.where(total_sex_labels == 'M')[0]
     women_indices = np.where(total_sex_labels == 'F')[0]
@@ -614,7 +628,7 @@ def plot_importance_comparison_men_vs_women(all_explanations_percent, protein_id
     # Annotate proteins
     for i in range(min_len):
         # Extract the part before the first '|' in protein_ids
-        protein_id_x = protein_ids[i] #.split('|')[0]
+        protein_id_x = protein_ids[i].split('|')[0]
         x, y = mean_importance_men[i], mean_importance_women[i]
         
         # Check if point is within threshold of the line y = x
@@ -716,7 +730,7 @@ def create_protein_plots(combined_sum_node_importance_raw, combined_sum_node_imp
     plot_explainer_results(config, all_percent_importances, protein_ids, f'explainer_plots/{model_name}_pca.png')
 
     # Comparison plot for men vs women
-    plot_importance_comparison_men_vs_women(all_percent_importances, protein_ids, config)
+    plot_importance_comparison_men_vs_women(all_percent_importances, protein_ids, config, exclude_ctl=True)
 
 
 ############FUNCTIONS TO COMPARE RESULTS############################################
