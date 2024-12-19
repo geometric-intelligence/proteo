@@ -232,6 +232,29 @@ class FTDDataset(InMemoryDataset):
         edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
         return Data(x=x, edge_index=edge_index, y=label, weight=weight, sex=sex, mutation=mutation, age=age)
 
+    def create_graph_data_train(
+        self,
+        feature,
+        label,
+        weight,
+        adj_matrix,
+        sex,
+        mutation,
+        age,
+    ):
+        """Create Data object for each graph.
+
+        Compute attributes x, edge_index, and y for each graph.
+        """
+        x = feature  # protein concentrations: what is on the nodes
+        adj_tensor = torch.tensor(adj_matrix)
+        # Find the indices where the matrix has non-zero elements
+        pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
+        # Extract the pairs of connected nodes
+        edge_index = torch.tensor(pairs_indices.tolist())
+        edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
+        return Data(x=x, edge_index=edge_index, y=label, weight=weight, sex=sex, mutation=mutation, age=age)
+    
     def process(self):
         """
         Read data into huge `Data` list, i.e., a list of graphs.
@@ -478,6 +501,53 @@ class FTDDataset(InMemoryDataset):
     
     # --------------------------- FUNCTIONS PROCESSING ALL --------------------------------#
 
+    def _prepare_weights(self, labels, reweight, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
+        assert reweight in {'none', 'inverse', 'sqrt_inv'}
+        assert reweight != 'none' if lds else True, \
+            "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
+        # Find the minimum label to shift all labels to non-negative range
+        min_label = int(np.min(labels))
+        offset = -min_label if min_label < 0 else 0  # Shift only if negative labels exist
+        max_label = int(np.max(labels)) + offset
+
+        # Initialize value_dict for adjusted labels
+        value_dict = {x: 0 for x in range(max_label + 1)}
+
+        # Count occurrences of each adjusted label
+        for label in labels:
+            adjusted_label = int(label) + offset
+            value_dict[adjusted_label] += 1
+
+        # Apply reweighting
+        if reweight == 'sqrt_inv':
+            value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
+        elif reweight == 'inverse':
+            value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()}
+
+        # Map original labels to their corresponding adjusted label frequencies
+        num_per_label = [value_dict[int(label) + offset] for label in labels]
+
+        # If no valid labels or reweight is 'none', return None
+        if not len(num_per_label) or reweight == 'none':
+            return None
+        print(f"Using re-weighting: [{reweight.upper()}]")
+        # Apply LDS if specified
+        if lds:
+            lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
+            smoothed_value = convolve1d(
+                np.asarray([v for _, v in value_dict.items()]),
+                weights=lds_kernel_window,
+                mode='constant'
+            )
+            num_per_label = [smoothed_value[int(label) + offset] for label in labels]
+
+        # Compute weights
+        weights = [np.float32(1 / x) for x in num_per_label]
+        scaling = len(weights) / np.sum(weights)  # Normalize weights
+        weights = [scaling * x for x in weights]
+
+        return weights
+    # --------------------------- FUNCTIONS PROCESSING ALL --------------------------------#
     def load_csv_data_pre_pt_files(self, config):
         '''Load the csv data features and labels'''
         csv_path = self.raw_paths[0]
@@ -611,9 +681,11 @@ class FTDDataset(InMemoryDataset):
 
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
+        #Find weights for LDS weighting
         train_labels_weights = torch.FloatTensor(self._prepare_weights(train_labels,"sqrt_inv"))
         train_labels = torch.FloatTensor(train_labels)
         test_labels = torch.FloatTensor(test_labels)
+
         train_sex = torch.IntTensor(train_sex)
         test_sex = torch.IntTensor(test_sex)
         train_mutation = torch.IntTensor(train_mutation)
@@ -853,9 +925,9 @@ def reverse_log_transform(standardized_log_data, mean, std, log=False):
         data = torch.exp(data)
     return data
 
+
 def get_lds_kernel_window(kernel, ks, sigma):
     assert kernel in ['gaussian', 'triang', 'laplace']
-
     half_ks = (ks - 1) // 2
     if kernel == 'gaussian':
         base_kernel = [0.] * half_ks + [1.] + [0.] * half_ks
