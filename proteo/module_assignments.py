@@ -656,6 +656,15 @@ def find_modules_kmeans_importances(
         kmeans = KMeans(n_clusters=optimal_k, random_state=42)
         clusters = kmeans.fit_predict(df_top_proteins)
 
+        # Save cluster assignments to a CSV file
+        cluster_assignments = pd.DataFrame({
+            'PID': pids,  # Patient IDs
+            'Cluster': clusters            # Cluster assignments
+        })
+        assignments_csv_path = os.path.join(output_dir, f"{config_name}_assignments.csv")
+        cluster_assignments.to_csv(assignments_csv_path, index=False)
+        print(f"Saved cluster assignments to: {assignments_csv_path}")
+
         # Analyze cluster makeup
         cluster_makeup = analyze_cluster_makeup(clusters, df)
 
