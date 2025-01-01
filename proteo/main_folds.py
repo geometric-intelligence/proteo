@@ -42,7 +42,7 @@ from ray.train.torch import TorchTrainer
 from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
 
-import proteo.callbacks_ray as proteo_callbacks_ray
+import proteo.callbacks_ray_folds as proteo_callbacks_ray
 from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, Y_VALS_TO_NORMALIZE
 from proteo.datasets.ftd_folds import FTDDataset
 
@@ -208,7 +208,7 @@ def train_func(train_loop_config):
                 proteo_callbacks_ray.CustomRayWandbCallback(),
                 proteo_callbacks_ray.CustomRayReportLossCallback(),
                 TuneReportCheckpointCallback(
-                    metrics={"val_loss": "val_loss", "train_loss": "train_loss"},
+                    metrics={"mean_val_loss": "mean_val_loss", "std_val_loss": "std_val_loss", "mean_train_loss": "mean_train_loss", "std_train_loss": "std_train_loss"},
                     filename=f"checkpoint.ckpt",
                     on="validation_end",
                 ),
@@ -425,7 +425,7 @@ def main():
         ray_trainer,
         param_space={"train_loop_config": search_space},
         tune_config=tune.TuneConfig(
-            metric='val_loss',
+            metric='mean_val_loss',
             mode='min',
             num_samples=config.num_samples,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
@@ -433,7 +433,7 @@ def main():
         ),
     )
     results = tuner.fit()
-    results.get_dataframe(filter_metric="val_loss", filter_mode="min").to_csv(
+    results.get_dataframe(filter_metric="mean_val_loss", filter_mode="min").to_csv(
         'ray_results_search_hyperparameters.csv'
     )
 

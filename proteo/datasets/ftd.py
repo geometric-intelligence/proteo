@@ -31,14 +31,15 @@ LABEL_DIM_MAP = {
 SEXES = [["M"], ["F"], ["M", "F"], ["F", "M"]]
 MODALITIES = ["plasma", "csf"]
 
-Y_VALS_TO_NORMALIZE = ["nfl", "cog_z_score", "clinical_dementia_rating"]
+Y_VALS_TO_NORMALIZE = ["nfl", "cog_z_score", "clinical_dementia_rating", "global_cog_slope"]
 CONTINOUS_Y_VALS = [
     "nfl",
     "disease_age",
     "executive_function",
     "memory",
     "clinical_dementia_rating",
-    "cog_z_score"
+    "cog_z_score",
+    "global_cog_slope"
 ]
 BINARY_Y_VALS_MAP = {
     "clinical_dementia_rating_binary": {0: 0, 0.5: 1, 1: 1, 2: 1, 3: 1},
@@ -63,7 +64,8 @@ Y_VAL_COL_MAP = {
     'clinical_dementia_rating_global': "CDRGLOB",
     'clinical_dementia_rating_binary': "CDRGLOB",
     'carrier': "Carrier.Status",
-    'cog_z_score': "GLOBALCOG.ZSCORE"
+    'cog_z_score': "GLOBALCOG.ZSCORE",
+    'global_cog_slope': "global.ageadj.slope"
 }
 
 mutation_col = "Mutation"
@@ -552,17 +554,6 @@ class FTDDataset(InMemoryDataset):
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
-        
-        # Load the additional CSV file
-        numeric_meta_path = os.path.join(self.raw_dir, "numericMetaLouisa.csv")
-        numeric_meta_data = pd.read_csv(numeric_meta_path)
-        
-        # Merge the global.ageadj.slope into csv_data based on DID
-        csv_data = csv_data.merge(
-            numeric_meta_data[['DID', 'global.ageadj.slope']],
-            on='DID',
-            how='left'  # Use 'left' to keep all rows from csv_data
-        )
         
         # Remove bimodal columns
         csv_data = remove_erroneous_columns(config, csv_data, self.raw_dir)
