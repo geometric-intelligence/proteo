@@ -28,6 +28,7 @@ LABEL_DIM_MAP = {
     "memory": 1,
     "nfl": 1,
     "cog_z_score": 1,
+    "global_cog_slope": 1
 }
 SEXES = [["M"], ["F"], ["M", "F"], ["F", "M"]]
 MODALITIES = ["plasma", "csf"]
@@ -294,7 +295,7 @@ class FTDDataset(InMemoryDataset):
             print("using master nodes")
             print("features shape after master nodes", features.shape)
         
-        kf = KFold(n_splits=3, shuffle=True, random_state=42)
+        kf = KFold(n_splits=3, shuffle=True, random_state= self.config.random_state)
         for fold, (train_index, test_index) in enumerate(kf.split(features)):
             train_features = features[train_index]
             test_features = features[test_index]
