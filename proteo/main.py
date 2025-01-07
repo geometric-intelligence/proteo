@@ -116,7 +116,7 @@ def train_func(train_loop_config):
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
-        use_LDS = True,
+        use_weights=config.use_weights
     )
     if config.y_val in Y_VALS_TO_NORMALIZE:
         wandb.log(
@@ -389,7 +389,8 @@ def main():
         'sex': tune.grid_search(config.sex_choices),
         'modality': tune.grid_search(config.modality_choices),
         'y_val': tune.grid_search(config.y_val_choices),
-        'sex_specific_adj': tune.grid_search(config.sex_specific_adj_choices)
+        'sex_specific_adj': tune.grid_search(config.sex_specific_adj_choices),
+        'use_weights': tune.grid_search(config.use_weights_choices)
     }
 
     scheduler = ASHAScheduler(

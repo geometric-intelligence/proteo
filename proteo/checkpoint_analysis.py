@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 
-from proteo.datasets.ftd import FTDDataset, reverse_log_transform
+from proteo.datasets.ftd import FTDDataset, reverse_log_transform, RANDOM_STATE
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 c9_mean_dict = {
@@ -73,6 +73,9 @@ def load_checkpoint(relative_checkpoint_path):
     ):
         checkpoint['hyper_parameters']['config'].use_master_nodes = False  # Add default value
         checkpoint['hyper_parameters']['config'].master_nodes = []
+    
+    if not hasattr(checkpoint['hyper_parameters']['config'], 'random_state'):
+        checkpoint['hyper_parameters']['config'].random_state = 42
 
     torch.save(checkpoint, relative_checkpoint_path)
     module = proteo_train.Proteo.load_from_checkpoint(relative_checkpoint_path)
@@ -240,6 +243,7 @@ def process_checkpoints(checkpoint_paths, mean_dict, std_dict, device):
 def get_sex_mutation_age_distribution(config):
     # Make an instance of the FTDDataset class to use the load_csv_data_pre_pt_files method
     root = config.data_dir
+    random_state = config.random_state
     train_dataset = FTDDataset(root, "train", config)
     (
         _,
@@ -249,7 +253,8 @@ def get_sex_mutation_age_distribution(config):
         filtered_sex_col,
         filtered_mutation_col,
         filtered_age_col,
-        filtered_did_col
+        filtered_did_col,
+        filtered_gene_col
     ) = train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
     (
@@ -260,9 +265,11 @@ def get_sex_mutation_age_distribution(config):
         train_age_labels,
         test_age_labels,
         train_did_labels, 
-        test_did_labels
+        test_did_labels,
+        train_gene_col,
+        test_gene_col
     ) = train_test_split(
-        filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, test_size=0.20, random_state=42
+        filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=random_state
     )
     print("train did labels", train_did_labels)
     print("test did labels", test_did_labels )
@@ -274,7 +281,9 @@ def get_sex_mutation_age_distribution(config):
         train_age_labels,
         test_age_labels,
         train_did_labels,
-        test_did_labels
+        test_did_labels,
+        train_gene_col, 
+        test_gene_col
     )
 
 
