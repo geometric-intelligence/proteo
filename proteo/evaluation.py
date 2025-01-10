@@ -15,7 +15,7 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 # Custom imports from proteo
-from proteo.datasets.ftd import FTDDataset, remove_erroneous_columns, RANDOM_STATE
+from proteo.datasets.ftd import FTDDataset, remove_erroneous_columns
 import train as proteo_train
 import plotly.graph_objs as go
 from matplotlib.lines import Line2D
@@ -278,27 +278,29 @@ def run_explainer_train_and_test(checkpoint_path):
     print("all_explanations shape (raw importance):", np.array(all_raw_importances).shape)
     print("all_explanations shape (percent importance):", np.array(all_percent_importances).shape)
 
-    #save to a csv
-    df = pd.DataFrame(all_percent_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
-    df.insert(0, "SEX", total_sex_labels)
-    df.insert(1, "AGE", total_age_labels)
-    df.insert(2, "Mutation", total_mutation_labels)
-    df.insert(3, "Gene.Dx", total_gene_col)
-    df.to_csv("percent_importances.csv")
+    # Save to a csv with model name appended to the filename
+    model_name_suffix = f"_{model_name}.csv"
 
-    df = pd.DataFrame(all_raw_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
-    df.insert(0, "SEX", total_sex_labels)
-    df.insert(1, "AGE", total_age_labels)
-    df.insert(2, "Mutation", total_mutation_labels)
-    df.insert(3, "Gene.Dx", total_gene_col)
-    df.to_csv("raw_importances.csv")
+    df_percent_importances = pd.DataFrame(all_percent_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
+    df_percent_importances.insert(0, "SEX", total_sex_labels)
+    df_percent_importances.insert(1, "AGE", total_age_labels)
+    df_percent_importances.insert(2, "Mutation", total_mutation_labels)
+    df_percent_importances.insert(3, "Gene.Dx", total_gene_col)
+    df_percent_importances.to_csv(f"percent_importances{model_name_suffix}")
 
-    df = pd.DataFrame(features, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
-    df.insert(0, "SEX", total_sex_labels)
-    df.insert(1, "AGE", total_age_labels)
-    df.insert(2, "Mutation", total_mutation_labels)
-    df.insert(3, "Gene.Dx", total_gene_col)
-    df.to_csv("raw_expression.csv")
+    df_raw_importances = pd.DataFrame(all_raw_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
+    df_raw_importances.insert(0, "SEX", total_sex_labels)
+    df_raw_importances.insert(1, "AGE", total_age_labels)
+    df_raw_importances.insert(2, "Mutation", total_mutation_labels)
+    df_raw_importances.insert(3, "Gene.Dx", total_gene_col)
+    df_raw_importances.to_csv(f"raw_importances{model_name_suffix}")
+
+    df_raw_expression = pd.DataFrame(features, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
+    df_raw_expression.insert(0, "SEX", total_sex_labels)
+    df_raw_expression.insert(1, "AGE", total_age_labels)
+    df_raw_expression.insert(2, "Mutation", total_mutation_labels)
+    df_raw_expression.insert(3, "Gene.Dx", total_gene_col)
+    df_raw_expression.to_csv("raw_expression.csv")
 
 
     # Combine top proteins for both train and test datasets

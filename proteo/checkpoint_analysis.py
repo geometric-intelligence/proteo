@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 
-from proteo.datasets.ftd import FTDDataset, reverse_log_transform, RANDOM_STATE
+from proteo.datasets.ftd import FTDDataset, reverse_log_transform
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 c9_mean_dict = {
