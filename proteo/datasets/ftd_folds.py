@@ -295,7 +295,7 @@ class FTDDataset(InMemoryDataset):
             print("using master nodes")
             print("features shape after master nodes", features.shape)
         
-        kf = KFold(n_splits=3, shuffle=True, random_state= self.config.random_state)
+        kf = KFold(n_splits=3, shuffle=True, random_state=self.config.random_state)
         for fold, (train_index, test_index) in enumerate(kf.split(features)):
             train_features = features[train_index]
             test_features = features[test_index]
@@ -367,8 +367,8 @@ class FTDDataset(InMemoryDataset):
                     test_data_list.append(data)
 
             # Save the train and test data lists
-            train_path = f"{self.processed_paths[0]}_fold_{fold}"
-            test_path = f"{self.processed_paths[1]}_fold_{fold}"
+            train_path = f"{self.processed_paths[0]}"
+            test_path = f"{self.processed_paths[1]}"
             self.save(train_data_list, train_path)
             self.save(test_data_list, test_path)
 

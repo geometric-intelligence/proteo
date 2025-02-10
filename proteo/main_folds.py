@@ -266,7 +266,7 @@ def main():
         storage_path=config.ray_results_dir,
         checkpoint_config=CheckpointConfig(
             num_to_keep=config.num_to_keep,
-            checkpoint_score_attribute='val_loss',
+            checkpoint_score_attribute='mean_val_loss',
             checkpoint_score_order='min',
         ),
     )
