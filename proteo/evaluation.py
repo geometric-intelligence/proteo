@@ -518,9 +518,9 @@ def plot_bar_chart(protein_dict, title, x_label, y_label, filename=None, top_n=1
     x_highest = list(top_highest.keys())
     y_highest = list(top_highest.values())
 
-    plt.figure(figsize=(28, 10))
+    plt.figure(figsize=(28, 10), dpi=300)
     bar_width = 0.6
-    plt.bar(x_highest, y_highest, color='skyblue', width=bar_width)
+    plt.bar(x_highest, y_highest, color='lightcoral', width=bar_width)
     plt.xlabel(x_label, fontsize=18)
     plt.ylabel(y_label, fontsize=18)
     plt.title(f"Top {top_n} Highest - {title}", fontsize=24)
@@ -535,8 +535,8 @@ def plot_bar_chart(protein_dict, title, x_label, y_label, filename=None, top_n=1
     x_lowest = list(top_lowest.keys())
     y_lowest = list(top_lowest.values())
 
-    plt.figure(figsize=(28, 10))
-    plt.bar(x_lowest, y_lowest, color='lightcoral', width=bar_width)
+    plt.figure(figsize=(28, 10), dpi=300)
+    plt.bar(x_lowest, y_lowest, color='skyblue', width=bar_width)
     plt.xlabel(x_label, fontsize=18)
     plt.ylabel(y_label, fontsize=18)
     plt.title(f"Top {top_n} Lowest - {title}", fontsize=24)
