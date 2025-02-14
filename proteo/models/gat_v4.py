@@ -12,7 +12,6 @@ from torch_geometric.utils import to_dense_batch
 
 
 # Overriding parameter intitialization
-# Overriding parameter intitialization
 class CustomGATConv(GATv2Conv):
     def __init__(
         self,
@@ -226,7 +225,7 @@ class GATv4(nn.Module):
                 if layer.bias is not None:
                     layer.bias.data.fill_(0)
 
-    def forward(self, x, edge_index=None, data=None):
+    def forward(self, x, edge_index=None, data=None, return_attention_weights=False):
         if not isinstance(data, Batch):
             data = Batch().from_data_list([data])
 
@@ -244,9 +243,12 @@ class GATv4(nn.Module):
         x0, _ = to_dense_batch(torch.mean(x, dim=-1), batch=batch)
 
         # Apply first GAT layer and pooling
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        # apply dropout if we are training, reduced this to 0.1 from 0.2
-        x = self.convs[0](x, edge_index)
+        att = None
+        if return_attention_weights:
+            x, att1 = self.convs[0](x, edge_index, return_attention_weights=True)
+        else:
+            x = self.convs[0](x, edge_index)
+
         # [bs*nodes, hidden_channels[0]*heads[0]], Apply the gatconv layer
         x = self.ACT_MAP[self.act](
             x
@@ -257,7 +259,10 @@ class GATv4(nn.Module):
 
         # Apply second GAT layer and pooling
         x = F.dropout(x, p=self.dropout, training=self.training)  # apply dropout if we are training
-        x = self.convs[1](x, edge_index)
+        if return_attention_weights:
+            x, att2 = self.convs[1](x, edge_index, return_attention_weights=True)
+        else:
+            x = self.convs[1](x, edge_index)
         x = self.ACT_MAP[self.act](x)  # [bs*nodes, hidden_channels[1]*heads[1]]
         x2 = self.pools[1](x)  # [bs*nodes, 1]
         x2 = x2.squeeze(-1)  # [bs*nodes]
@@ -301,5 +306,8 @@ class GATv4(nn.Module):
         pred = self.encoder(multiscale_features)
         '''
         aux = [x0, x1, x2, multiscale_features]
-
-        return pred, aux
+        
+        if return_attention_weights:
+            return pred, aux, att1, att2
+        else:
+            return pred, aux

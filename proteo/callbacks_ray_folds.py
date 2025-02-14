@@ -14,6 +14,7 @@ from pytorch_lightning.callbacks import Callback
 from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
+import numpy as np
 
 from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
 
@@ -247,11 +248,14 @@ class CustomRayWandbCallback(Callback):
                 mean_val_loss = np.mean(self.fold_val_losses)
                 std_val_loss = np.std(self.fold_val_losses)
 
+                # Convert fold_train_losses to CPU and then to numpy
+                fold_train_losses_cpu = [loss.cpu().item() for loss in self.fold_train_losses]
+
                 # Log the mean and standard deviation
                 pl_module.log('mean_val_loss', mean_val_loss, on_epoch=True)
                 pl_module.log('std_val_loss', std_val_loss, on_epoch=True)
-                pl_module.log('mean_train_loss', np.mean(self.fold_train_losses), on_epoch=True)
-                pl_module.log('std_train_loss', np.std(self.fold_train_losses), on_epoch=True)
+                pl_module.log('mean_train_loss', np.mean(fold_train_losses_cpu), on_epoch=True)
+                pl_module.log('std_train_loss', np.std(fold_train_losses_cpu), on_epoch=True)
 
                 # Clear the list for the next round of folds
                 self.fold_val_losses.clear()
