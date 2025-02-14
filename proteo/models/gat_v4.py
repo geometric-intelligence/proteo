@@ -245,7 +245,7 @@ class GATv4(nn.Module):
         # Apply first GAT layer and pooling
         att = None
         if return_attention_weights:
-            x, att = self.convs[0](x, edge_index, return_attention_weights=True)
+            x, att1 = self.convs[0](x, edge_index, return_attention_weights=True)
         else:
             x = self.convs[0](x, edge_index)
 
@@ -259,7 +259,10 @@ class GATv4(nn.Module):
 
         # Apply second GAT layer and pooling
         x = F.dropout(x, p=self.dropout, training=self.training)  # apply dropout if we are training
-        x = self.convs[1](x, edge_index)
+        if return_attention_weights:
+            x, att2 = self.convs[1](x, edge_index, return_attention_weights=True)
+        else:
+            x = self.convs[1](x, edge_index)
         x = self.ACT_MAP[self.act](x)  # [bs*nodes, hidden_channels[1]*heads[1]]
         x2 = self.pools[1](x)  # [bs*nodes, 1]
         x2 = x2.squeeze(-1)  # [bs*nodes]
@@ -305,6 +308,6 @@ class GATv4(nn.Module):
         aux = [x0, x1, x2, multiscale_features]
         
         if return_attention_weights:
-            return pred, aux, att
+            return pred, aux, att1, att2
         else:
             return pred, aux
