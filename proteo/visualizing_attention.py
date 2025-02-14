@@ -3,18 +3,26 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd
-
+from proteo.datasets.ftd import FTDDataset
 from checkpoint_analysis import load_checkpoint, load_config
 from proteo.train import construct_datasets
+from sklearn.model_selection import train_test_split
+
+def load_patient_demographics(config):
+    # Make an instance of the FTDDataset class to get the top proteins
+    root = config.data_dir
+    random_state = config.random_state
+    train_dataset = FTDDataset(root, "train", config)
+    _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
+    # Splitting indices only
+    train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels, train_gene_col, test_gene_col = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=random_state)
+    return train_did_labels, test_did_labels, train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_gene_col, test_gene_col
 
 def load_attention_coefficient(
     checkpoint_path: str,
     csv_path: str,
-    participant_id: str,
     participant_id_num: int,
-    mutation: str,
     top_n: int = 30,
-    edge_threshold: float = 0.01,
     layout: str = "spring"
 ):
     """
@@ -27,9 +35,8 @@ def load_attention_coefficient(
         checkpoint_path (str): Path to your trained checkpoint file.
         csv_path (str): Path to the CSV containing importance scores.
             - Rows = participants; columns = node IDs (or feature IDs).
-        participant_id (str): The participant to visualize (must match CSV).
+        participant_id_num (int): The index of the participant to visualize.
         top_n (int): Number of top nodes (by importance) to include in subgraph.
-        edge_threshold (float): Remove edges whose attention < this value.
         layout (str): Which layout to use for visualization. 
                       Options: "spring", "kamada", etc.
     """
@@ -43,14 +50,14 @@ def load_attention_coefficient(
     # 2) Construct or load your dataset
     train_dataset, test_dataset = construct_datasets(config)
 
-    # Make sure test_dataset[0] truly corresponds to participant_id 
-    # (if not, map participant_id -> correct index).
+    # Make sure test_dataset[0] truly corresponds to participant_id_num 
+    # (if not, map participant_id_num -> correct index).
     participant_data = test_dataset[participant_id_num]
     print("participant_data.edge_index", participant_data.edge_index)
 
     # 3) Forward pass to get attention from the first layer
     with torch.no_grad():
-        pred, aux, (edge_index, alpha_1) = model(
+        pred, aux, (edge_index1, alpha_1), (edge_index2, alpha_2) = model(
             participant_data.x,
             edge_index=participant_data.edge_index,
             data=participant_data,
@@ -60,11 +67,17 @@ def load_attention_coefficient(
     # If multiple heads, average across them
     if alpha_1.dim() == 2:
         alpha_1 = alpha_1.mean(dim=1)  # shape [E]
+        print("alpha_1", alpha_1)
     alpha_1 = alpha_1.cpu().numpy()  # numpy array of attention
 
-    print("edge_index shape:", edge_index.shape)  # [2, E]
+    if alpha_2.dim() == 2:
+        alpha_2 = alpha_2.mean(dim=1)  # shape [E]
+        print("alpha_2", alpha_2)
+    alpha_2 = alpha_2.cpu().numpy()  # numpy array of attention
+
+    print("edge_index shape:", edge_index1.shape)  # [2, E]
     print("Alpha shape:", alpha_1.shape)
-    E = edge_index.size(1)
+    E = edge_index1.size(1)
 
     # 4) Load the CSV containing the importance scores
     importance_df = pd.read_csv(csv_path, index_col=0)
@@ -73,8 +86,20 @@ def load_attention_coefficient(
     protein_columns = importance_df.columns[4:]
     print("Number of protein_columns:", len(protein_columns))
 
-    if participant_id not in importance_df.index:
-        raise ValueError(f"Participant {participant_id} not found in the CSV index.")
+    # Calculate mean importance across all participants
+    mean_importance = importance_df[protein_columns].mean(axis=0)
+
+    # Identify top-N highest and lowest proteins by mean importance
+    top_n_highest_proteins = mean_importance.nlargest(top_n).index.to_list()
+    top_n_lowest_proteins = mean_importance.nsmallest(top_n).index.to_list()
+    top_n_proteins = top_n_highest_proteins + top_n_lowest_proteins
+
+    # Load patient demographics
+    _, test_did_labels, _, _, _, test_mutation_labels, _, test_age_labels, _, _ = load_patient_demographics(config)
+    # Get participant_id, mutation, and age for the given participant_id_num
+    participant_id = test_did_labels.iloc[participant_id_num]  # Use iloc for positional indexing
+    mutation = test_mutation_labels.iloc[participant_id_num]
+    age = test_age_labels.iloc[participant_id_num]
 
     # Select the row for the specified participant
     row = importance_df.loc[participant_id, protein_columns]
@@ -82,34 +107,29 @@ def load_attention_coefficient(
 
     # Create mapping from protein to node index
     protein_to_node = {protein: idx for idx, protein in enumerate(protein_columns)}
-
-    # 5) Identify top-N node indices by importance
-    top_n_proteins = row.nlargest(top_n).index.to_list()
     top_n_indices = [protein_to_node[protein] for protein in top_n_proteins]
     top_n_set = set(top_n_indices)
+
 
     #print("Top N indices:", top_n_indices)
 
     # --------------------------
     # OPTIONAL: Filter edges before building the subgraph
     #  (a) remove self-loops
-    #  (b) remove low-attention edges
-    # --------------------------
-    src, dst = edge_index[0], edge_index[1]
+
+    src, dst = edge_index1[0], edge_index1[1]
 
     #(a) remove self-loops
     no_self_loop_mask = (src != dst)
 
-    final_mask = no_self_loop_mask
-
     # Filter edge_index and alpha_1
-    edge_index = edge_index[:, final_mask]
-    alpha_1 = alpha_1[final_mask]
+    edge_index = edge_index1[:, no_self_loop_mask]
+    alpha_1 = alpha_1[no_self_loop_mask]
 
     # 6) Re-build adjacency (top_n x top_n) from the filtered edges
     E_filtered = edge_index.size(1)
     node2idx = {nid: i for i, nid in enumerate(sorted(top_n_set))}
-    adj_top_n = np.zeros((top_n, top_n), dtype=np.float32)
+    adj_top_n = np.zeros((2 * top_n, 2 * top_n), dtype=np.float32)
     edges_list = []
 
     for e in range(E_filtered):
@@ -126,19 +146,22 @@ def load_attention_coefficient(
 
     # 7) Visualize with NetworkX
     G_sub = nx.from_numpy_array(adj_top_n, create_using=nx.DiGraph)
-    # rename nodes to their real protein IDs
-    mapping = {i: top_n_proteins[i] for i in range(top_n)}
+    # Create a mapping from the node index in the subgraph to the protein name
+    mapping = {i: protein_columns[top_n_indices[i]] for i in range(len(top_n_indices))}
     G_sub = nx.relabel_nodes(G_sub, mapping)
 
     # Node size ~ importance
     node_sizes = [3000 * row[protein] for protein in top_n_proteins]
+
+    # Node color based on importance
+    node_colors = ['red' if protein in top_n_highest_proteins else 'blue' for protein in top_n_proteins]
 
     # Edge widths ~ attention
     edge_widths = []
     for (u, v) in G_sub.edges():
         w = G_sub[u][v]['weight']
         # scale for visualization
-        edge_widths.append(3.0 * w)
+        edge_widths.append(10 * w)
 
     # Choose a layout
     if layout == "spring":
@@ -156,19 +179,19 @@ def load_attention_coefficient(
     plt.figure(figsize=(20, 20), dpi=150)
     nx.draw_networkx_nodes(G_sub, pos,
                            node_size=node_sizes,
-                           node_color="skyblue",
+                           node_color=node_colors,
                            alpha=0.8)
     nx.draw_networkx_edges(G_sub, pos,
                            width=edge_widths,
                            edge_color="gray",
                            alpha=0.7)
     nx.draw_networkx_labels(G_sub, pos, labels=labels, font_size=8)
-    plt.title(f"Participant {participant_id} - Top-{top_n} Subgraph (Mutation={mutation})")
+    plt.title(f"Participant {participant_id} - Age: {age} - Mutation: {mutation} - Top-{top_n} Subgraph")
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f"gnn_vis/node_visual_{participant_id}.png")
     plt.close()
-    return participant_data.edge_index, edge_index, adj_top_n, edges_list
+    return participant_data.edge_index, edge_index1, edge_index2, adj_top_n, edges_list, alpha_1, alpha_2
 
 if __name__ == "__main__":
     checkpoint_path_global_age = (
@@ -185,64 +208,41 @@ if __name__ == "__main__":
     checkpoint_path_nfl = "/scratch/lcornelis/outputs/ray_results/TorchTrainer_2024-10-29_13-49-44/model=gat-v4,seed=47436_511_act=tanh,adj_thresh=0.9000,batch_size=8,dropout=0.1000,l1_lambda=0.0000,lr=0.0001,lr_scheduler=CosineA_2024-10-29_18-37-51/checkpoint_000342"
     csv_path_nfl = "percent_importances_model=gat-v4,seed=47436_511_act=tanh,adj_thresh=0.9000,batch_size=8,dropout=0.1000,l1_lambda=0.0000,lr=0.0001,lr_scheduler=CosineA_2024-10-29_18-37-51.csv"
 
-    participant_ids = [
-        203658808, 203015047, 203424662, 203675150, 203444149, 203698781,
-        203767335, 203920017, 203024967, 203107651, 203208248, 203846123,
-        203874005, 203633810, 203237749, 203579685, 203754322, 203037518,
-        203394884, 203075010, 203307931, 203056536, 203445036, 203484970,
-        203117034, 203955060, 203711414, 203854714, 203025100, 203649860,
-        203545890, 203363904, 203485014, 203292476, 203836355, 203083561,
-        203412030, 203052412, 203787564, 203697600, 203232724, 203510962,
-        203609568, 203557584, 203162182, 203686947, 203041416, 203228793,
-        203554899, 203681871, 203132940
-    ]
-
-    # List of mutations corresponding to participant_ids
-    mutations = [
-        "MAPT", "C9orf72", "CTL", "MAPT", "MAPT", "CTL", "C9orf72", "C9orf72", "C9orf72", "CTL",
-        "CTL", "CTL", "MAPT", "MAPT", "C9orf72", "MAPT", "C9orf72", "CTL", "C9orf72", "MAPT",
-        "GRN", "GRN", "CTL", "GRN", "MAPT", "CTL", "C9orf72", "MAPT", "GRN", "MAPT", "GRN",
-        "MAPT", "MAPT", "MAPT", "C9orf72", "C9orf72", "CTL", "C9orf72", "MAPT", "C9orf72",
-        "C9orf72", "GRN", "GRN", "CTL", "CTL", "C9orf72", "GRN", "CTL", "CTL", "C9orf72", "GRN"
-    ]
-
-    # Iterate over participant_ids and mutations
-    for idx, (participant_id, mutation) in enumerate(zip(participant_ids, mutations)):
-        # Call the function with the current participant_id
-        edge_index, attention_edge_index, adj_top_n, edges_list = load_attention_coefficient(
+    # Iterate over participant indices
+    for participant_id_num in range(51):
+        print("participant_id_num", participant_id_num)
+        edge_index, attention_edge_index, adj_top_n, edges_list, alpha_1 = load_attention_coefficient(
             checkpoint_path=checkpoint_path_global_age,
-            csv_path=csv_path_global_age,
-            participant_id=participant_id,
-            participant_id_num=idx,
-            mutation=mutation,
+            csv_path=csv_path_nfl,
+            participant_id_num=participant_id_num,
             top_n=200,  # Adjust as needed
-            edge_threshold=0.01,  # Adjust if needed
             layout="spring"       # or "kamada"
         )
 
-    # # Run for participant 203025100 with all nodes
-    # edge_index, attention_edge_index, adj_top_n, edges_list_0 = load_attention_coefficient(
-    #     checkpoint_path=checkpoint_path_global_age,
-    #     csv_path=csv_path_global_age,
-    #     participant_id=203025100,
-    #     participant_id_num=participant_ids.index(203025100),
-    #     top_n=7257,
-    #     edge_threshold=0.01,  # Adjust if needed
-    #     layout="spring"       # or "kamada"
-    # )
+    # Run for participant 203025100 with all nodes
+    edge_index, attention_edge_index1, attention_edge_index2, adj_top_n, edges_list_0, alpha_1_0, alpha_2_0 = load_attention_coefficient(
+        checkpoint_path=checkpoint_path_global_age,
+        csv_path=csv_path_global_age,
+        participant_id_num=10,
+        top_n=1000,
+        layout="spring"       # or "kamada"
+    )
 
-    # # Run for participant 203658808 with all nodes
-    # edge_index, attention_edge_index, adj_top_n, edges_list_1 = load_attention_coefficient(
-    #     checkpoint_path=checkpoint_path_global_age,
-    #     csv_path=csv_path_global_age,
-    #     participant_id=203658808,
-    #     participant_id_num=0,
-    #     top_n=7257,
-    #     edge_threshold=0.01,  # Adjust if needed
-    #     layout="spring"       # or "kamada"
-    # )
+    # Run for participant 203658808 with all nodes
+    edge_index, attention_edge_index1, attention_edge_index2, adj_top_n, edges_list_1, alpha_1_1, alpha_2_1 = load_attention_coefficient(
+        checkpoint_path=checkpoint_path_global_age,
+        csv_path=csv_path_global_age,
+        participant_id_num=15,
+        top_n=1000,
+        layout="spring"       # or "kamada"
+    )
 
-    # if edges_list_0 == edges_list_1:
-    #     print("edges_list_0 and edges_list_1 are the same.")
-    # else:
-    #     print("edges_list_0 and edges_list_1 are different.")
+    if np.array_equal(alpha_2_0, alpha_2_1):
+        print("edges_list_0 and edges_list_1 are the same.")
+    else:
+        for idx, (val_0, val_1) in enumerate(zip(alpha_1_0, alpha_1_1)):
+            if abs(val_0 - val_1) > 0.000001:
+                print(f"different at index {idx} with values: {val_0} {val_1}")
+        print("edges_list_0 and edges_list_1 are different.")
+
+   
