@@ -8,3 +8,26 @@
 **/ray_results/
 **/ray_results_search_hyperparameters.csv
 **/explainer_plots/
+**/DE_scores_nfl.csv
+**/clustering 2/
+**/clustering/
+**/correlation_with_expression_vs_NFL3_MEAN_colored.png
+**/de_scores_plot_highest.png
+**/k_distance_plot.png
+**/mean_importance_vs_correlation.png
+**/negative_de_scores_plot_lowest.png
+**/nmf_metrics_plot.png
+**/node_visual.png
+**/people_cluster_assignments.csv
+**/people_cluster_assignments_with_pca.csv
+**/percent_importances_model=gat-v4,seed=15990_1874_act=relu,adj_thresh=0.5000,batch_size=8,dropout=0.1000,l1_lambda=0.0000,lr=0.0031,lr_scheduler=Lambda_2025-01-05_10-44-13.csv
+**/percent_importances_model=gat-v4,seed=42423_3995_act=sigmoid,adj_thresh=0.7000,batch_size=32,dropout=0.2000,l1_lambda=0.0000,lr=0.0087,lr_scheduler=La_2025-02-05_12-48-31.csv
+**/percent_importances_model=gat-v4,seed=47436_511_act=tanh,adj_thresh=0.9000,batch_size=8,dropout=0.1000,l1_lambda=0.0000,lr=0.0001,lr_scheduler=CosineA_2024-10-29_18-37-51.csv
+**/raw_expression.csv
+**/raw_expression_global_age.csv
+**/raw_expression_nfl.csv
+**/raw_importances_global_age.csv
+**/raw_importances_model=gat-v4,seed=15990_1874_act=relu,adj_thresh=0.5000,batch_size=8,dropout=0.1000,l1_lambda=0.0000,lr=0.0031,lr_scheduler=Lambda_2025-01-05_10-44-13.csv
+**/raw_importances_model=gat-v4,seed=42423_3995_act=sigmoid,adj_thresh=0.7000,batch_size=32,dropout=0.2000,l1_lambda=0.0000,lr=0.0087,lr_scheduler=La_2025-02-05_12-48-31.csv
+**/raw_importances_model=gat-v4,seed=47436_511_act=tanh,adj_thresh=0.9000,batch_size=8,dropout=0.1000,l1_lambda=0.0000,lr=0.0001,lr_scheduler=CosineA_2024-10-29_18-37-51.csv
+**/significant_differential_correlations.csv
