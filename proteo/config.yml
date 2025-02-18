@@ -114,6 +114,7 @@ pin_memory: true
 
 # Hyperparameter search
 # Nb of trials = len(model_grid_search) * num_samples
+num_folds: 5
 num_samples: 200
 grace_period: 20  # Each training is run at least this nb of epochs.
 reduction_factor: 6

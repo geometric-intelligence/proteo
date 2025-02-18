@@ -91,7 +91,9 @@ def train_func(train_loop_config):
         mode="offline" if config.wandb_offline else "online",
     )
 
-    train_dataset, test_dataset = proteo_train.construct_datasets(config)
+    # Use the fold from train_loop_config
+    fold = train_loop_config['fold']
+    train_dataset, test_dataset = proteo_train.construct_datasets(config, fold)
     train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
 
     avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
@@ -256,158 +258,102 @@ def main():
     )
 
     # Configure hyperparameter search for Tuner
-    def num_layers(trial_config):
-        num_layers_map = {
-            'gat-v4': [None],  # Unused. Here for compatibility.
-            'gat': config.gat_num_layers,
-            'gcn': config.gcn_num_layers,
-            'mlp': [None]
+    model_param_grid = {
+        'gat-v4': {
+            'num_layers': [None],
+            'hidden_channels': config.gat_v4_hidden_channels,
+            'heads': config.gat_v4_heads,
+            'fc_dim': config.gat_v4_fc_dim,
+            'fc_dropout': config.gat_v4_fc_dropout,
+            'fc_act': config.gat_v4_fc_act,
+            'weight_initializer': config.gat_v4_weight_initializer,
+            'channel_list': [None],
+            'norm': [None],
+            'plain_last': [None]
+        },
+        'gat': {
+            'num_layers': config.gat_num_layers,
+            'hidden_channels': config.gat_hidden_channels,
+            'heads': config.gat_heads,
+            'fc_dim': [None],
+            'fc_dropout': [None],
+            'fc_act': [None],
+            'weight_initializer': [None],
+            'channel_list': [None],
+            'norm': [None],
+            'plain_last': [None]
+        },
+        'gcn': {
+            'num_layers': config.gcn_num_layers,
+            'hidden_channels': config.gcn_hidden_channels,
+            'heads': [None],
+            'fc_dim': [None],
+            'fc_dropout': [None],
+            'fc_act': [None],
+            'weight_initializer': [None],
+            'channel_list': [None],
+            'norm': [None],
+            'plain_last': [None]
+        },
+        'mlp': {
+            'num_layers': [None],
+            'hidden_channels': [None],
+            'heads': [None],
+            'fc_dim': [None],
+            'fc_dropout': [None],
+            'fc_act': [None],
+            'weight_initializer': [None],
+            'channel_list': config.mlp_channel_lists,
+            'norm': config.mlp_norms,
+            'plain_last': config.mlp_plain_last
         }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(num_layers_map[model])
-
-    def hidden_channels(trial_config):
-        hidden_channels_map = {
-            'gat-v4': config.gat_v4_hidden_channels,
-            'gat': config.gat_hidden_channels,
-            'gcn': config.gcn_hidden_channels,
-            'mlp': [None]
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(hidden_channels_map[model])
-
-    def heads(trial_config):
-        heads_map = {
-            'gat-v4': config.gat_v4_heads,
-            'gat': config.gat_heads,
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': [None]
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(heads_map[model])
-
-    def fc_dim(trial_config):
-        fc_dim_map = {
-            'gat-v4': config.gat_v4_fc_dim,
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],
-            'mlp': [None]
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(fc_dim_map[model])
-
-    def fc_dropout(trial_config):
-        fc_dropout_map = {
-            'gat-v4': config.gat_v4_fc_dropout,
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': [None]
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(fc_dropout_map[model])
-
-    def fc_act(trial_config):
-        fc_act_map = {
-            'gat-v4': config.gat_v4_fc_act,
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': [None]
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(fc_act_map[model])
-
-    def weight_initializer(trial_config):
-        weight_initializer_map = {
-            'gat-v4': config.gat_v4_weight_initializer,
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': [None]
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(weight_initializer_map[model])
-    
-    def channel_list(trial_config):
-        channel_list_map = {
-            'gat-v4':[None],
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': config.mlp_channel_lists,
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(channel_list_map[model])
-    
-    def norm(trial_config):
-        norm_map = {
-            'gat-v4':[None],
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': config.mlp_norms,
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(norm_map[model])
-    
-    def plain_last(trial_config):
-        plain_last_map = {
-            'gat-v4':[None],
-            'gat': [None],  # Unused. Here for compatibility.
-            'gcn': [None],  # Unused. Here for compatibility.
-            'mlp': config.mlp_plain_last,
-        }
-        model = trial_config['train_loop_config']['model']
-        return random.choice(plain_last_map[model])
-
-    def trial_str_creator(trial):
-        train_loop_config = trial.config['train_loop_config']
-        model = train_loop_config['model']
-        seed = train_loop_config['seed']
-        return f"model={model},seed={seed}"
-
-    search_space = {
-        'model': tune.grid_search(config.model_grid_search),
-        # Model-specific parameters
-        'num_layers': tune.sample_from(num_layers),
-        'hidden_channels': tune.sample_from(hidden_channels),
-        'heads': tune.sample_from(heads),
-        'fc_dim': tune.sample_from(fc_dim),
-        'fc_dropout': tune.sample_from(fc_dropout),
-        'fc_act': tune.sample_from(fc_act),
-        'weight_initializer': tune.sample_from(weight_initializer),
-        'channel_list': tune.sample_from(channel_list),
-        'norm': tune.sample_from(norm),
-        'plain_last': tune.sample_from(plain_last),
-        # Shared parameters
-        'seed': tune.randint(0, MAX_SEED),
-        'lr': tune.loguniform(config.lr_min, config.lr_max),
-        'batch_size': tune.choice(config.batch_size_choices),
-        'lr_scheduler': tune.choice(config.lr_scheduler_choices),
-        'dropout': tune.choice(config.dropout_choices),
-        'l1_lambda': tune.loguniform(config.l1_lambda_min, config.l1_lambda_max),
-        'act': tune.choice(config.act_choices),
-        'num_nodes': tune.choice(config.num_nodes_choices),
-        'adj_thresh': tune.choice(config.adj_thresh_choices),
-        'mutation': tune.grid_search(config.mutation_choices),
-        'sex': tune.grid_search(config.sex_choices),
-        'modality': tune.grid_search(config.modality_choices),
-        'y_val': tune.grid_search(config.y_val_choices),
-        'sex_specific_adj': tune.grid_search(config.sex_specific_adj_choices),
-        'use_weights': tune.grid_search(config.use_weights_choices)
     }
 
-    scheduler = ASHAScheduler(
-        time_attr="training_iteration",
-        max_t=config['epochs'],
-        grace_period=config.grace_period,
-        reduction_factor=config.reduction_factor,
-    )
+    # Build search space with model-specific parameter grids
+    search_spaces = []
+    
+    # Create a separate search space for each model type
+    for model_name in config.model_grid_search:
+        model_space = {
+            'model': model_name,
+            # Shared parameters
+            'seed': config.seed,  # Use fixed seed instead of randint
+            'fold': tune.grid_search(list(range(config.num_folds))),  # Add fold as grid search parameter
+            'lr': tune.grid_search(np.logspace(np.log10(config.lr_min), np.log10(config.lr_max), 5)),
+            'batch_size': tune.grid_search(config.batch_size_choices),
+            'lr_scheduler': tune.grid_search(config.lr_scheduler_choices),
+            'dropout': tune.grid_search(config.dropout_choices),
+            'l1_lambda': tune.grid_search(np.logspace(np.log10(config.l1_lambda_min), np.log10(config.l1_lambda_max), 5)),
+            'act': tune.grid_search(config.act_choices),
+            'num_nodes': tune.grid_search(config.num_nodes_choices),
+            'adj_thresh': tune.grid_search(config.adj_thresh_choices),
+            'mutation': tune.grid_search(config.mutation_choices),
+            'sex': tune.grid_search(config.sex_choices),
+            'modality': tune.grid_search(config.modality_choices),
+            'y_val': tune.grid_search(config.y_val_choices),
+            'sex_specific_adj': tune.grid_search(config.sex_specific_adj_choices),
+            'use_weights': tune.grid_search(config.use_weights_choices)
+        }
+        
+        # Add model-specific parameters
+        for param, values in model_param_grid[model_name].items():
+            if values != [None]:
+                model_space[param] = tune.grid_search(values)
+            else:
+                model_space[param] = None
+                
+        search_spaces.append(model_space)
+
+    # Combine all search spaces
+    search_space = tune.grid_search(search_spaces)
+
     tuner = tune.Tuner(
         ray_trainer,
         param_space={"train_loop_config": search_space},
         tune_config=tune.TuneConfig(
             metric='val_loss',
             mode='min',
-            num_samples=config.num_samples,  # Repeats grid search options n times through
             trial_name_creator=trial_str_creator,
-            scheduler=scheduler,
         ),
     )
     results = tuner.fit()
