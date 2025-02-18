@@ -105,11 +105,6 @@ def train_func(train_loop_config):
         focal_loss_weight = proteo_train.compute_focal_loss_weight(
             config, test_dataset, train_dataset
         )
-    # For wandb logging top proteins
-    protein_file_data = proteo_train.read_protein_file(train_dataset.processed_dir, config)
-    protein_names = protein_file_data['Protein']
-    metrics = protein_file_data['Metric']
-    top_proteins_data = [[protein, metric] for protein, metric in zip(protein_names, metrics)]
 
     module = proteo_train.Proteo(
         config,
@@ -139,9 +134,6 @@ def train_func(train_loop_config):
                 f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
             )
         ),
-        "top_proteins": wandb.Table(
-            columns=["Protein", "Metric"], data=top_proteins_data
-        ),  # note this is in order from most to least different
         "parameters": wandb.Table(
             columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
             data=[

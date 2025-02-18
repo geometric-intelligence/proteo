@@ -125,12 +125,12 @@ class FTDDataset(InMemoryDataset):
 
     """
 
-    def __init__(self, root, split, fold,  config):
+    def __init__(self, root, split, fold, config):
         self.name = 'ftd'
         self.root = root
         self.split = split
         self.fold = fold
-        assert split in ["train", "test"]
+        assert split in ["train", "validation"]
 
         assert config.sex in SEXES
         assert config.modality in MODALITIES
@@ -154,7 +154,7 @@ class FTDDataset(InMemoryDataset):
 
         path = os.path.join(
             self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_{split}_nolog_random_state_{self.config.random_state}_fold_{self.fold}.pt',
+            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_{split}_random_state_{self.config.random_state}_fold_{self.fold}.pt',
         )
         print("Loading data from:", path)
         self.load(path)
@@ -186,13 +186,13 @@ class FTDDataset(InMemoryDataset):
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
         files= [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_train_nolog_random_state_{self.config.random_state}_fold_{self.fold}.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_{self.config.use_master_nodes}_sex_specific_{self.config.sex_specific_adj}_test_nolog_random_state_{self.config.random_state}_fold_{self.fold}.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_train_random_state_{self.config.random_state}_fold_{self.fold}.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_test_random_state_{self.config.random_state}_fold_{self.fold}.pt",
         ]
         print("Processed file names:", files)
         return files
 
-    def create_graph_data_test(
+    def create_graph_data(
         self,
         feature,
         label,
@@ -214,51 +214,6 @@ class FTDDataset(InMemoryDataset):
         edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
         return Data(x=x, edge_index=edge_index, y=label, sex=sex, mutation=mutation, age=age)
     
-    def create_graph_data_train(
-        self,
-        feature,
-        label,
-        weight,
-        adj_matrix,
-        sex,
-        mutation,
-        age,
-    ):
-        """Create Data object for each graph.
-        Compute attributes x, edge_index, and y for each graph.
-        """
-        x = feature  # protein concentrations: what is on the nodes
-        adj_tensor = torch.tensor(adj_matrix)
-        # Find the indices where the matrix has non-zero elements
-        pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
-        # Extract the pairs of connected nodes
-        edge_index = torch.tensor(pairs_indices.tolist())
-        edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
-        return Data(x=x, edge_index=edge_index, y=label, weight=weight, sex=sex, mutation=mutation, age=age)
-
-    def create_graph_data_train(
-        self,
-        feature,
-        label,
-        weight,
-        adj_matrix,
-        sex,
-        mutation,
-        age,
-    ):
-        """Create Data object for each graph.
-
-        Compute attributes x, edge_index, and y for each graph.
-        """
-        x = feature  # protein concentrations: what is on the nodes
-        adj_tensor = torch.tensor(adj_matrix)
-        # Find the indices where the matrix has non-zero elements
-        pairs_indices = torch.nonzero(adj_tensor, as_tuple=False)
-        # Extract the pairs of connected nodes
-        edge_index = torch.tensor(pairs_indices.tolist())
-        edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
-        return Data(x=x, edge_index=edge_index, y=label, weight=weight, sex=sex, mutation=mutation, age=age)
-    
     def process(self):
         """
         Read data into huge `Data` list, i.e., a list of graphs.
@@ -266,202 +221,79 @@ class FTDDataset(InMemoryDataset):
         (
             features,
             labels,
-            filtered_data_for_adj,
-            top_protein_columns,
+            protein_columns,
             filtered_sex_col,
             filtered_mutation_col,
             filtered_age_col,
             filtered_did_col, 
             filtered_gene_col
         ) = self.load_csv_data_pre_pt_files(self.config)
-                # Convert sex and mutation to categorical labels
+
+        # Convert sex and mutation to categorical labels
         sex_labels = np.array(filtered_sex_col.astype('category').cat.codes)
         mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
 
-        if self.config.use_master_nodes:
-            master_node_dict = {
-                'sex': sex_labels.reshape(-1, 1),
-                'mutation': mutation_labels.reshape(-1, 1),
-                'age': filtered_age_col.values.reshape(-1, 1),
-            }
-            master_node_features = [
-                master_node_dict[feature]
-                for feature in self.config.master_nodes
-                if feature in master_node_dict
-            ]
-            if master_node_features:
-                master_node_features = np.concatenate(master_node_features, axis=1)
-                features = np.concatenate((features, master_node_features), axis=1)
-            print("using master nodes")
-            print("features shape after master nodes", features.shape)
-        
-        kf = KFold(n_splits=3, shuffle=True, random_state=self.config.random_state)
-        for fold, (train_index, test_index) in enumerate(kf.split(features)):
-            train_features = features[train_index]
-            test_features = features[test_index]
-            train_labels = labels[train_index]
-            test_labels = labels[test_index]
-            train_sex = sex_labels[train_index]
-            test_sex = sex_labels[test_index]
-            train_mutation = mutation_labels[train_index]
-            test_mutation = mutation_labels[test_index]
-            train_age = filtered_age_col.values[train_index]
-            test_age = filtered_age_col.values[test_index]
+        # Split data into train_val and test sets
+        train_val_features, test_features, train_val_labels, test_labels, train_val_sex, test_sex, train_val_mutation, test_mutation, train_val_age, test_age = train_test_split(
+            features, labels, sex_labels, mutation_labels, filtered_age_col.values, test_size=0.2, random_state=self.config.random_state
+        )
+
+        # Perform k-fold splitting on the train_val set
+        kf = KFold(n_splits=self.config.num_folds, shuffle=True, random_state=self.config.random_state)
+        for fold, (train_index, val_index) in enumerate(kf.split(train_val_features)):
+            train_features = train_val_features[train_index]
+            val_features = train_val_features[val_index]
+            train_labels = train_val_labels[train_index]
+            val_labels = train_val_labels[val_index]
+            train_sex = train_val_sex[train_index]
+            val_sex = train_val_sex[val_index]
+            train_mutation = train_val_mutation[train_index]
+            val_mutation = train_val_mutation[val_index]
+            train_age = train_val_age[train_index]
+            val_age = train_val_age[val_index]
+
             # Unpack the return values from load_csv_data
             (
                 train_features,
                 train_labels,
-                train_labels_weights,
-                test_features,
-                test_labels,
+                val_features,
+                val_labels,
                 train_sex,
-                test_sex,
+                val_sex,
                 train_mutation,
-                test_mutation,
+                val_mutation,
                 train_age,
-                test_age,
-                adj_matrices,  # This will be a list
-            ) = self.load_csv_data(self.config, train_features, test_features, train_labels, test_labels, train_sex, test_sex, train_mutation, test_mutation, train_age, test_age)
+                val_age,
+                adj_matrix,  # This will be a list
+            ) = self.load_csv_data(self.config, train_features, val_features, train_labels, val_labels, train_sex, val_sex, train_mutation, val_mutation, train_age, val_age)
 
             train_data_list = []
-            test_data_list = []
+            val_data_list = []
 
-            # Check if we are using sex-specific adjacency matrices
-            if self.config.sex_specific_adj:
-                # Unpack male and female adjacency matrices
-                adj_matrix_M, adj_matrix_F = adj_matrices
+            # Single adjacency matrix is used for both male and female data
+            adj_matrix = adj_matrix
 
-                # Iterate through train data and assign the correct adjacency matrix based on sex
-                for feature, label, weight, sex, mutation, age in zip(
-                    train_features, train_labels, train_labels_weights, train_sex, train_mutation, train_age
-                ):
-                    # Choose male or female adjacency matrix based on sex label (assuming 1 = Male, 0 = Female)
-                    adj_matrix = adj_matrix_M if sex.item() == 1 else adj_matrix_F
-                    data = self.create_graph_data_train(feature, label, weight, adj_matrix, sex, mutation, age)
-                    train_data_list.append(data)
+            # Iterate through train data and use the single adjacency matrix
+            for feature, label, sex, mutation, age in zip(
+                train_features, train_labels, train_sex, train_mutation, train_age
+            ):
+                data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
+                train_data_list.append(data)
 
-                # Iterate through test data and assign the correct adjacency matrix based on sex
-                for feature, label, sex, mutation, age in zip(
-                    test_features, test_labels, test_sex, test_mutation, test_age
-                ):
-                    adj_matrix = adj_matrix_M if sex.item() == 1 else adj_matrix_F
-                    data = self.create_graph_data_test(feature, label, adj_matrix, sex, mutation, age)
-                    test_data_list.append(data)
+            # Iterate through val data and use the single adjacency matrix
+            for feature, label, sex, mutation, age in zip(
+                val_features, val_labels, val_sex, val_mutation, val_age
+            ):
+                data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
+                val_data_list.append(data)
 
-            else:
-                # Single adjacency matrix is used for both male and female data
-                adj_matrix = adj_matrices[0]
-
-                # Iterate through train data and use the single adjacency matrix
-                for feature, label, weight, sex, mutation, age in zip(
-                    train_features, train_labels, train_labels_weights, train_sex, train_mutation, train_age
-                ):
-                    data = self.create_graph_data_train(feature, label, weight, adj_matrix, sex, mutation, age)
-                    train_data_list.append(data)
-
-                # Iterate through test data and use the single adjacency matrix
-                for feature, label, sex, mutation, age in zip(
-                    test_features, test_labels, test_sex, test_mutation, test_age
-                ):
-                    data = self.create_graph_data_test(feature, label, adj_matrix, sex, mutation, age)
-                    test_data_list.append(data)
-
-            # Save the train and test data lists
+            # Save the train and val data lists
             train_path = f"{self.processed_paths[0]}"
-            test_path = f"{self.processed_paths[1]}"
+            val_path = f"{self.processed_paths[1]}"
             self.save(train_data_list, train_path)
-            self.save(test_data_list, test_path)
+            self.save(val_data_list, val_path)
 
-    # -----------------------------FUNCTIONS TO GET FEATURES---------------------------------#
-    def find_top_proteins(self, filtered_data, y_val):
-        # Get the column names of the correct proteins (plasma or csf)
-        modality_cols = [
-            col
-            for col in filtered_data.columns
-            if col.endswith(MODALITY_COL_END[self.config.modality])
-        ]
-
-        # Case where y_val = "carrier", "clinical_dementia_rating_binary", ks test - binary
-        if self.config.y_val in BINARY_Y_VALS_MAP:
-            top_columns, metric = self.get_top_columns_binary_classification(
-                filtered_data, modality_cols, y_val
-            )
-        # Case where y_val = "nfl", "disease_age", "executive_function", "memory", "clinical_dementia_rating", regression
-        elif self.config.y_val in CONTINOUS_Y_VALS:
-            top_columns, metric = self.get_top_columns_regression(
-                filtered_data, modality_cols, y_val
-            )
-        # Case where y_val = "clinical_dementia_rating_global", multiclass
-        elif self.config.y_val in MULTICLASS_Y_VALS_MAP:
-            top_columns, metric = self.get_top_columns_multiclass(
-                filtered_data, modality_cols, y_val
-            )
-
-        # Save the plasma_protein_names to a file for wandb
-        protein_names = top_columns['Protein'].values
-        file_path = os.path.join(
-            self.processed_dir,
-            f'top_proteins_num_nodes_{self.config.num_nodes}_mutation_{self.config.mutation}_{self.config.modality}_{self.config.sex}.npy',
-        )
-        # Combine into a structured array
-        structured_array = np.rec.array(
-            (protein_names, metric), dtype=[('Protein', 'U50'), ('Metric', 'f8')]
-        )
-        np.save(file_path, structured_array)
-
-        return top_columns['Protein'].tolist()
-
-    def get_top_columns_binary_classification(self, filtered_data, modality_cols, y_val):
-        '''For binary classification, use the KS test to find the most different proteins between the two groups.'''
-        # Compare the group with y=1 to the group with y=0
-        # Convert to pandas Series to align with filtered_data
-        y_val = pd.Series(y_val, index=filtered_data.index)
-        group_1 = filtered_data[y_val == 1]
-        group_0 = filtered_data[y_val == 0]
-        ks_stats = []
-        for protein_column in modality_cols:
-            data1 = group_1[protein_column]
-            data0 = group_0[protein_column]
-            ks_statistic, ks_p_value = ks_2samp(data1, data0)
-            ks_stats.append((protein_column, ks_statistic, ks_p_value))
-        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
-        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(
-            self.config.num_nodes
-        )
-        return top_columns, top_columns['P Value'].values
-
-    def get_top_columns_regression(self, filtered_data, modality_cols, y_val):
-        '''Find the top n proteins with the highest correlation to y_val using Kendall's tau.'''
-        correlations = []
-        # Compute Kendall's tau correlation for each protein column with y_val
-        for protein_column in modality_cols:
-            tau, p_value = kendalltau(filtered_data[protein_column], y_val)
-            correlations.append((protein_column, tau, p_value))
-        correlations_df = pd.DataFrame(correlations, columns=['Protein', 'Kendall_Tau', 'P Value'])
-        correlations_df['Abs_Tau'] = correlations_df['Kendall_Tau'].abs()  # take absolute value
-        top_columns = correlations_df.sort_values(by='Abs_Tau', ascending=False).head(
-            self.config.num_nodes
-        )
-        return top_columns, top_columns['Kendall_Tau'].values
-
-    def get_top_columns_multiclass(self, filtered_data, modality_cols, y_val):
-        '''Find the top n proteins with the highest p score between cdr = 0 and cdr>0. NOTE: this is hardcoded for cdr global right now.'''
-        y_val = pd.Series(y_val, index=filtered_data.index)
-        group_1 = filtered_data[y_val.isin([1, 2, 3, 4])]
-        group_0 = filtered_data[y_val == 0]
-        ks_stats = []
-        for protein_column in modality_cols:
-            data1 = group_1[protein_column]
-            data0 = group_0[protein_column]
-            ks_statistic, ks_p_value = ks_2samp(data1, data0)
-            ks_stats.append((protein_column, ks_statistic, ks_p_value))
-        ks_stats_df = pd.DataFrame(ks_stats, columns=['Protein', 'KS_Statistic', 'P Value'])
-        top_columns = ks_stats_df.sort_values(by='P Value', ascending=True).head(
-            self.config.num_nodes
-        )
-        return top_columns, top_columns['P Value'].values
-
-    # -----------------------------FUNCTIONS TO GET LABELS AND WEIGHTS---------------------------------#
+    # -----------------------------FUNCTIONS TO GET LABELS---------------------------------#
     def load_y_vals(self, filtered_data):
         '''Find the y_val values based on the config.'''
         y_vals = filtered_data[Y_VAL_COL_MAP[self.config.y_val]]
@@ -494,107 +326,10 @@ class FTDDataset(InMemoryDataset):
         mapped_values = [mapping_dict[value] for value in y_vals]
         return mapped_values
     
-    def _prepare_weights(self, labels, reweight, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2, num_bins=50):
-        assert reweight in {'none', 'inverse', 'sqrt_inv'}
-        assert reweight != 'none' if lds else True, \
-            "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
-        # Find the minimum label to shift all labels to non-negative range
-        min_label = int(np.min(labels))
-        offset = -min_label if min_label < 0 else 0  # Shift only if negative labels exist
-        labels_shifted = labels + offset
 
-        # Define bins for continuous labels
-        bin_edges = np.linspace(np.min(labels_shifted), np.max(labels_shifted), num=num_bins + 1)  # Create `num_bins` bins
-        binned_labels = np.digitize(labels_shifted, bins=bin_edges) - 1  # Bin indices (0-indexed)
-        binned_labels = np.clip(binned_labels, 0, num_bins - 1)
-
-        # Initialize value_dict for binned labels
-        value_dict = {x: 0 for x in range(num_bins)}
-
-        for label in binned_labels:
-            value_dict[label] += 1  # Count occurrences in each bin
-        
-        # Apply reweighting
-        print(value_dict)
-        if reweight == 'sqrt_inv':
-            value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
-        elif reweight == 'inverse':
-            value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()} #clip the labels
-        # Map original labels to their corresponding adjusted label frequencies
-        num_per_label = [value_dict[binned_labels[i]] for i in range(len(labels))]
-        print(num_per_label)
-        if not len(num_per_label) or reweight == 'none':
-            return None
-        
-        print(f"Using re-weighting: [{reweight.upper()}]")
-        # Apply LDS if specified
-        if lds:
-            lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
-            smoothed_value = convolve1d(
-                np.asarray([v for _, v in value_dict.items()]),
-                weights=lds_kernel_window,
-                mode='constant'
-            )
-            num_per_label = [smoothed_value[binned_labels[i]] for i in range(len(labels))]
-        # Compute weights
-        weights = [np.float32(1 / x) for x in num_per_label]
-        scaling = len(weights) / np.sum(weights)  # Normalize weights
-        weights = [scaling * x for x in weights]
-        weights = np.log1p(weights)  # log(1 + weight)
-        print(weights)
-        return weights
-    
-    # --------------------------- FUNCTIONS PROCESSING ALL --------------------------------#
-
-    def _prepare_weights(self, labels, reweight, lds=True, lds_kernel='gaussian', lds_ks=5, lds_sigma=2):
-        assert reweight in {'none', 'inverse', 'sqrt_inv'}
-        assert reweight != 'none' if lds else True, \
-            "Set reweight to \'sqrt_inv\' (default) or \'inverse\' when using LDS"
-        # Find the minimum label to shift all labels to non-negative range
-        min_label = int(np.min(labels))
-        offset = -min_label if min_label < 0 else 0  # Shift only if negative labels exist
-        max_label = int(np.max(labels)) + offset
-
-        # Initialize value_dict for adjusted labels
-        value_dict = {x: 0 for x in range(max_label + 1)}
-
-        # Count occurrences of each adjusted label
-        for label in labels:
-            adjusted_label = int(label) + offset
-            value_dict[adjusted_label] += 1
-
-        # Apply reweighting
-        if reweight == 'sqrt_inv':
-            value_dict = {k: np.sqrt(v) for k, v in value_dict.items()}
-        elif reweight == 'inverse':
-            value_dict = {k: np.clip(v, 5, 1000) for k, v in value_dict.items()}
-
-        # Map original labels to their corresponding adjusted label frequencies
-        num_per_label = [value_dict[int(label) + offset] for label in labels]
-
-        # If no valid labels or reweight is 'none', return None
-        if not len(num_per_label) or reweight == 'none':
-            return None
-        print(f"Using re-weighting: [{reweight.upper()}]")
-        # Apply LDS if specified
-        if lds:
-            lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
-            smoothed_value = convolve1d(
-                np.asarray([v for _, v in value_dict.items()]),
-                weights=lds_kernel_window,
-                mode='constant'
-            )
-            num_per_label = [smoothed_value[int(label) + offset] for label in labels]
-
-        # Compute weights
-        weights = [np.float32(1 / x) for x in num_per_label]
-        scaling = len(weights) / np.sum(weights)  # Normalize weights
-        weights = [scaling * x for x in weights]
-
-        return weights
     # --------------------------- FUNCTIONS PROCESSING ALL --------------------------------#
     def load_csv_data_pre_pt_files(self, config):
-        '''Load the csv data features and labels'''
+        '''Load the csv data features and labels. Filter out sex, mutation, modality, and remove erroneous columns.'''
         csv_path = self.raw_paths[0]
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
@@ -618,47 +353,34 @@ class FTDDataset(InMemoryDataset):
             sex_mutation_modality_filter
         ]  # Select rows that meet all conditions
 
-        if config.sex_specific_adj:
-            # Ensure that both "M" and "F" are present in config.sex if sex-specific adjacency is enabled
-            if "M" not in config.sex or "F" not in config.sex:
-                raise ValueError(
-                    "When `sex_specific_adj` is True, `config.sex` must contain both 'M' and 'F'."
-                )
-        filtered_data_for_adj = (
-            filtered_data  # don't remove values with nfl = NaN to find corr for adj matrix.
-        )
         # Extract the y_val values
         y_vals, y_val_mask = self.load_y_vals(filtered_data)
         filtered_data = filtered_data[y_val_mask]  # Remove rows where y_val is NaN
         # Extract the top proteins (features) for building datasets
-        top_protein_columns = self.find_top_proteins(filtered_data, y_vals)
-        #top_protein_columns = sorted(
-        #    top_protein_columns
-        #)  # to ensure same ordering when using all proteins
-        top_proteins = filtered_data[top_protein_columns]
 
-        filtered_data_for_adj = filtered_data_for_adj[
-            top_protein_columns + [sex_col]
-        ]  # keep sex for filtering later
+        # Filter protein columns based on modality
+        protein_cols = [
+            col
+            for col in filtered_data.columns
+            if col.endswith(MODALITY_COL_END[self.config.modality])
+        ]
+        print("Number of proteins:", len(protein_cols))
+        top_proteins = filtered_data[protein_cols]
 
         # Extract column labels for sex to understand explainer results
         filtered_sex_col = filtered_data[sex_col]
-        print("Dimensions of filtered sex col", filtered_sex_col.shape)
         filtered_mutation_col = filtered_data[mutation_col]
         filtered_age_col = filtered_data[age_col]
         filtered_did_col = filtered_data[did_col]
         filtered_gene_col = filtered_data[gene_col]
 
         features = np.array(top_proteins)
-        print("Features shape before master nodes:", features.shape)
-
         labels = np.array(y_vals)
 
         return (
             features,
             labels,
-            filtered_data_for_adj,
-            top_protein_columns,
+            protein_cols,
             filtered_sex_col,
             filtered_mutation_col,
             filtered_age_col,
@@ -675,6 +397,7 @@ class FTDDataset(InMemoryDataset):
             hist_path = os.path.join(self.processed_dir, self.hist_path_str)
             plot_histogram(pd.DataFrame(combined_labels), self.config.y_val, save_to=hist_path)
         
+        train_features_for_adj = train_features
         scaler = StandardScaler()
         train_features = scaler.fit_transform(train_features)
         test_features = scaler.transform(test_features) 
@@ -683,18 +406,16 @@ class FTDDataset(InMemoryDataset):
 
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
-        #Find weights for LDS weighting
-        train_labels_weights = torch.FloatTensor(self._prepare_weights(train_labels,"sqrt_inv"))
         train_labels = torch.FloatTensor(train_labels)
         test_labels = torch.FloatTensor(test_labels)
-
         train_sex = torch.IntTensor(train_sex)
         test_sex = torch.IntTensor(test_sex)
         train_mutation = torch.IntTensor(train_mutation)
         test_mutation = torch.IntTensor(test_mutation)
         train_age = torch.FloatTensor(train_age)
         test_age = torch.FloatTensor(test_age)
-        print("Training features and labels:", train_features.shape, train_labels.shape, train_labels_weights.shape)
+
+        print("Training features and labels:", train_features.shape, train_labels.shape)
         print("Testing features and labels:", test_features.shape, test_labels.shape)
         print(
             "Training sex, mutation and age labels shape:",
@@ -708,70 +429,27 @@ class FTDDataset(InMemoryDataset):
             test_mutation.shape,
             test_age.shape,
         )
-        adj_matrices = []
-        if config.sex_specific_adj:
-            adj_path_M = os.path.join(
-                self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.csv',
-            )
-            adj_path_F = os.path.join(
-                self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.csv',
-            )
-            if not os.path.exists(adj_path_M) or not os.path.exists(adj_path_F):
-                print("Sex-specific adjacency matrices do not exist. Calculating now...")
-                filtered_data_M = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "M"].drop(
-                    columns=[sex_col]
-                )
-                print("Length of filtered M:", len(filtered_data_M))
-                filtered_data_F = filtered_data_for_adj[filtered_data_for_adj[sex_col] == "F"].drop(
-                    columns=[sex_col]
-                )
-                print("Length of filtered F:", len(filtered_data_F))
-                calculate_adjacency_matrix(config, filtered_data_M, save_to=adj_path_M)
-                calculate_adjacency_matrix(config, filtered_data_F, save_to=adj_path_F)
+        # Calculate adjacency matrix    
+        adj_path = os.path.join(
+            self.processed_dir,
+            f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.csv',
+        )
+        # Calculate and save adjacency matrix
+        if not os.path.exists(adj_path):
+            calculate_adjacency_matrix(config, train_features_for_adj, save_to=adj_path)
 
-            adj_matrix_M = self.load_adjacency_matrix(adj_path_M, config.adj_thresh, config)
-            adj_matrix_F = self.load_adjacency_matrix(adj_path_F, config.adj_thresh, config)
-            self.plot_adj_matrix(
-                adj_matrix_M,
-                os.path.join(
-                    self.processed_dir,
-                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg',
-                ),
-            )
-            self.plot_adj_matrix(
-                adj_matrix_F,
-                os.path.join(
-                    self.processed_dir,
-                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg',
-                ),
-            )
-            adj_matrices.extend([adj_matrix_M, adj_matrix_F])
-        else:
-            adj_path = os.path.join(
+        adj_matrix = self.load_adjacency_matrix(adj_path, config.adj_thresh, config)
+        # Plot and save adjacency matrix as jpg
+        self.plot_adj_matrix(
+            adj_matrix,
+            os.path.join(
                 self.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.csv',
-            )
-            # Calculate and save adjacency matrix
-            if not os.path.exists(adj_path):
-                filtered_data_no_sex = filtered_data_for_adj.drop(columns=[sex_col])
-                calculate_adjacency_matrix(config, filtered_data_no_sex, save_to=adj_path)
-
-            adj_matrix = self.load_adjacency_matrix(adj_path, config.adj_thresh, config)
-            # Plot and save adjacency matrix as jpg
-            self.plot_adj_matrix(
-                adj_matrix,
-                os.path.join(
-                    self.processed_dir,
-                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
+                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg',
                 ),
             )
-            adj_matrices.append(adj_matrix)
         return (
             train_features,
             train_labels,
-            train_labels_weights,
             test_features,
             test_labels,
             train_sex,
@@ -780,7 +458,7 @@ class FTDDataset(InMemoryDataset):
             test_mutation,
             train_age,
             test_age,
-            adj_matrices,
+            adj_matrix,
         )
 
     def load_adjacency_matrix(self, path, adj_thresh, config):
@@ -799,8 +477,8 @@ class FTDDataset(InMemoryDataset):
         adj_matrix = torch.FloatTensor(np.where(adj_matrix > adj_thresh, 1, 0))  # Thresholding
         print("Adjacency matrix shape:", adj_matrix.shape)
         expected_shape = (
-            config.num_nodes + len(config.master_nodes) if config.use_master_nodes else config.num_nodes,
-            config.num_nodes + len(config.master_nodes) if config.use_master_nodes else config.num_nodes,
+            config.num_nodes,
+            config.num_nodes,
         )
         # Assert the shape matches the expected shape
         assert adj_matrix.shape == expected_shape, f"Unexpected shape: {adj_matrix.shape}. Expected shape: {expected_shape}"
@@ -825,10 +503,9 @@ def remove_erroneous_columns(config, csv_data, raw_dir):
     modality_columns = error_proteins_df['Plasma'].dropna().tolist()
     csf_columns = error_proteins_df['CSF'].dropna().tolist()
     columns_to_remove = list(set(modality_columns + csf_columns))
-    if config.y_val == 'nfl':
-        columns_to_remove.extend(
-            ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA']
-        )
+    columns_to_remove.extend(
+        ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA','CPPED1|Q9BRF8|CSF','CPPED1|Q9BRF8|PLASMA']
+    )
     # Remove the columns
     csv_data = csv_data.drop(columns=columns_to_remove)
     return csv_data
@@ -879,17 +556,6 @@ def calculate_adjacency_matrix(config, protein_data, save_to):
 
     print("Adjacency matrix shape:", adjacency_matrix.shape)
 
-    # Pad the adjacency matrix if master nodes are used
-    if config.use_master_nodes:
-        padding_size = len(config.master_nodes)
-        adjacency_matrix = np.pad(
-            adjacency_matrix,
-            pad_width=((0, padding_size), (0, padding_size)),
-            mode='constant',
-            constant_values=1,
-        )
-        print("Adjacency matrix shape after padding:", adjacency_matrix.shape)
-
     # Save the adjacency matrix to the specified file path
     adjacency_df = pd.DataFrame(adjacency_matrix)
     with open(save_to, 'w') as f:
@@ -925,17 +591,3 @@ def reverse_log_transform(standardized_log_data, mean, std, log=False):
     if log:
         data = torch.exp(data)
     return data
-
-
-def get_lds_kernel_window(kernel, ks, sigma):
-    assert kernel in ['gaussian', 'triang', 'laplace']
-    half_ks = (ks - 1) // 2
-    if kernel == 'gaussian':
-        base_kernel = [0.] * half_ks + [1.] + [0.] * half_ks
-        kernel_window = gaussian_filter1d(base_kernel, sigma=sigma) / max(gaussian_filter1d(base_kernel, sigma=sigma))
-    elif kernel == 'triang':
-        kernel_window = triang(ks)
-    else:
-        laplace = lambda x: np.exp(-abs(x) / sigma) / (2. * sigma)
-        kernel_window = list(map(laplace, np.arange(-half_ks, half_ks + 1))) / max(map(laplace, np.arange(-half_ks, half_ks + 1)))
-    return kernel_window
