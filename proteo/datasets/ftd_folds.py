@@ -834,7 +834,7 @@ def remove_erroneous_columns(config, csv_data, raw_dir):
     return csv_data
 
 
-def calculate_adjacency_matrix(config, plasma_protein, save_to):
+def calculate_adjacency_matrix(config, protein_data, save_to):
     import rpy2.robjects as ro
     from rpy2.robjects import pandas2ri
     from rpy2.robjects import r
@@ -844,18 +844,18 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
     pandas2ri.activate()
     wgcna = importr('WGCNA')
     """Calculate and save adjacency matrix using R's WGCNA."""
-    # Convert the input `plasma_protein` (NumPy array) to a pandas DataFrame if necessary
-    if not isinstance(plasma_protein, pd.DataFrame):
-        plasma_protein_df = pd.DataFrame(plasma_protein)
+    # Convert the input `protein_data` (NumPy array) to a pandas DataFrame if necessary
+    if not isinstance(protein_data, pd.DataFrame):
+        protein_data_df = pd.DataFrame(protein_data)
     else:
-        plasma_protein_df = plasma_protein
+        protein_data_df = protein_data
 
     # Convert pandas DataFrame to R DataFrame
-    r_plasma_protein = pandas2ri.py2rpy(plasma_protein_df)
+    r_protein_data = pandas2ri.py2rpy(protein_data_df)
 
     # Call R's `pickSoftThreshold` function to determine the soft thresholding power
     soft_threshold_result = wgcna.pickSoftThreshold(
-        r_plasma_protein, corFnc="bicor", networkType="signed"
+        r_protein_data, corFnc="bicor", networkType="signed"
     )
     soft_threshold_power = soft_threshold_result.rx2('powerEstimate')[
         0
@@ -868,7 +868,7 @@ def calculate_adjacency_matrix(config, plasma_protein, save_to):
 
     # Call R's `adjacency` function using the chosen power and the desired correlation function (bicor)
     adjacency_matrix_r = wgcna.adjacency(
-        r_plasma_protein,
+        r_protein_data,
         power=soft_threshold_power,
         type="signed",  # Specify network type
         corFnc="bicor",  # Use biweight midcorrelation
