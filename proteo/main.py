@@ -43,10 +43,31 @@ from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
 from ray.tune.schedulers import ASHAScheduler
 
 import proteo.callbacks_ray as proteo_callbacks_ray
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, Y_VALS_TO_NORMALIZE
+from proteo.datasets.ftd_folds import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, Y_VALS_TO_NORMALIZE, FTDDataset
 
 MAX_SEED = 65535
 
+def construct_datasets(config, fold):
+    root = config.data_dir
+    print(f"Loading datasets from {root}")
+    print(f"Absolute path: {os.path.abspath(root)}")
+    print(f"Directory contents: {os.listdir(root)}")
+    
+    try:
+        train_dataset = FTDDataset(root, "train", fold, config)
+        print("Train dataset loaded successfully")
+    except Exception as e:
+        print(f"Error loading train dataset: {str(e)}")
+        raise
+    
+    try:
+        val_dataset = FTDDataset(root, "val", fold, config)
+        print("val dataset loaded successfully")
+    except Exception as e:
+        print(f"Error loading val dataset: {str(e)}")
+        raise
+    
+    return train_dataset, val_dataset
 
 def train_func(train_loop_config):
     """Train one neural network with Lightning.
@@ -93,17 +114,17 @@ def train_func(train_loop_config):
 
     # Use the fold from train_loop_config
     fold = train_loop_config['fold']
-    train_dataset, test_dataset = proteo_train.construct_datasets(config, fold)
-    train_loader, test_loader = proteo_train.construct_loaders(config, train_dataset, test_dataset)
+    train_dataset, val_dataset = construct_datasets(config, fold)
+    train_loader, val_loader = proteo_train.construct_loaders(config, train_dataset, val_dataset)
 
-    avg_node_degree = proteo_train.compute_avg_node_degree(test_dataset)
+    avg_node_degree = proteo_train.compute_avg_node_degree(val_dataset)
     pos_weight = 1.0  # default value
     focal_loss_weight = [1.0]  # default value
     if config.y_val in BINARY_Y_VALS_MAP:
-        pos_weight = proteo_train.compute_pos_weight(test_dataset, train_dataset)
+        pos_weight = proteo_train.compute_pos_weight(val_dataset, train_dataset)
     elif config.y_val in MULTICLASS_Y_VALS_MAP:
         focal_loss_weight = proteo_train.compute_focal_loss_weight(
-            config, test_dataset, train_dataset
+            config, val_dataset, train_dataset
         )
 
     module = proteo_train.Proteo(
@@ -121,17 +142,17 @@ def train_func(train_loop_config):
                 "histogram original": wandb.Image(
                     os.path.join(
                         train_dataset.processed_dir,
-                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_orig_histogram.jpg',
+                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_split_{config.split}_orig_histogram.jpg',
                     )
                 )
             }
         )
-    # Initialize the dictionary to log
+    # Update the file paths for logging and saving
     log_data = {
         "histogram": wandb.Image(
             os.path.join(
                 train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
+                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_split_{config.split}_histogram.jpg',
             )
         ),
         "parameters": wandb.Table(
@@ -147,28 +168,13 @@ def train_func(train_loop_config):
             ],
         ),
     }
-    if config.sex_specific_adj:
-        # Add both male and female adjacency images to the log
-        log_data["adjacency_M"] = wandb.Image(
-            os.path.join(
-                train_dataset.processed_dir,
-                f"adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg",
-            )
+    # Add the single adjacency image to the log
+    log_data["adjacency"] = wandb.Image(
+        os.path.join(
+            train_dataset.processed_dir,
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_split_{config.split}.jpg',
         )
-        log_data["adjacency_F"] = wandb.Image(
-            os.path.join(
-                train_dataset.processed_dir,
-                f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg',
-            )
-        )
-    else:
-        # Add the single adjacency image to the log
-        log_data["adjacency"] = wandb.Image(
-            os.path.join(
-                train_dataset.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
-            )
-        )
+    )
     wandb.log(log_data)
 
     # Define Lightning's Trainer that will be wrapped by Ray's TorchTrainer
@@ -194,7 +200,7 @@ def train_func(train_loop_config):
     )
     trainer = ray_lightning.prepare_trainer(trainer)
     # FIXME: When a trial errors, Wandb still shows it as "running".
-    trainer.fit(module, train_loader, test_loader)
+    trainer.fit(module, train_loader, val_loader)
     torch.cuda.empty_cache()
 
 

@@ -403,6 +403,10 @@ class FTDDataset(InMemoryDataset):
         test_features = scaler.transform(test_features) 
         train_age = scaler.fit_transform(train_age.reshape(-1, 1)).reshape(-1)
         test_age = scaler.transform(test_age.reshape(-1, 1)).reshape(-1)
+        train_sex = scaler.fit_transform(train_sex.reshape(-1, 1)).reshape(-1)
+        test_sex = scaler.transform(test_sex.reshape(-1, 1)).reshape(-1)
+        train_mutation = scaler.fit_transform(train_mutation.reshape(-1, 1)).reshape(-1)
+        test_mutation = scaler.transform(test_mutation.reshape(-1, 1)).reshape(-1)
 
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
@@ -444,7 +448,7 @@ class FTDDataset(InMemoryDataset):
             adj_matrix,
             os.path.join(
                 self.processed_dir,
-                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.jpg',
+                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_split_{config.split}.jpg',
                 ),
             )
         return (
