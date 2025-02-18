@@ -154,7 +154,7 @@ gat_v4_weight_initializer: ['xavier', 'kaiming', 'orthogonal', 'truncated_normal
 #gat_v4_which_layer_choices: [['layer1', 'layer2', 'layer3', 'sex', 'mutation', 'age'], ['layer1', 'layer2', 'layer3', 'sex', 'mutation']]
 
 # GAT
-gat_num_layers: [2, 4, 6, 12]  # only for GAT and GCN
+gat_num_layers: [2, 4, 6, 12, 18]  # only for GAT and GCN
 gat_hidden_channels: [8, 32, 128, 256, 512]
 gat_heads: [1, 2, 4, 8]
 # GCN
