@@ -130,7 +130,7 @@ class FTDDataset(InMemoryDataset):
         self.root = root
         self.split = split
         self.fold = fold
-        assert split in ["train", "validation"]
+        assert split in ["train", "val"]
 
         assert config.sex in SEXES
         assert config.modality in MODALITIES
@@ -187,7 +187,7 @@ class FTDDataset(InMemoryDataset):
         """
         files= [
             f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_train_random_state_{self.config.random_state}_fold_{self.fold}.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_test_random_state_{self.config.random_state}_fold_{self.fold}.pt",
+            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_val_random_state_{self.config.random_state}_fold_{self.fold}.pt",
         ]
         print("Processed file names:", files)
         return files
@@ -388,39 +388,39 @@ class FTDDataset(InMemoryDataset):
             filtered_gene_col
         )  # NOTE: Just returning top_protein_cols to use it in finding top proteins in evaluation.ipynb
 
-    def load_csv_data(self, config, train_features, test_features, train_labels, test_labels, train_sex, test_sex, train_mutation, test_mutation, train_age, test_age):
+    def load_csv_data(self, config, train_features, val_features, train_labels, val_labels, train_sex, val_sex, train_mutation, val_mutation, train_age, val_age):
         if config.y_val in Y_VALS_TO_NORMALIZE:
             train_labels, train_mean, train_std = log_transform(train_labels, train_labels)
-            test_labels, test_mean, test_std = log_transform(train_labels, test_labels)
+            val_labels, val_mean, val_std = log_transform(train_labels, val_labels)
             #Recombine to plot normalized labels histogram
-            combined_labels = np.concatenate((train_labels, test_labels), axis=0)
+            combined_labels = np.concatenate((train_labels, val_labels), axis=0)
             hist_path = os.path.join(self.processed_dir, self.hist_path_str)
             plot_histogram(pd.DataFrame(combined_labels), self.config.y_val, save_to=hist_path)
         
         train_features_for_adj = train_features
         scaler = StandardScaler()
         train_features = scaler.fit_transform(train_features)
-        test_features = scaler.transform(test_features) 
+        val_features = scaler.transform(val_features) 
         train_age = scaler.fit_transform(train_age.reshape(-1, 1)).reshape(-1)
-        test_age = scaler.transform(test_age.reshape(-1, 1)).reshape(-1)
+        val_age = scaler.transform(val_age.reshape(-1, 1)).reshape(-1)
         train_sex = scaler.fit_transform(train_sex.reshape(-1, 1)).reshape(-1)
-        test_sex = scaler.transform(test_sex.reshape(-1, 1)).reshape(-1)
+        val_sex = scaler.transform(val_sex.reshape(-1, 1)).reshape(-1)
         train_mutation = scaler.fit_transform(train_mutation.reshape(-1, 1)).reshape(-1)
-        test_mutation = scaler.transform(test_mutation.reshape(-1, 1)).reshape(-1)
+        val_mutation = scaler.transform(val_mutation.reshape(-1, 1)).reshape(-1)
 
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
-        test_features = torch.FloatTensor(test_features.reshape(-1, test_features.shape[1], 1))
+        val_features = torch.FloatTensor(val_features.reshape(-1, val_features.shape[1], 1))
         train_labels = torch.FloatTensor(train_labels)
-        test_labels = torch.FloatTensor(test_labels)
+        val_labels = torch.FloatTensor(val_labels)
         train_sex = torch.IntTensor(train_sex)
-        test_sex = torch.IntTensor(test_sex)
+        val_sex = torch.IntTensor(val_sex)
         train_mutation = torch.IntTensor(train_mutation)
-        test_mutation = torch.IntTensor(test_mutation)
+        val_mutation = torch.IntTensor(val_mutation)
         train_age = torch.FloatTensor(train_age)
-        test_age = torch.FloatTensor(test_age)
+        val_age = torch.FloatTensor(val_age)
 
         print("Training features and labels:", train_features.shape, train_labels.shape)
-        print("Testing features and labels:", test_features.shape, test_labels.shape)
+        print("Val features and labels:", val_features.shape, val_labels.shape)
         print(
             "Training sex, mutation and age labels shape:",
             train_sex.shape,
@@ -428,10 +428,10 @@ class FTDDataset(InMemoryDataset):
             train_age.shape,
         )
         print(
-            "Testing sex, mutation and age labels shape:",
-            test_sex.shape,
-            test_mutation.shape,
-            test_age.shape,
+            "Val sex, mutation and age labels shape:",
+            val_sex.shape,
+            val_mutation.shape,
+            val_age.shape,
         )
         # Calculate adjacency matrix    
         adj_path = os.path.join(
@@ -454,14 +454,14 @@ class FTDDataset(InMemoryDataset):
         return (
             train_features,
             train_labels,
-            test_features,
-            test_labels,
+            val_features,
+            val_labels,
             train_sex,
-            test_sex,
+            val_sex,
             train_mutation,
-            test_mutation,
+            val_mutation,
             train_age,
-            test_age,
+            val_age,
             adj_matrix,
         )
 
