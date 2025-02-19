@@ -137,7 +137,6 @@ mutation_choices: [['GRN', 'MAPT','C9orf72','CTL']] #,['MAPT'], ['C9orf72']],['C
 sex_choices: [['M', 'F']]
 modality_choices: ['csf']
 y_val_choices: ['nfl'] #['nfl','disease_age','clinical_dementia_rating_global', 'clinical_dementia_rating'] #'executive_function', 'memory', 'clinical_dementia_rating', 'nfl'] #"clinical_dementia_rating_global"]
-use_weights_choices: [False]
 
 # GAT-v4
 gat_v4_hidden_channels: [[8, 16], [32, 64], [64, 128]]

@@ -90,7 +90,6 @@ class Proteo(pl.LightningModule):
         avg_node_degree,
         pos_weight,
         focal_loss_weight,
-        use_weights = True,
     ):
         """Initializes the proteo module by defining self.model according to the model specified in config.yml."""
         super().__init__()
@@ -112,7 +111,6 @@ class Proteo(pl.LightningModule):
         self.focal_loss_weight = focal_loss_weight
         self.min_val_loss = 1000
         self.min_train_loss = 1000
-        self.use_weights = use_weights
 
         if config.model == 'gat-v4':
             self.model = GATv4(
@@ -250,12 +248,8 @@ class Proteo(pl.LightningModule):
             pred = torch.nn.Softmax(dim=-1)(pred)
         else:
             loss_fn = self.LOSS_MAP["mse_regression_weighted"]
-        if self.use_weights:
-            assert self.config.y_val not in MULTICLASS_Y_VALS_MAP, "Can only use LDS for regression tasks, not for multiclass tasks."
-            assert self.config.y_val not in BINARY_Y_VALS_MAP, "Can only use LDS for regression tasks, not for binary classification tasks."
-            loss = loss_fn(pred, target, batch.weight)
-        else:
-            loss = loss_fn(pred, target)
+
+        loss = loss_fn(pred, target)
 
         # Calculate L1 regularization term to encourage sparsity
         # FIXME: With L1 regularization, the train_RMSE is not the RMSE
@@ -532,7 +526,6 @@ def main():
         avg_node_degree=avg_node_degree,
         pos_weight=pos_weight,
         focal_loss_weight=focal_loss_weight,
-        use_weights = config.use_weights
     )
 
     logger = get_wandb_logger(config)
