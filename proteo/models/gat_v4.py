@@ -113,8 +113,6 @@ class GATv4(nn.Module):
         fc_act,
         num_nodes,
         weight_initializer,
-        use_master_nodes,
-        master_nodes,
     ):
         super(GATv4, self).__init__()
         self.in_channels = in_channels
@@ -128,12 +126,7 @@ class GATv4(nn.Module):
         self.fc_dim = fc_dim
         self.fc_dropout = fc_dropout
         self.fc_act = fc_act
-        # Conditionally define fc_input_dim based on config.use_master_nodes
-        if use_master_nodes:
-            self.fc_input_dim = (num_nodes + len(master_nodes)) * len(which_layer)
-            print("INPUT DIM", self.fc_input_dim)
-        else:
-            self.fc_input_dim = num_nodes * len(which_layer)
+        self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]
         self.num_nodes = num_nodes
 
@@ -146,23 +139,13 @@ class GATv4(nn.Module):
         self.build_pooling_layers()
 
         # Layer normalization
-        if use_master_nodes:
-            self.layer_norm = LayerNorm(self.num_nodes + len(master_nodes))
-        else:
-            self.layer_norm = LayerNorm(self.num_nodes)
+        self.layer_norm = LayerNorm(self.num_nodes)
 
         # Fully connected layers
         self.encoder = self.build_fc_layers()
-        self.sex_encoder = self.build_sex_encoder()
-        self.mutation_encoder = self.build_mutation_encoder()
-        self.age_encoder = self.build_age_encoder()
-        self.feature_encoders = {
-            'sex': self.sex_encoder,
-            'mutation': self.mutation_encoder,
-            'age': lambda x: self.age_encoder(
-                x.view(-1, 1)
-            ),  # Use a lambda function to reshape age appropriately
-        }
+
+        # Feature encoders
+        self.feature_encoder = self.build_feature_encoder()
 
         # Initialize weights
         self.reset_parameters()
@@ -201,14 +184,8 @@ class GATv4(nn.Module):
         layers.append(nn.Linear(fc_dim, self.out_channels))
         return nn.Sequential(*layers)
 
-    def build_sex_encoder(self):
-        return nn.Embedding(num_embeddings=2, embedding_dim=self.num_nodes)  # 2 sexes
-
-    def build_mutation_encoder(self):
-        return nn.Embedding(num_embeddings=4, embedding_dim=self.num_nodes)  # 4 mutations
-
-    def build_age_encoder(self):
-        return nn.Linear(1, self.num_nodes)  # 1 age #TODO: Add nonlinearity?
+    def build_feature_encoder(self):
+        return nn.Linear(1, self.num_nodes)
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -280,13 +257,12 @@ class GATv4(nn.Module):
             [multiscale_features[layer] for layer in self.which_layer[0:3]],
             dim=1,  # just take first 3 gat layers
         )
-
-        for feature, encoder in self.feature_encoders.items():
-            if feature in self.which_layer:
+        for feature in self.which_layer:
+            if feature in ['sex','mutation','age']:
                 feature_value = locals().get(
                     feature
                 )  # Get the value of the feature (e.g., sex, mutation, age)
-                encoded_features.append(encoder(feature_value))
+                encoded_features.append(self.feature_encoder(feature_value.view(-1, 1)))
 
         if encoded_features:
             demographic_features = torch.cat(encoded_features, dim=1)

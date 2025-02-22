@@ -1,6 +1,7 @@
 import os
 
 os.environ["RPY2_RINTERFACE_SIGINT"] = "FALSE"
+import os.path as osp
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,6 +17,7 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal.windows import triang
 from scipy.ndimage import convolve1d
 from sklearn.model_selection import KFold
+from typing import Callable, Sequence
 
 
 LABEL_DIM_MAP = {
@@ -125,11 +127,11 @@ class FTDDataset(InMemoryDataset):
 
     """
 
-    def __init__(self, root, split, fold, config):
+    def __init__(self, root, split, config):
         self.name = 'ftd'
         self.root = root
         self.split = split
-        self.fold = fold
+        self.kfold = config.kfold
         assert split in ["train", "val"]
 
         assert config.sex in SEXES
@@ -145,17 +147,22 @@ class FTDDataset(InMemoryDataset):
         self.mutation_str = f'mutation_{",".join(config.mutation)}'
         self.modality_str = f'{config.modality}'
         self.sex_str = f'sex_{",".join(config.sex)}'
-        self.hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_split_{split}_histogram.jpg'
-        self.orig_hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_split_{split}_orig_histogram.jpg'
+        self.hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_{self.config.num_folds}fold_{self.config.fold}_histogram.jpg'
+        self.orig_hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_{self.config.num_folds}fold_{self.config.fold}_orig_histogram.jpg'
 
         super(FTDDataset, self).__init__(root, transform=None, pre_transform=None)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
         self.label_dim = LABEL_DIM_MAP[self.config.y_val]
-
-        path = os.path.join(
-            self.processed_dir,
-            f'{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_{split}_random_state_{self.config.random_state}_fold_{self.fold}.pt',
-        )
+        if self.kfold:
+            path = os.path.join(
+                self.processed_dir,
+                f'{self.experiment_id}_{split}_random_state_{self.config.random_state}_{self.config.num_folds}fold_{self.config.fold}.pt',
+            )
+        else:
+            path = os.path.join(
+                self.processed_dir,
+                f'{self.experiment_id}_{split}_random_state_{self.config.random_state}.pt',
+            )
         print("Loading data from:", path)
         self.load(path)
 
@@ -185,10 +192,17 @@ class FTDDataset(InMemoryDataset):
         --------
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/data/dataset.py
         """
-        files= [
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_train_random_state_{self.config.random_state}_fold_{self.fold}.pt",
-            f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}_masternodes_val_random_state_{self.config.random_state}_fold_{self.fold}.pt",
-        ]
+        self.experiment_id = f"{self.name}_{self.y_val_str}_{self.adj_str}_{self.num_nodes_str}_{self.mutation_str}_{self.modality_str}_{self.sex_str}"
+        if self.kfold:
+            files= [
+                f"{self.experiment_id}_train_random_state_{self.config.random_state}_{self.config.num_folds}fold_{self.config.fold}.pt",
+                f"{self.experiment_id}_val_random_state_{self.config.random_state}_{self.config.num_folds}fold_{self.config.fold}.pt",
+            ]
+        else: 
+            files= [
+                f"{self.experiment_id}_train_random_state_{self.config.random_state}.pt",
+                f"{self.experiment_id}_val_random_state_{self.config.random_state}.pt",
+            ]
         print("Processed file names:", files)
         return files
 
@@ -233,14 +247,17 @@ class FTDDataset(InMemoryDataset):
         sex_labels = np.array(filtered_sex_col.astype('category').cat.codes)
         mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
 
-        # Split data into train_val and test sets
+        # Split data into train and val/test sets
         train_val_features, test_features, train_val_labels, test_labels, train_val_sex, test_sex, train_val_mutation, test_mutation, train_val_age, test_age = train_test_split(
             features, labels, sex_labels, mutation_labels, filtered_age_col.values, test_size=0.2, random_state=self.config.random_state
         )
 
-        # Perform k-fold splitting on the train_val set
-        kf = KFold(n_splits=self.config.num_folds, shuffle=True, random_state=self.config.random_state)
-        for fold, (train_index, val_index) in enumerate(kf.split(train_val_features)):
+        if self.kfold is not None:
+            # Perform k-fold splitting on the train set
+            assert self.config.fold < self.config.num_folds, f"Invalid fold index {self.config.fold}, should be lower than the number of folds {self.config.num_folds}"
+            kf = KFold(n_splits=self.config.num_folds, shuffle=True, random_state=self.config.random_state)
+            train_index, val_index = next(split for fold,split in enumerate(kf.split(train_val_features)) if fold==self.config.fold)
+            
             train_features = train_val_features[train_index]
             val_features = train_val_features[val_index]
             train_labels = train_val_labels[train_index]
@@ -251,47 +268,60 @@ class FTDDataset(InMemoryDataset):
             val_mutation = train_val_mutation[val_index]
             train_age = train_val_age[train_index]
             val_age = train_val_age[val_index]
+            
+        else:
+            # Just consider train and test/val splits
+            train_features = train_val_features
+            val_features = test_features
+            train_labels = train_val_labels
+            val_labels = test_labels
+            train_sex = train_val_sex
+            val_sex = test_sex
+            train_mutation = train_val_mutation
+            val_mutation = test_mutation
+            train_age = train_val_age
+            val_age = test_age
 
-            # Unpack the return values from load_csv_data
-            (
-                train_features,
-                train_labels,
-                val_features,
-                val_labels,
-                train_sex,
-                val_sex,
-                train_mutation,
-                val_mutation,
-                train_age,
-                val_age,
-                adj_matrix,  # This will be a list
-            ) = self.load_csv_data(self.config, train_features, val_features, train_labels, val_labels, train_sex, val_sex, train_mutation, val_mutation, train_age, val_age)
+        # Unpack the return values from load_csv_data
+        (
+            train_features,
+            train_labels,
+            val_features,
+            val_labels,
+            train_sex,
+            val_sex,
+            train_mutation,
+            val_mutation,
+            train_age,
+            val_age,
+            adj_matrix,  # This will be a list
+        ) = self.load_csv_data(self.config, train_features, val_features, train_labels, val_labels, train_sex, val_sex, train_mutation, val_mutation, train_age, val_age)
 
-            train_data_list = []
-            val_data_list = []
+        train_data_list = []
+        val_data_list = []
 
-            # Single adjacency matrix is used for both male and female data
-            adj_matrix = adj_matrix
+        # Single adjacency matrix is used for both male and female data
+        adj_matrix = adj_matrix
 
-            # Iterate through train data and use the single adjacency matrix
-            for feature, label, sex, mutation, age in zip(
-                train_features, train_labels, train_sex, train_mutation, train_age
-            ):
-                data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
-                train_data_list.append(data)
+        # Iterate through train data and use the single adjacency matrix
+        for feature, label, sex, mutation, age in zip(
+            train_features, train_labels, train_sex, train_mutation, train_age
+        ):
+            data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
+            train_data_list.append(data)
 
-            # Iterate through val data and use the single adjacency matrix
-            for feature, label, sex, mutation, age in zip(
-                val_features, val_labels, val_sex, val_mutation, val_age
-            ):
-                data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
-                val_data_list.append(data)
+        # Iterate through val data and use the single adjacency matrix
+        for feature, label, sex, mutation, age in zip(
+            val_features, val_labels, val_sex, val_mutation, val_age
+        ):
+            data = self.create_graph_data(feature, label, adj_matrix, sex, mutation, age)
+            val_data_list.append(data)
 
-            # Save the train and val data lists
-            train_path = f"{self.processed_paths[0]}"
-            val_path = f"{self.processed_paths[1]}"
-            self.save(train_data_list, train_path)
-            self.save(val_data_list, val_path)
+        # Save the train and val data lists
+        train_path = f"{self.processed_paths[0]}"
+        val_path = f"{self.processed_paths[1]}"
+        self.save(train_data_list, train_path)
+        self.save(val_data_list, val_path)
 
     # -----------------------------FUNCTIONS TO GET LABELS---------------------------------#
     def load_y_vals(self, filtered_data):
@@ -391,6 +421,7 @@ class FTDDataset(InMemoryDataset):
     def load_csv_data(self, config, train_features, val_features, train_labels, val_labels, train_sex, val_sex, train_mutation, val_mutation, train_age, val_age):
         if config.y_val in Y_VALS_TO_NORMALIZE:
             train_labels, train_mean, train_std = log_transform(train_labels, train_labels)
+            save_mean_std(train_mean, train_std, config, self.experiment_id, self.processed_dir)
             val_labels, val_mean, val_std = log_transform(train_labels, val_labels)
             #Recombine to plot normalized labels histogram
             combined_labels = np.concatenate((train_labels, val_labels), axis=0)
@@ -401,21 +432,21 @@ class FTDDataset(InMemoryDataset):
         scaler = StandardScaler()
         train_features = scaler.fit_transform(train_features)
         val_features = scaler.transform(val_features) 
-        train_age = scaler.fit_transform(train_age.reshape(-1, 1)).reshape(-1)
-        val_age = scaler.transform(val_age.reshape(-1, 1)).reshape(-1)
-        train_sex = scaler.fit_transform(train_sex.reshape(-1, 1)).reshape(-1)
-        val_sex = scaler.transform(val_sex.reshape(-1, 1)).reshape(-1)
-        train_mutation = scaler.fit_transform(train_mutation.reshape(-1, 1)).reshape(-1)
-        val_mutation = scaler.transform(val_mutation.reshape(-1, 1)).reshape(-1)
+        train_age = scaler.fit_transform(train_age.reshape(-1, 1))
+        val_age = scaler.transform(val_age.reshape(-1, 1))
+        train_sex = scaler.fit_transform(train_sex.reshape(-1, 1))
+        val_sex = scaler.transform(val_sex.reshape(-1, 1))
+        train_mutation = scaler.fit_transform(train_mutation.reshape(-1, 1))
+        val_mutation = scaler.transform(val_mutation.reshape(-1, 1))
 
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         val_features = torch.FloatTensor(val_features.reshape(-1, val_features.shape[1], 1))
         train_labels = torch.FloatTensor(train_labels)
         val_labels = torch.FloatTensor(val_labels)
-        train_sex = torch.IntTensor(train_sex)
-        val_sex = torch.IntTensor(val_sex)
-        train_mutation = torch.IntTensor(train_mutation)
-        val_mutation = torch.IntTensor(val_mutation)
+        train_sex = torch.FloatTensor(train_sex)
+        val_sex = torch.FloatTensor(val_sex)
+        train_mutation = torch.FloatTensor(train_mutation)
+        val_mutation = torch.FloatTensor(val_mutation)
         train_age = torch.FloatTensor(train_age)
         val_age = torch.FloatTensor(val_age)
 
@@ -448,7 +479,7 @@ class FTDDataset(InMemoryDataset):
             adj_matrix,
             os.path.join(
                 self.processed_dir,
-                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_split_{config.split}.jpg',
+                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_{config.num_folds}fold_{config.fold}.jpg',
                 ),
             )
         return (
@@ -583,15 +614,26 @@ def log_transform(train_data, data, log=False):
         data = np.log(data)
     mean = np.mean(train_data)
     std = np.std(train_data)
-    print("mean log train", mean)
-    print("std log train", std)
     standardized_log_data = (data - mean) / std
     return standardized_log_data, mean, std
 
 
 def reverse_log_transform(standardized_log_data, mean, std, log=False):
     # De-standardize the data
+    
     data = standardized_log_data * std + mean
     if log:
         data = torch.exp(data)
     return data
+
+def save_mean_std(mean, std, config, experiment_id, processed_dir):
+    if config.kfold:
+        file_name = f"{experiment_id}_train_random_state_{config.random_state}_{config.num_folds}fold_{config.fold}.json"
+    else:
+        file_name = f"{experiment_id}_train_random_state_{config.random_state}.json"
+    file_path = os.path.join(processed_dir, file_name)
+
+    with open(file_path, 'w') as f:
+        f.write(f"mean: {mean}\n")
+        f.write(f"std: {std}\n")
+    print(f"Mean and std saved to: {file_path}")
