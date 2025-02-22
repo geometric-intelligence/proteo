@@ -262,7 +262,7 @@ class GATv4(nn.Module):
                 feature_value = locals().get(
                     feature
                 )  # Get the value of the feature (e.g., sex, mutation, age)
-                encoded_features.append(self.feature_encoder(feature_value.view(-1, 1)))
+                encoded_features.append(self.feature_encoder(feature_value))
 
         if encoded_features:
             demographic_features = torch.cat(encoded_features, dim=1)

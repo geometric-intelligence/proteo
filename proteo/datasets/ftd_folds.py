@@ -226,6 +226,9 @@ class FTDDataset(InMemoryDataset):
         # Extract the pairs of connected nodes
         edge_index = torch.tensor(pairs_indices.tolist())
         edge_index = torch.transpose(edge_index, 0, 1)  # reshape(edge_index, (2, -1))
+        sex = sex.unsqueeze(1)
+        mutation = mutation.unsqueeze(1)
+        age = age.unsqueeze(1)
         return Data(x=x, edge_index=edge_index, y=label, sex=sex, mutation=mutation, age=age)
     
     def process(self):
