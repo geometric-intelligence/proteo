@@ -25,6 +25,7 @@ Seems OK to disregard.
 import os
 import random
 import time
+import itertools
 
 import numpy as np
 import pytorch_lightning as pl
@@ -44,30 +45,9 @@ from ray.tune.schedulers import ASHAScheduler
 
 import proteo.callbacks_ray as proteo_callbacks_ray
 from proteo.datasets.ftd_folds import BINARY_Y_VALS_MAP, MULTICLASS_Y_VALS_MAP, Y_VALS_TO_NORMALIZE, FTDDataset
+from proteo.train import construct_datasets
 
 MAX_SEED = 65535
-
-def construct_datasets(config, fold):
-    root = config.data_dir
-    print(f"Loading datasets from {root}")
-    print(f"Absolute path: {os.path.abspath(root)}")
-    print(f"Directory contents: {os.listdir(root)}")
-    
-    try:
-        train_dataset = FTDDataset(root, "train", fold, config)
-        print("Train dataset loaded successfully")
-    except Exception as e:
-        print(f"Error loading train dataset: {str(e)}")
-        raise
-    
-    try:
-        val_dataset = FTDDataset(root, "val", fold, config)
-        print("val dataset loaded successfully")
-    except Exception as e:
-        print(f"Error loading val dataset: {str(e)}")
-        raise
-    
-    return train_dataset, val_dataset
 
 def train_func(train_loop_config):
     """Train one neural network with Lightning.
@@ -113,8 +93,7 @@ def train_func(train_loop_config):
     )
 
     # Use the fold from train_loop_config
-    fold = train_loop_config['fold']
-    train_dataset, val_dataset = construct_datasets(config, fold)
+    train_dataset, val_dataset = construct_datasets(config)
     train_loader, val_loader = proteo_train.construct_loaders(config, train_dataset, val_dataset)
 
     avg_node_degree = proteo_train.compute_avg_node_degree(val_dataset)
@@ -141,7 +120,7 @@ def train_func(train_loop_config):
                 "histogram original": wandb.Image(
                     os.path.join(
                         train_dataset.processed_dir,
-                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_split_{config.split}_orig_histogram.jpg',
+                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_orig_histogram.jpg',
                     )
                 )
             }
@@ -151,7 +130,7 @@ def train_func(train_loop_config):
         "histogram": wandb.Image(
             os.path.join(
                 train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_split_{config.split}_histogram.jpg',
+                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_histogram.jpg',
             )
         ),
         "parameters": wandb.Table(
@@ -171,7 +150,7 @@ def train_func(train_loop_config):
     log_data["adjacency"] = wandb.Image(
         os.path.join(
             train_dataset.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_split_{config.split}.jpg',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_{config.num_folds}fold_{config.fold}.jpg',
         )
     )
     wandb.log(log_data)
@@ -254,17 +233,36 @@ def main():
         run_config=run_config,
     )
 
-    # Configure hyperparameter search for Tuner
-    model_param_grid = {
+    # Global parameters (apply to all models)
+    global_space = {
+        'seed': [config.seed],
+        'fold': list(range(config.num_folds)),
+        #'lr': list(np.logspace(np.log10(config.lr_min), np.log10(config.lr_max), 5)),
+        'batch_size': config.batch_size_choices,
+        'lr_scheduler': config.lr_scheduler_choices,
+        'dropout': config.dropout_choices,
+        #'l1_lambda': list(np.logspace(np.log10(config.l1_lambda_min), np.log10(config.l1_lambda_max), 5)),
+        'act': config.act_choices,
+        'num_nodes': config.num_nodes_choices,
+        'adj_thresh': config.adj_thresh_choices,
+        'mutation': config.mutation_choices,
+        'sex': config.sex_choices,
+        'modality': config.modality_choices,
+        'y_val': config.y_val_choices,
+    }
+
+
+    ## Model-specific parameters for each model type:
+    model_space = {
         'gat-v4': {
             'num_layers': [None],
-            'hidden_channels': config.gat_v4_hidden_channels,
+            'hidden_channels': config.gat_v4_hidden_channels,  # list of candidate values
             'heads': config.gat_v4_heads,
             'fc_dim': config.gat_v4_fc_dim,
             'fc_dropout': config.gat_v4_fc_dropout,
             'fc_act': config.gat_v4_fc_act,
             'weight_initializer': config.gat_v4_weight_initializer,
-            'channel_list': [None],
+            'channel_list': [None],  # not used
             'norm': [None],
             'plain_last': [None]
         },
@@ -306,42 +304,44 @@ def main():
         }
     }
 
-    # Build search space with model-specific parameter grids
-    search_spaces = []
+    def trial_str_creator(trial):
+        train_loop_config = trial.config['train_loop_config']
+        model = train_loop_config['model']
+        return f"model={model},seed={config.seed},num_folds={config.num_folds}"
     
-    # Create a separate search space for each model type
-    for model_name in config.model_grid_search:
-        model_space = {
-            'model': model_name,
-            # Shared parameters
-            'seed': config.seed,  # Use fixed seed instead of randint
-            'fold': tune.grid_search(list(range(config.num_folds))),  # Add fold as grid search parameter
-            'lr': tune.grid_search(np.logspace(np.log10(config.lr_min), np.log10(config.lr_max), 5)),
-            'batch_size': tune.grid_search(config.batch_size_choices),
-            'lr_scheduler': tune.grid_search(config.lr_scheduler_choices),
-            'dropout': tune.grid_search(config.dropout_choices),
-            'l1_lambda': tune.grid_search(np.logspace(np.log10(config.l1_lambda_min), np.log10(config.l1_lambda_max), 5)),
-            'act': tune.grid_search(config.act_choices),
-            'num_nodes': tune.grid_search(config.num_nodes_choices),
-            'adj_thresh': tune.grid_search(config.adj_thresh_choices),
-            'mutation': tune.grid_search(config.mutation_choices),
-            'sex': tune.grid_search(config.sex_choices),
-            'modality': tune.grid_search(config.modality_choices),
-            'y_val': tune.grid_search(config.y_val_choices),
-            'sex_specific_adj': tune.grid_search(config.sex_specific_adj_choices),
-        }
+    def flatten_configs(global_dict, model_dict, model_name):
+        """Generates a list of full config dictionaries for a given model."""
+        # Copy global parameters and fix 'model' to the given model_name.
+        global_config = global_dict.copy()
+        global_config['model'] = [model_name]
         
-        # Add model-specific parameters
-        for param, values in model_param_grid[model_name].items():
-            if values != [None]:
-                model_space[param] = tune.grid_search(values)
-            else:
-                model_space[param] = None
-                
-        search_spaces.append(model_space)
+        # Ensure each value is a list
+        global_keys = list(global_config.keys())
+        global_values = [global_config[k] if isinstance(global_config[k], list) else [global_config[k]] for k in global_keys]
+        
+        model_keys = list(model_dict.keys())
+        model_values = [model_dict[k] if isinstance(model_dict[k], list) else [model_dict[k]] for k in model_keys]
+        
+        full_configs = []
+        for g_vals in itertools.product(*global_values):
+            gc = dict(zip(global_keys, g_vals))
+            for m_vals in itertools.product(*model_values):
+                mc = dict(zip(model_keys, m_vals))
+                config_combo = {}
+                config_combo.update(gc)
+                config_combo.update(mc)
+                full_configs.append(config_combo)
+        return full_configs
+    
+    all_configs = []
+    for model in config.model_grid_search:
+        # Ensure model-specific parameters are lists:
+        for key, value in model_space[model].items():
+            if not isinstance(value, list):
+                model_space[model][key] = list(value)
+        all_configs.extend(flatten_configs(global_space, model_space[model], model))
 
-    # Combine all search spaces
-    search_space = tune.grid_search(search_spaces)
+    search_space = tune.grid_search(all_configs)
 
     tuner = tune.Tuner(
         ray_trainer,

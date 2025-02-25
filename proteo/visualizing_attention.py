@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import os
 import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -86,13 +87,6 @@ def load_attention_coefficient(
     protein_columns = importance_df.columns[4:]
     print("Number of protein_columns:", len(protein_columns))
 
-    # Calculate mean importance across all participants
-    mean_importance = importance_df[protein_columns].mean(axis=0)
-
-    # Identify top-N highest and lowest proteins by mean importance
-    top_n_highest_proteins = mean_importance.nlargest(top_n).index.to_list()
-    top_n_lowest_proteins = mean_importance.nsmallest(top_n).index.to_list()
-    top_n_proteins = top_n_highest_proteins + top_n_lowest_proteins
 
     # Load patient demographics
     _, test_did_labels, _, _, _, test_mutation_labels, _, test_age_labels, _, _ = load_patient_demographics(config)
@@ -104,6 +98,12 @@ def load_attention_coefficient(
     # Select the row for the specified participant
     row = importance_df.loc[participant_id, protein_columns]
     row = pd.to_numeric(row, errors='coerce')  # convert to numeric if needed
+
+    # Identify top-N highest and lowest proteins by mean importance
+    top_n_highest_proteins = row.nlargest(top_n).index.to_list()
+    top_n_lowest_proteins = row.nsmallest(top_n).index.to_list()
+    print("len top_n_lowest_proteins", len(top_n_lowest_proteins))
+    top_n_proteins = top_n_highest_proteins + top_n_lowest_proteins
 
     # Create mapping from protein to node index
     protein_to_node = {protein: idx for idx, protein in enumerate(protein_columns)}
@@ -185,13 +185,15 @@ def load_attention_coefficient(
                            width=edge_widths,
                            edge_color="gray",
                            alpha=0.7)
-    nx.draw_networkx_labels(G_sub, pos, labels=labels, font_size=8)
+    nx.draw_networkx_labels(G_sub, pos, labels=labels, font_size=12)
     plt.title(f"Participant {participant_id} - Age: {age} - Mutation: {mutation} - Top-{top_n} Subgraph")
     plt.axis("off")
     plt.tight_layout()
+    output_dir = "gnn_vis"
+    os.makedirs(output_dir, exist_ok=True)
     plt.savefig(f"gnn_vis/node_visual_{participant_id}.png")
     plt.close()
-    return participant_data.edge_index, edge_index1, edge_index2, adj_top_n, edges_list, alpha_1, alpha_2
+    return participant_data.edge_index, edge_index1, adj_top_n, edges_list, alpha_1
 
 if __name__ == "__main__":
     checkpoint_path_global_age = (
@@ -212,13 +214,13 @@ if __name__ == "__main__":
     for participant_id_num in range(51):
         print("participant_id_num", participant_id_num)
         edge_index, attention_edge_index, adj_top_n, edges_list, alpha_1 = load_attention_coefficient(
-            checkpoint_path=checkpoint_path_global_age,
+            checkpoint_path=checkpoint_path_nfl,
             csv_path=csv_path_nfl,
             participant_id_num=participant_id_num,
             top_n=200,  # Adjust as needed
             layout="spring"       # or "kamada"
         )
-
+    '''
     # Run for participant 203025100 with all nodes
     edge_index, attention_edge_index1, attention_edge_index2, adj_top_n, edges_list_0, alpha_1_0, alpha_2_0 = load_attention_coefficient(
         checkpoint_path=checkpoint_path_global_age,
@@ -244,5 +246,6 @@ if __name__ == "__main__":
             if abs(val_0 - val_1) > 0.000001:
                 print(f"different at index {idx} with values: {val_0} {val_1}")
         print("edges_list_0 and edges_list_1 are different.")
+    '''
 
    

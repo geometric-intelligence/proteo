@@ -367,8 +367,8 @@ class FTDDataset(InMemoryDataset):
         print("Loading data from:", csv_path)
         csv_data = pd.read_csv(csv_path)
 
-        # Remove bimodal columns
-        csv_data = remove_erroneous_columns(config, csv_data, self.raw_dir)
+        # Remove nfl columns
+        csv_data = remove_nfl_columns(config, csv_data)
         
         # Get the correct subset of proteins based on the mutation, if they have the correct modality measurements, and sex and then use those to find the top proteins and labels
         condition_sex = csv_data[sex_col].isin(self.config.sex)
@@ -533,18 +533,9 @@ class FTDDataset(InMemoryDataset):
         plt.close()
 
 
-def remove_erroneous_columns(config, csv_data, raw_dir):
+def remove_nfl_columns(config, csv_data):
     """Remove columns that have bimodal distributions."""
-    csv_path = os.path.join(raw_dir, config.error_protein_file_name)
-    error_proteins_df = pd.read_excel(csv_path)
-    # Extract column names under "Plasma" and "CSF"
-    modality_columns = error_proteins_df['Plasma'].dropna().tolist()
-    csf_columns = error_proteins_df['CSF'].dropna().tolist()
-    columns_to_remove = list(set(modality_columns + csf_columns))
-    columns_to_remove.extend(
-        ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA']
-    )
-    # Remove the columns
+    columns_to_remove = ['NEFL|P07196|CSF', 'NEFH|P12036|CSF', 'NEFL|P07196|PLASMA', 'NEFH|P12036|PLASMA']
     csv_data = csv_data.drop(columns=columns_to_remove)
     return csv_data
 

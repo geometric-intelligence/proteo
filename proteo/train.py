@@ -47,7 +47,7 @@ from torch_geometric.nn import GAT, GCN, global_mean_pool
 from torch_geometric.nn.models import MLP
 
 import proteo.callbacks as proteo_callbacks
-from proteo.datasets.ftd import (
+from proteo.datasets.ftd_folds import (
     BINARY_Y_VALS_MAP,
     MULTICLASS_Y_VALS_MAP,
     Y_VALS_TO_NORMALIZE,
@@ -127,8 +127,6 @@ class Proteo(pl.LightningModule):
                 fc_act=self.config_model.fc_act,
                 num_nodes=self.config.num_nodes,
                 weight_initializer=self.config_model.weight_initializer,
-                use_master_nodes=self.config.use_master_nodes,
-                master_nodes=self.config.master_nodes,
             )
         elif config.model == 'gat':
             self.model = GAT(
@@ -400,7 +398,7 @@ def construct_datasets(config):
         raise
     
     try:
-        test_dataset = FTDDataset(root, "test", config)
+        test_dataset = FTDDataset(root, "val", config)
         print("Test dataset loaded successfully")
     except Exception as e:
         print(f"Error loading test dataset: {str(e)}")
@@ -485,18 +483,6 @@ def get_wandb_logger(config):
     )
 
 
-def read_protein_file(processed_dir, config):
-    file_path = os.path.join(
-        processed_dir,
-        f'top_proteins_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_{config.sex}.npy',
-    )
-    print(f"Reading protein file: {file_path}")
-    if os.path.exists(file_path):
-        return np.load(file_path, allow_pickle=True)
-    else:
-        raise FileNotFoundError(f"The file {file_path} does not exist.")
-
-
 def main():
     """Training and evaluation script for experiments."""
     torch.set_float32_matmul_precision('medium')  # for performance
@@ -532,32 +518,16 @@ def main():
     images_to_log = [
         os.path.join(
             train_dataset.processed_dir,
-            f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_histogram.jpg',
+            f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_histogram.jpg',
         )
     ]
-    # Check if sex-specific adjacency is enabled
-    if config.sex_specific_adj:
-        # Load both male and female adjacency images
-        images_to_log.extend(
-            [
-                os.path.join(
-                    train_dataset.processed_dir,
-                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_M.jpg',
-                ),
-                os.path.join(
-                    train_dataset.processed_dir,
-                    f'adjacency_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}_F.jpg',
-                ),
-            ]
+    # Load the single adjacency image if sex-specific adjacency is not enabled
+    images_to_log.append(
+        os.path.join(
+            train_dataset.processed_dir,
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_{config.num_folds}fold_{config.fold}.jpg',
         )
-    else:
-        # Load the single adjacency image if sex-specific adjacency is not enabled
-        images_to_log.append(
-            os.path.join(
-                train_dataset.processed_dir,
-                f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_masternodes_{config.use_master_nodes}_sex_specific_{config.sex_specific_adj}.jpg',
-            )
-        )
+    )
 
     if (
         config.y_val in Y_VALS_TO_NORMALIZE
@@ -565,7 +535,7 @@ def main():
         images_to_log.append(
             os.path.join(
                 train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_orig_histogram.jpg',
+                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_orig_histogram.jpg',
             )
         )
 
@@ -573,13 +543,6 @@ def main():
         key="dataset_statistics",
         images=images_to_log,
     )
-    # Log top proteins, note this is in order from most to least different
-    protein_file_data = read_protein_file(train_dataset.processed_dir, config)
-    protein_names = protein_file_data['Protein']
-    metrics = protein_file_data['Metric']
-    # Create a list of lists for logging
-    top_proteins_data = [[protein, metric] for protein, metric in zip(protein_names, metrics)]
-    logger.log_text(key="top_proteins", columns=["Protein", "Metric"], data=top_proteins_data)
     logger.log_text(
         key="Parameters",
         columns=["Medium", "Mutation", "Target", "Sex", "Avg Node Degree"],
