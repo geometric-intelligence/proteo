@@ -423,11 +423,11 @@ class FTDDataset(InMemoryDataset):
 
     def load_csv_data(self, config, train_features, val_features, train_labels, val_labels, train_sex, val_sex, train_mutation, val_mutation, train_age, val_age):
         if config.y_val in Y_VALS_TO_NORMALIZE:
-            train_labels, train_mean, train_std = log_transform(train_labels, train_labels)
+            train_labels_norm, train_mean, train_std = log_transform(train_labels, train_labels)
             save_mean_std(train_mean, train_std, config, self.experiment_id, self.processed_dir)
             val_labels, val_mean, val_std = log_transform(train_labels, val_labels)
             #Recombine to plot normalized labels histogram
-            combined_labels = np.concatenate((train_labels, val_labels), axis=0)
+            combined_labels = np.concatenate((train_labels_norm, val_labels), axis=0)
             hist_path = os.path.join(self.processed_dir, self.hist_path_str)
             plot_histogram(pd.DataFrame(combined_labels), self.config.y_val, save_to=hist_path)
         
@@ -444,7 +444,7 @@ class FTDDataset(InMemoryDataset):
 
         train_features = torch.FloatTensor(train_features.reshape(-1, train_features.shape[1], 1))
         val_features = torch.FloatTensor(val_features.reshape(-1, val_features.shape[1], 1))
-        train_labels = torch.FloatTensor(train_labels)
+        train_labels_norm = torch.FloatTensor(train_labels_norm)
         val_labels = torch.FloatTensor(val_labels)
         train_sex = torch.FloatTensor(train_sex)
         val_sex = torch.FloatTensor(val_sex)
@@ -453,7 +453,7 @@ class FTDDataset(InMemoryDataset):
         train_age = torch.FloatTensor(train_age)
         val_age = torch.FloatTensor(val_age)
 
-        print("Training features and labels:", train_features.shape, train_labels.shape)
+        print("Training features and labels:", train_features.shape, train_labels_norm.shape)
         print("Val features and labels:", val_features.shape, val_labels.shape)
         print(
             "Training sex, mutation and age labels shape:",
@@ -487,7 +487,7 @@ class FTDDataset(InMemoryDataset):
             )
         return (
             train_features,
-            train_labels,
+            train_labels_norm,
             val_features,
             val_labels,
             train_sex,

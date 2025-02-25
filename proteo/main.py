@@ -342,7 +342,12 @@ def main():
         all_configs.extend(flatten_configs(global_space, model_space[model], model))
 
     search_space = tune.grid_search(all_configs)
-
+    scheduler = ASHAScheduler(
+        time_attr="training_iteration",
+        max_t=config['epochs'],
+        grace_period=config.grace_period,
+        reduction_factor=config.reduction_factor,
+    )
     tuner = tune.Tuner(
         ray_trainer,
         param_space={"train_loop_config": search_space},
@@ -350,6 +355,7 @@ def main():
             metric='val_loss',
             mode='min',
             trial_name_creator=trial_str_creator,
+            scheduler=scheduler,
         ),
     )
     results = tuner.fit()
