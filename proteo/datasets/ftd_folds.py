@@ -255,7 +255,7 @@ class FTDDataset(InMemoryDataset):
             features, labels, sex_labels, mutation_labels, filtered_age_col.values, test_size=0.2, random_state=self.config.random_state
         )
 
-        if self.kfold is not None:
+        if self.kfold:
             # Perform k-fold splitting on the train set
             assert self.config.fold < self.config.num_folds, f"Invalid fold index {self.config.fold}, should be lower than the number of folds {self.config.num_folds}"
             kf = KFold(n_splits=self.config.num_folds, shuffle=True, random_state=self.config.random_state)

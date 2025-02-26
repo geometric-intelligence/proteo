@@ -6,72 +6,29 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
 from proteo.proteo.datasets.ftd_folds import FTDDataset
 from config_utils import CONFIG_FILE, read_config_from_file
+from proteo.train import construct_datasets
+import itertools
 
 def load_and_prepare_data(config):
     # Load data using your existing function
-    dataset = FTDDataset(config.data_dir, "train", 0, config)  # Fold is set to 0 for initial loading
-    (
-        features,
-        labels,
-        protein_columns,
-        filtered_sex_col,
-        filtered_mutation_col,
-        filtered_age_col,
-        filtered_did_col, 
-        filtered_gene_col
-    ) = dataset.load_csv_data_pre_pt_files(config)
+    train_dataset, test_dataset = construct_datasets(config)
+    train_dataset_features = train_dataset.x
+    train_dataset_labels = train_dataset.y
+    train_dataset_sex = train_dataset.sex
+    train_dataset_mutation = train_dataset.mutation
+    train_dataset_age = train_dataset.age
+    val_dataset_features = test_dataset.x
+    val_dataset_labels = test_dataset.y
+    val_dataset_sex = test_dataset.sex
+    val_dataset_mutation = test_dataset.mutation
+    val_dataset_age = test_dataset.age
+    
+    return train_dataset_features, train_dataset_labels, train_dataset_sex, train_dataset_mutation, train_dataset_age, val_dataset_features, val_dataset_labels, val_dataset_sex, val_dataset_mutation, val_dataset_age
 
-    # Convert sex and mutation to categorical labels
-    sex_labels = np.array(filtered_sex_col.astype('category').cat.codes)
-    mutation_labels = np.array(filtered_mutation_col.astype('category').cat.codes)
-
-    # Split data into train_val and test sets
-    train_val_features, test_features, train_val_labels, test_labels, train_val_sex, test_sex, train_val_mutation, test_mutation, train_val_age, test_age = train_test_split(
-        features, labels, sex_labels, mutation_labels, filtered_age_col.values, val_size=0.2, random_state=config.random_state
-    )
-
-    return train_val_features, train_val_labels, train_val_sex, train_val_mutation, train_val_age.values
-
-def k_fold_split_and_standardize(features, labels, sex_labels, mutation_labels, age_values, config):
-    kf = KFold(n_splits=config.num_folds, shuffle=True, random_state=config.random_state)
-    for train_index, val_index in kf.split(features):
-        # Split data into train and val sets
-        train_features = features[train_index]
-        val_features = features[val_index]
-        train_labels = labels[train_index]
-        val_labels = labels[val_index]
-        train_sex = sex_labels[train_index]
-        val_sex = sex_labels[val_index]
-        train_mutation = mutation_labels[train_index]
-        val_mutation = mutation_labels[val_index]
-        train_age = age_values[train_index]
-        val_age = age_values[val_index]
-
-        # Standardize the features
-        scaler_features = StandardScaler()
-        train_features = scaler_features.fit_transform(train_features)
-        val_features = scaler_features.transform(val_features)
-
-        # Standardize the sex labels
-        scaler_sex = StandardScaler()
-        train_sex = scaler_sex.fit_transform(train_sex.reshape(-1, 1))
-        val_sex = scaler_sex.transform(val_sex.reshape(-1, 1))
-
-        # Standardize the mutation labels
-        scaler_mutation = StandardScaler()
-        train_mutation = scaler_mutation.fit_transform(train_mutation.reshape(-1, 1))
-        val_mutation = scaler_mutation.transform(val_mutation.reshape(-1, 1))
-
-        # Standardize the age values
-        scaler_age = StandardScaler()
-        train_age = scaler_age.fit_transform(train_age.reshape(-1, 1))
-        val_age = scaler_age.transform(val_age.reshape(-1, 1))
-
-        # Combine additional features
-        train_combined = np.hstack((train_features, train_sex, train_mutation, train_age))
-        val_combined = np.hstack((val_features, val_sex, val_mutation, val_age))
-
-        yield train_combined, val_combined, train_labels, val_labels
+def stack_features(train_features, train_labels, train_sex, train_mutation, train_age, val_features, val_labels, val_sex, val_mutation, val_age):
+    train_combined = np.hstack((train_features, train_sex, train_mutation, train_age))
+    val_combined = np.hstack((val_features, val_sex, val_mutation, val_age))
+    return train_combined, val_combined, train_labels, val_labels
 
 def find_best_alpha(features, labels):
     # Standardize the features
@@ -85,78 +42,135 @@ def find_best_alpha(features, labels):
     print(f"Best alpha found: {lasso_cv.alpha_}")
     return lasso_cv.alpha_
 
-def run_lasso_k_fold(features, labels, sex_labels, mutation_labels, age_values, best_alpha, config):
-    mse_scores = []
+def run_lasso_folds(config):
+    alphas = np.logspace(-4, 2, 50) # Range of alpha values to try
+    # Dictionary to store MSE scores for each alpha
+    alpha_results = {alpha: [] for alpha in alphas}
+    
+    for fold in range(config.num_folds):
+        # Update config fold number
+        config.fold = fold
+        
+        # Load data for this fold
+        train_features, train_labels, train_sex, train_mutation, train_age, \
+        val_features, val_labels, val_sex, val_mutation, val_age = load_and_prepare_data(config)
+        
+        # Stack features
+        train_combined, val_combined, train_labels, val_labels = stack_features(
+            train_features, train_labels, train_sex, train_mutation, train_age,
+            val_features, val_labels, val_sex, val_mutation, val_age
+        )
+        
+        # Try different alpha values
+        for alpha in alphas:
+            lasso_model = Lasso(alpha=alpha, random_state=42)
+            lasso_model.fit(train_combined, train_labels)
+            
+            # Predict and evaluate
+            predictions = lasso_model.predict(val_combined)
+            mse = mean_squared_error(val_labels, predictions)
+            alpha_results[alpha].append(mse)
+        
+        print(f"Completed fold {fold}")
+    
+    # Calculate and print statistics for each alpha
+    print("\nResults for each alpha value across folds:")
+    print("Alpha\tMean MSE ± Std MSE")
+    print("-" * 30)
+    
+    best_mean_mse = float('inf')
+    best_alpha = None
+    
+    for alpha in alphas:
+        mean_mse = np.mean(alpha_results[alpha])
+        std_mse = np.std(alpha_results[alpha])
+        print(f"{alpha:.3f}\t{mean_mse:.4f} ± {std_mse:.4f}")
+        
+        if mean_mse < best_mean_mse:
+            best_mean_mse = mean_mse
+            best_alpha = alpha
+    
+    print(f"\nBest alpha across all folds: {best_alpha} (MSE: {best_mean_mse:.4f})")
+    
+    return alpha_results
 
-    for train_combined, val_combined, train_labels, val_labels in k_fold_split_and_standardize(features, labels, sex_labels, mutation_labels, age_values, config):
-        # Train Lasso regression with the best alpha
-        lasso_model = Lasso(alpha=best_alpha)
-        lasso_model.fit(train_combined, train_labels)
 
-        # Predict and evaluate
-        predictions = lasso_model.predict(val_combined)
-        mse = mean_squared_error(val_labels, predictions)
-        mse_scores.append(mse)
-
-    return np.mean(mse_scores), np.std(mse_scores)
-
-def find_best_svr_params(features, labels):
-    # Standardize the features
-    scaler = StandardScaler()
-    features_scaled = scaler.fit_transform(features)
-
-    # Define the parameter grid for hyperparameter tuning
+def run_svr_folds(config):
+    # Define the parameter grid
     param_grid = {
         'C': [0.01, 0.1, 1, 10, 100, 1000],
         'epsilon': [0.1, 0.2, 0.5, 1],
         'kernel': ['linear', 'rbf', 'poly', 'sigmoid']
     }
-
-    # Initialize the SVR model
-    svr = SVR()
-
-    # Use GridSearchCV to find the best parameters
-    grid_search = GridSearchCV(svr, param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
-    grid_search.fit(features_scaled, labels)
-
-    print(f"Best SVR parameters: {grid_search.best_params_}")
-    return grid_search.best_params_
-
-def run_svr_k_fold(features, labels, sex_labels, mutation_labels, age_values, best_params, config):
-    mse_scores = []
-
-    for train_combined, val_combined, train_labels, val_labels in k_fold_split_and_standardize(features, labels, sex_labels, mutation_labels, age_values, config):
-        # Train SVR with the best parameters
-        svr_model = SVR(**best_params)
-        svr_model.fit(train_combined, train_labels)
-
-        # Predict and evaluate
-        predictions = svr_model.predict(val_combined)
-        mse = mean_squared_error(val_labels, predictions)
-        mse_scores.append(mse)
-
-    return np.mean(mse_scores), np.std(mse_scores)
+    
+    # Create all parameter combinations
+    param_combinations = [
+        dict(zip(param_grid.keys(), v)) 
+        for v in itertools.product(*param_grid.values())
+    ]
+    
+    # Dictionary to store MSE scores for each parameter combination
+    results = {str(params): [] for params in param_combinations}
+    
+    for fold in range(config.num_folds):
+        # Update config fold number
+        config.fold = fold
+        
+        # Load data for this fold
+        train_features, train_labels, train_sex, train_mutation, train_age, \
+        val_features, val_labels, val_sex, val_mutation, val_age = load_and_prepare_data(config)
+        
+        # Stack features
+        train_combined, val_combined, train_labels, val_labels = stack_features(
+            train_features, train_labels, train_sex, train_mutation, train_age,
+            val_features, val_labels, val_sex, val_mutation, val_age
+        )
+        
+        # Try different parameter combinations
+        for params in param_combinations:
+            svr_model = SVR(**params)
+            svr_model.fit(train_combined, train_labels)
+            
+            # Predict and evaluate
+            predictions = svr_model.predict(val_combined)
+            mse = mean_squared_error(val_labels, predictions)
+            results[str(params)].append(mse)
+        
+        print(f"Completed fold {fold}")
+    
+    # Calculate and print statistics for each parameter combination
+    print("\nResults for each parameter combination across folds:")
+    print("Parameters\tMean MSE ± Std MSE")
+    print("-" * 50)
+    
+    best_mean_mse = float('inf')
+    best_params = None
+    
+    for params_str, mse_scores in results.items():
+        mean_mse = np.mean(mse_scores)
+        std_mse = np.std(mse_scores)
+        print(f"{params_str}\t{mean_mse:.4f} ± {std_mse:.4f}")
+        
+        if mean_mse < best_mean_mse:
+            best_mean_mse = mean_mse
+            best_params = eval(params_str)
+    
+    print(f"\nBest parameters across all folds: {best_params}")
+    print(f"Best MSE: {best_mean_mse:.4f}")
+    
+    return results
 
 def main():
     # Read configuration
     config = read_config_from_file(CONFIG_FILE)
-
-    # Load and prepare data
-    features, labels, sex_labels, mutation_labels, age_values = load_and_prepare_data(config)
-
-    # Find the best alpha for Lasso
-    best_alpha = find_best_alpha(features, labels)
-
-    # Run Lasso regression with k-fold cross-validation
-    mean_mse, std_mse = run_lasso_k_fold(features, labels, sex_labels, mutation_labels, age_values, best_alpha, config)
-    print(f"Lasso Mean MSE: {mean_mse:.2f} ± {std_mse:.2f}")
-
-    # Find the best SVR parameters
-    best_svr_params = find_best_svr_params(features, labels)
-
-    # Run SVR with k-fold cross-validation
-    mean_mse_svr, std_mse_svr = run_svr_k_fold(features, labels, sex_labels, mutation_labels, age_values, best_svr_params, config)
-    print(f"SVR Mean MSE: {mean_mse_svr:.2f} ± {std_mse_svr:.2f}")
+    
+    # Run Lasso with k-fold cross validation
+    print("Running Lasso...")
+    lasso_results = run_lasso_folds(config)
+    
+    # Run SVR with k-fold cross validation
+    print("\nRunning SVR...")
+    svr_results = run_svr_folds(config)
 
 if __name__ == "__main__":
     main()
