@@ -307,7 +307,7 @@ def main():
     def trial_str_creator(trial):
         train_loop_config = trial.config['train_loop_config']
         model = train_loop_config['model']
-        return f"model={model},seed={config.seed},num_folds={config.num_folds}"
+        return f"trial_id={trial.trial_id}_model={model},seed={config.seed},num_folds={config.num_folds}"
     
     def flatten_configs(global_dict, model_dict, model_name):
         """Generates a list of full config dictionaries for a given model."""
