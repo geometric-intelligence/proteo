@@ -9,53 +9,11 @@ from scipy.stats import zscore
 from sklearn.model_selection import train_test_split
 from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
+import json
 
 from proteo.datasets.ftd import FTDDataset, reverse_log_transform
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-c9_mean_dict = {
-    "['M']_csf": 2.20139473218633,
-    "['F']_plasma": 2.5069125020915246,
-    "['F']_csf": 2.3905483112831987,
-    "['M', 'F']_plasma": 2.4382370774886417,
-    "['M', 'F']_csf": 2.323617044833538,
-}
-c9_std_dict = {
-    "['M']_csf": 0.9414006476156331,
-    "['F']_plasma": 0.9801098341235991,
-    "['F']_csf": 0.95108017948172,
-    "['M', 'F']_plasma": 0.9639665529956777,
-    "['M', 'F']_csf": 0.951972757962228,
-}
-MAPT_mean_dict = {
-    "['M']_csf": 2.080694213697065,
-    "['M']_plasma": 2.1657279439973016,
-    "['F']_csf": 2.0152637385189265,
-    "['M', 'F']_csf": 2.0454624193703754,
-}
-MAPT_std_dict = {
-    "['M']_csf": 0.6213240141321779,
-    "['M']_plasma": 0.6840496344783593,
-    "['F']_csf": 0.7999340389937927,
-    "['M', 'F']_csf": 0.7237378322971036,
-}
-GRN_mean_dict = {
-    "['M']_csf": 2.178815827183045,
-    "['F']_plasma": 3.120974866855634,
-    "['F']_csf": 3.2586357196385385,
-    "['M', 'F']_csf": 2.752470145050026,
-}
-GRN_std_dict = {
-    "['M']_csf": 0.7776541040264751,
-    "['F']_plasma": 1.2401561087499366,
-    "['F']_csf": 1.1764975422138229,
-    "['M', 'F']_csf": 1.1441881493582908,
-}
-all_nodes_csf_mean = 2.124088581365514
-all_nodes_csf_std = 0.8733420033790319
-all_nodes_plasma_mean = 2.1761493077110043
-all_nodes_plasma_std = 0.9054411007915015
-
 
 def load_checkpoint(relative_checkpoint_path):
     '''Load the checkpoint as a module. Note levels_up depends on the directory structure of the ray_results folder'''
@@ -158,11 +116,31 @@ def load_model_and_predict(module, config, device='cuda'):
     print("Normalized train MSE:", train_mse)
     return train_preds, train_targets, train_mse, val_preds, val_targets, val_mse
 
+def load_stats_from_json(config):
+    #Just make an instance to get mean and std path 
+    root = config.data_dir
+    dataset = FTDDataset(root, "train", config)
+    if config.kfold:
+        mean_std_file_name = f"{dataset.experiment_id}_train_random_state_{config.random_state}_{config.num_folds}fold_{config.fold}.json"
+    else:
+        mean_std_file_name = f"{dataset.experiment_id}_train_random_state_{config.random_state}.json"
+    mean_std_file_path = os.path.join(dataset.processed_dir, mean_std_file_name)
+    with open(mean_std_file_path, 'r') as f:
+        stats = json.load(f)
+    
+    mean = stats['mean']
+    std = stats['std']
+    
+    return mean, std
 
-def full_load_and_run_and_convert(relative_checkpoint_path, device, mean, std):
+def full_load_and_run_and_convert(relative_checkpoint_path, device):
     '''Call all the functions to load the checkpoint, run the model and convert the predictions back to the original units'''
     module = load_checkpoint(relative_checkpoint_path)
     config = load_config(module)
+
+    mean, std = load_stats_from_json(config)
+
+
     train_preds, train_targets, train_mse, val_preds, val_targets, val_mse = load_model_and_predict(
         module, config, device
     )
@@ -287,9 +265,10 @@ def get_sex_mutation_age_distribution(config):
     )
 
 
-def predict_for_subgroups_with_labels(relative_checkpoint_path, device, mean, std):
+def predict_for_subgroups_with_labels(relative_checkpoint_path, device):
     module = load_checkpoint(relative_checkpoint_path)
     config = load_config(module)
+    mean, std = load_stats_from_json(config)
     # Load the model and get the predictions and targets
     train_preds, train_targets, _, val_preds, val_targets, _ = load_model_and_predict(
         module, config, device
