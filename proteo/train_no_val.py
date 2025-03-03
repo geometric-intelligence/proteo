@@ -471,7 +471,7 @@ def main():
     ckpt_callback = pl_callbacks.ModelCheckpoint(
         monitor='train_loss',
         dirpath=config.checkpoint_dir,
-        filename=config.model + '-{epoch}' + '-{val_loss:.4f}',
+        filename=config.model + '-{epoch}' + '-{train_loss:.4f}',
         mode='min',
         every_n_epochs=config.checkpoint_every_n_epochs_train,
     )
