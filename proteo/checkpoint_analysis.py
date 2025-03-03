@@ -26,11 +26,10 @@ def load_checkpoint(relative_checkpoint_path):
     checkpoint = torch.load(relative_checkpoint_path, map_location=torch.device('cpu'))
 
     # Ensure that the 'use_master_nodes' attribute is in the checkpoint's config
-    if not hasattr(checkpoint['hyper_parameters']['config'], 'use_master_nodes') or not hasattr(
-        checkpoint['hyper_parameters']['config'], 'master_nodes'
-    ):
-        checkpoint['hyper_parameters']['config'].use_master_nodes = False  # Add default value
-        checkpoint['hyper_parameters']['config'].master_nodes = []
+    if not hasattr(checkpoint['hyper_parameters']['config'], 'kfold') or not hasattr(checkpoint['hyper_parameters']['config'], 'num_folds') or not hasattr(checkpoint['hyper_parameters']['config'], 'fold'):
+        checkpoint['hyper_parameters']['config'].kfold = False
+        checkpoint['hyper_parameters']['config'].num_folds = 1
+        checkpoint['hyper_parameters']['config'].fold = 0
     
     if not hasattr(checkpoint['hyper_parameters']['config'], 'random_state'):
         checkpoint['hyper_parameters']['config'].random_state = 42
@@ -38,7 +37,6 @@ def load_checkpoint(relative_checkpoint_path):
     torch.save(checkpoint, relative_checkpoint_path)
     module = proteo_train.Proteo.load_from_checkpoint(relative_checkpoint_path)
     return module
-
 
 def load_config(module):
     '''Load the config from the module  and return it'''
