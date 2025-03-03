@@ -15,7 +15,7 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 # Custom imports from proteo
-from proteo.datasets.ftd import FTDDataset, remove_erroneous_columns
+from proteo.datasets.ftd_folds import FTDDataset
 import train as proteo_train
 import plotly.graph_objs as go
 from matplotlib.lines import Line2D
@@ -25,10 +25,6 @@ from sklearn.preprocessing import StandardScaler
 def load_config(module):
     '''Load the config from the module  and return it'''
     config = module.config
-    # Check if 'use_master_nodes' attribute exists, added for runs with master nodes
-    if not hasattr(config, 'use_master_nodes'):
-        # Add the attribute with a default value (e.g., False)
-        setattr(config, 'use_master_nodes', False)
     return config
 
 #Load model checkpoint - Note when the wrapper class is not necessary you can use this function from checkpoint_analysis.py
@@ -46,9 +42,10 @@ def load_checkpoint(relative_checkpoint_path):
     checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     
     # Ensure that the 'use_master_nodes' attribute is in the checkpoint's config
-    if not hasattr(checkpoint['hyper_parameters']['config'], 'use_master_nodes') or not hasattr(checkpoint['hyper_parameters']['config'], 'master_nodes'):
-        checkpoint['hyper_parameters']['config'].use_master_nodes = False  # Add default value
-        checkpoint['hyper_parameters']['config'].master_nodes = []
+    if not hasattr(checkpoint['hyper_parameters']['config'], 'kfold') or not hasattr(checkpoint['hyper_parameters']['config'], 'num_folds') or not hasattr(checkpoint['hyper_parameters']['config'], 'fold'):
+        checkpoint['hyper_parameters']['config'].kfold = False
+        checkpoint['hyper_parameters']['config'].num_folds = 1
+        checkpoint['hyper_parameters']['config'].fold = 0
     
     if not hasattr(checkpoint['hyper_parameters']['config'], 'random_state'):
         checkpoint['hyper_parameters']['config'].random_state = 42
@@ -74,7 +71,7 @@ def get_explainer_baseline(config):
     root = config.data_dir
     random_state = config.random_state
     train_dataset = FTDDataset(root, "train", config)
-    features, _, _, top_protein_columns, _, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
+    features, _, top_protein_columns, _, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
     train_features, test_features = train_test_split(features, test_size=0.20, random_state=random_state)
     combined_features = np.concatenate((train_features, test_features), axis=0)
     scaler = StandardScaler()
@@ -82,7 +79,6 @@ def get_explainer_baseline(config):
 
     #Get the CTL Data to transform and get mean
     csv_data = pd.read_csv(train_dataset.raw_paths[0])
-    csv_data = remove_erroneous_columns(config, csv_data, train_dataset.raw_dir)
     condition_ctl = csv_data["Mutation"].isin(["CTL"])
     ctl_data = csv_data[condition_ctl]
 
@@ -91,7 +87,7 @@ def get_explainer_baseline(config):
     proteins_ctl_scaled = scaler.transform(proteins_ctl)
     # Calculate the mean for each protein
     baseline_mean = proteins_ctl_scaled.mean(axis=0)
-    return baseline_mean, combined_features
+    return baseline_mean, train_features
 
 
 
@@ -100,8 +96,7 @@ def get_protein_ids(config):
     # Make an instance of the FTDDataset class to get the top proteins
     root = config.data_dir
     train_dataset = FTDDataset(root, "train", config)
-    _, _, _, top_protein_columns, _, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
-    top_protein_columns.extend(['sex', 'mutation', 'age'])
+    _, _, top_protein_columns, _, _, _, _, _ = train_dataset.load_csv_data_pre_pt_files(config)
     return np.array(top_protein_columns)
 
 def get_sex_mutation_age_distribution(config):
@@ -109,15 +104,10 @@ def get_sex_mutation_age_distribution(config):
     root = config.data_dir
     random_state = config.random_state
     train_dataset = FTDDataset(root, "train", config)
-    _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
+    _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
     train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels, train_gene_col, test_gene_col = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=random_state)
-    total_sex_labels = np.concatenate((train_sex_labels, test_sex_labels))
-    total_mutation_labels = np.concatenate((train_mutation_labels, test_mutation_labels))
-    total_age_labels = np.concatenate((train_age_labels, test_age_labels))
-    total_did_labels = np.concatenate((train_did_labels, test_did_labels))
-    total_gene_labels = np.concatenate((train_gene_col, test_gene_col))
-    return total_sex_labels, total_mutation_labels, total_age_labels, total_did_labels, train_did_labels, test_did_labels, total_gene_labels
+    return train_sex_labels, train_mutation_labels, train_age_labels, train_did_labels, train_did_labels
 
 # Helper function to plot importance values
 def plot_importance_scores(explanations, labels, filename, title, ylabel):
@@ -212,21 +202,19 @@ def run_explainer_single_dataset(dataset, explainer, protein_ids, dids, filename
     # Return both raw and percent importance scores, along with other info
     return sum_node_importance_raw, sum_node_importance_percent, positive_percent_by_protein, negative_percent_by_protein, protein_count, all_raw_importances, all_percent_importances, all_top_proteins
 
-def run_explainer_train_and_test(checkpoint_path):
+def run_explainer_train(checkpoint_path):
     module = load_checkpoint(checkpoint_path)
     config = load_config(module)
     print(config)
     # Load datasets and labels
-    total_sex_labels, total_mutation_labels, total_age_labels, total_did_labels, train_did, test_did, total_gene_col= get_sex_mutation_age_distribution(config)
+    train_sex_labels, train_mutation_labels, train_age_labels, train_did_labels, train_gene_labels = get_sex_mutation_age_distribution(config)
     train_dataset, test_dataset = proteo_train.construct_datasets(config)
     print("dim train_dataset", len(train_dataset))
-    print("dim test_dataset", len(test_dataset))
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     train_dataset.to(device)
-    test_dataset.to(device)
 
-    baseline_mean, features = get_explainer_baseline(config)
+    baseline_mean, train_features = get_explainer_baseline(config)
     baseline_mean_tensor = torch.tensor(baseline_mean, dtype=torch.float32).to(device)
     baseline_mean_tensor = baseline_mean_tensor.unsqueeze(0).unsqueeze(2)
     # Construct Explainer and set parameters
@@ -252,66 +240,42 @@ def run_explainer_train_and_test(checkpoint_path):
     model_name = re.search(pattern, checkpoint_path).group(1)
     
     # Run explainer for both training and testing datasets
-    train_sum_node_importance_raw, train_sum_node_importance_percent, train_positive_percent, train_negative_percent, train_protein_count, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train = run_explainer_single_dataset(train_dataset, explainer, protein_ids, train_did,  filename=model_name + "_train.png")
-    test_sum_node_importance_raw, test_sum_node_importance_percent,  test_positive_percent, test_negative_percent, test_protein_count, all_raw_importances_test, all_percent_importances_test, all_top_proteins_test = run_explainer_single_dataset(test_dataset, explainer, protein_ids, test_did, filename=model_name + "_test.png")
-
-    # Combine sum_node_importance for train and test datasets
-    combined_sum_node_importance_raw = {key: train_sum_node_importance_raw.get(key, 0) + test_sum_node_importance_raw.get(key, 0)
-                                    for key in set(train_sum_node_importance_raw) | set(test_sum_node_importance_raw)}
-    
-    combined_sum_node_importance_percent = {key: train_sum_node_importance_percent.get(key, 0) + test_sum_node_importance_percent.get(key, 0)
-                                    for key in set(train_sum_node_importance_percent) | set(test_sum_node_importance_percent)}
-    
-    combined_sum_node_importance_positive = {key: train_positive_percent.get(key, 0) + test_positive_percent.get(key, 0)
-                                    for key in set(train_positive_percent) | set(test_positive_percent)}
-    
-    combined_sum_node_importance_negative = {key: train_negative_percent.get(key, 0) + test_negative_percent.get(key, 0)
-                                    for key in set(train_negative_percent) | set(test_negative_percent)}
-
-    
-    # Combine protein_count for train and test datasets
-    combined_protein_count = train_protein_count + test_protein_count
+    train_sum_node_importance_raw, train_sum_node_importance_percent, train_positive_percent, train_negative_percent, train_protein_count, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train = run_explainer_single_dataset(train_dataset, explainer, protein_ids, train_did_labels,  filename=model_name + "_train.png")
 
     # Combine raw and percent importance scores
-    all_raw_importances = all_raw_importances_train + all_raw_importances_test
-    all_percent_importances = all_percent_importances_train + all_percent_importances_test
-    print("all_explanations shape (raw importance):", np.array(all_raw_importances).shape)
-    print("all_explanations shape (percent importance):", np.array(all_percent_importances).shape)
+    print("train shape (raw importance):", np.array(all_raw_importances_train).shape)
+    print("train shape (percent importance):", np.array(all_percent_importances_train).shape)
 
     # Save to a csv with model name appended to the filename
     model_name_suffix = f"_{model_name}.csv"
 
-    df_percent_importances = pd.DataFrame(all_percent_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
-    df_percent_importances.insert(0, "SEX", total_sex_labels)
-    df_percent_importances.insert(1, "AGE", total_age_labels)
-    df_percent_importances.insert(2, "Mutation", total_mutation_labels)
-    df_percent_importances.insert(3, "Gene.Dx", total_gene_col)
+    df_percent_importances = pd.DataFrame(all_percent_importances_train, index=train_did_labels, columns=protein_ids[0:np.array(all_raw_importances_train).shape[1]])
+    df_percent_importances.insert(0, "SEX", train_sex_labels)
+    df_percent_importances.insert(1, "AGE", train_age_labels)
+    df_percent_importances.insert(2, "Mutation", train_mutation_labels)
+    df_percent_importances.insert(3, "Gene.Dx", train_gene_labels)
     df_percent_importances.to_csv(f"percent_importances{model_name_suffix}")
 
-    df_raw_importances = pd.DataFrame(all_raw_importances, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
-    df_raw_importances.insert(0, "SEX", total_sex_labels)
-    df_raw_importances.insert(1, "AGE", total_age_labels)
-    df_raw_importances.insert(2, "Mutation", total_mutation_labels)
-    df_raw_importances.insert(3, "Gene.Dx", total_gene_col)
+    df_raw_importances = pd.DataFrame(all_raw_importances_train, index=train_did_labels, columns=protein_ids[0:np.array(all_raw_importances_train).shape[1]])
+    df_raw_importances.insert(0, "SEX", train_sex_labels)
+    df_raw_importances.insert(1, "AGE", train_age_labels)
+    df_raw_importances.insert(2, "Mutation", train_mutation_labels)
+    df_raw_importances.insert(3, "Gene.Dx", train_gene_labels)
     df_raw_importances.to_csv(f"raw_importances{model_name_suffix}")
 
-    df_raw_expression = pd.DataFrame(features, index=total_did_labels, columns=protein_ids[0:np.array(all_raw_importances).shape[1]])
-    df_raw_expression.insert(0, "SEX", total_sex_labels)
-    df_raw_expression.insert(1, "AGE", total_age_labels)
-    df_raw_expression.insert(2, "Mutation", total_mutation_labels)
-    df_raw_expression.insert(3, "Gene.Dx", total_gene_col)
+    df_raw_expression = pd.DataFrame(train_features, index=train_did_labels, columns=protein_ids[0:np.array(all_raw_importances_train).shape[1]])
+    df_raw_expression.insert(0, "SEX", train_sex_labels)
+    df_raw_expression.insert(1, "AGE", train_age_labels)
+    df_raw_expression.insert(2, "Mutation", train_mutation_labels)
+    df_raw_expression.insert(3, "Gene.Dx", train_gene_labels)
     df_raw_expression.to_csv("raw_expression.csv")
 
-
-    # Combine top proteins for both train and test datasets
-    all_top_proteins = all_top_proteins_train + all_top_proteins_test
-    
-    return combined_sum_node_importance_raw, combined_sum_node_importance_percent, combined_sum_node_importance_positive, combined_sum_node_importance_negative, combined_protein_count, config, all_raw_importances, all_percent_importances, all_top_proteins, protein_ids
+    return train_sum_node_importance_raw, train_sum_node_importance_percent, train_positive_percent, train_negative_percent, train_protein_count, config, all_raw_importances_train, all_percent_importances_train, all_top_proteins_train, protein_ids
 
 ##############FUNCTIONS TO PLOT AND VISUALIZE RESULTS############################
 ### CLUSTERING FUNCTIONS ###
 def get_sex_per_cluster(clusters, config):
-    participant_sex, _, _, _, _, _, _= get_sex_mutation_age_distribution(config)
+    participant_sex, _, _, _, _= get_sex_mutation_age_distribution(config)
     # Group sex by clusters
     cluster_sex = defaultdict(list)
     for i, cluster in enumerate(clusters):
@@ -666,7 +630,7 @@ def plot_explainer_results(config, all_explanations_percent, protein_ids, filena
     reduced_vectors, explained_variance, loadings = perform_pca(np.array(all_explanations_percent))
     
     # Get labels for sex, mutation, and age from config
-    total_sex_labels, total_mutation_labels, total_age_labels, _, _, _, _ = get_sex_mutation_age_distribution(config)
+    total_sex_labels, total_mutation_labels, total_age_labels, _, _ = get_sex_mutation_age_distribution(config)
 
     # Plot the first 3 PCA components in 2D
     plot_pca_all_components_2d(reduced_vectors, explained_variance, total_sex_labels, total_mutation_labels, total_age_labels)
