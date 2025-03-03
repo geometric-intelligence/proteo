@@ -15,7 +15,7 @@ from ray import train
 from ray._private.usage.usage_lib import TagKey, record_extra_usage_tag
 from ray.train import Checkpoint
 
-from proteo.datasets.ftd import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
+from proteo.datasets.ftd_folds import BINARY_Y_VALS_MAP, CONTINOUS_Y_VALS, MULTICLASS_Y_VALS_MAP
 
 # TODO: not using below function
 class CustomRayCheckpointCallback(Callback):
