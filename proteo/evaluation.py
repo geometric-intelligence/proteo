@@ -107,7 +107,7 @@ def get_sex_mutation_age_distribution(config):
     _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
     train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels, train_gene_col, test_gene_col = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=random_state)
-    return train_sex_labels, train_mutation_labels, train_age_labels, train_did_labels, train_did_labels
+    return train_sex_labels, train_mutation_labels, train_age_labels, train_did_labels, train_gene_col
 
 # Helper function to plot importance values
 def plot_importance_scores(explanations, labels, filename, title, ylabel):
@@ -566,7 +566,7 @@ def divide_dict_values(dict1, dict2):
 
 def plot_importance_comparison_men_vs_women(all_explanations_percent, protein_ids, config, exclude_ctl=False):
     """Compares feature importance between men and women."""
-    total_sex_labels, total_mutation_labels, _, _, _, _, _ = get_sex_mutation_age_distribution(config)
+    total_sex_labels, total_mutation_labels, _, _, _ = get_sex_mutation_age_distribution(config)
     all_explanations_percent = np.array(all_explanations_percent)
 
 
