@@ -108,9 +108,6 @@ class GATv4(nn.Module):
         act,
         which_layer,
         use_layer_norm,
-        fc_dim,
-        fc_dropout,
-        fc_act,
         num_nodes,
         weight_initializer,
     ):
@@ -123,9 +120,6 @@ class GATv4(nn.Module):
         self.act = act
         self.which_layer = which_layer
         self.use_layer_norm = use_layer_norm
-        self.fc_dim = fc_dim
-        self.fc_dropout = fc_dropout
-        self.fc_act = fc_act
         self.fc_input_dim = num_nodes * len(which_layer)
         self.weight_initializer = self.INIT_MAP[weight_initializer]
         self.num_nodes = num_nodes
@@ -140,12 +134,6 @@ class GATv4(nn.Module):
 
         # Layer normalization
         self.layer_norm = LayerNorm(self.num_nodes)
-
-        # Fully connected layers
-        self.encoder = self.build_fc_layers()
-
-        # Feature encoders
-        self.feature_encoder = self.build_feature_encoder()
 
         # Initialize weights
         self.reset_parameters()
@@ -169,24 +157,6 @@ class GATv4(nn.Module):
         for hidden_dim, num_heads in zip(self.hidden_channels, self.heads):
             self.pools.append(nn.Linear(hidden_dim * num_heads, 1))
 
-    def build_fc_layers(self):
-        layers = []
-        fc_layer_input_dim = self.fc_input_dim
-        for fc_dim in self.fc_dim:
-            layers.append(
-                nn.Sequential(
-                    nn.Linear(fc_layer_input_dim, fc_dim),
-                    self.ACT_MAP[self.fc_act],
-                    nn.AlphaDropout(p=self.fc_dropout, inplace=True),
-                )
-            )
-            fc_layer_input_dim = fc_dim
-        layers.append(nn.Linear(fc_dim, self.out_channels))
-        return nn.Sequential(*layers)
-
-    def build_feature_encoder(self):
-        return nn.Linear(1, self.num_nodes)
-
     def reset_parameters(self):
         for conv in self.convs:
             conv.reset_parameters()
@@ -195,12 +165,6 @@ class GATv4(nn.Module):
             self.weight_initializer(pool.weight)
             if pool.bias is not None:
                 pool.bias.data.fill_(0)
-
-        for layer in self.encoder:
-            if isinstance(layer, nn.Linear):
-                self.weight_initializer(layer.weight)
-                if layer.bias is not None:
-                    layer.bias.data.fill_(0)
 
     def forward(self, x, edge_index=None, data=None, return_attention_weights=False):
         if not isinstance(data, Batch):
@@ -211,7 +175,6 @@ class GATv4(nn.Module):
         sex = data.sex  # [bs] - 0 or 1
         mutation = data.mutation  # [bs] - 0, 1, 2, 3
         age = data.age  # [bs] - age
-        encoded_features = []
 
         # Initial operations before GAT layers
         x = x.requires_grad_()  # [bs*nodes, in_channels]
@@ -257,33 +220,10 @@ class GATv4(nn.Module):
             [multiscale_features[layer] for layer in self.which_layer[0:3]],
             dim=1,  # just take first 3 gat layers
         )
-        for feature in self.which_layer:
-            if feature in ['sex','mutation','age']:
-                feature_value = locals().get(
-                    feature
-                )  # Get the value of the feature (e.g., sex, mutation, age)
-                encoded_features.append(self.feature_encoder(feature_value))
 
-        if encoded_features:
-            demographic_features = torch.cat(encoded_features, dim=1)
-            # Concatenate demographic features with multiscale features
-            total_features = torch.cat([demographic_features, multiscale_features], dim=1)
-        else:
-            # No demographic features present, just use the multiscale features
-            total_features = multiscale_features
-
-        # Pass through the final encoder
-        pred = self.encoder(total_features)
-
-        '''
-        pred_nfl = self.encoder_nfl(pred)
-        pred_cdr_multiclass = self.encoder_cdr_multiclass(pred)
-        pred_cognitive_decline = self.encoder_cognitive_decline(pred)
-        pred = self.encoder(multiscale_features)
-        '''
         aux = [x0, x1, x2, multiscale_features]
         
         if return_attention_weights:
-            return pred, aux, att1, att2
+            return multiscale_features, aux, att1, att2
         else:
-            return pred, aux
+            return multiscale_features, aux

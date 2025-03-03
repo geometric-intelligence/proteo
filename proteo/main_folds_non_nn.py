@@ -4,20 +4,21 @@ from sklearn.svm import SVR
 from sklearn.model_selection import KFold, GridSearchCV, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
-from proteo.proteo.datasets.ftd_folds import FTDDataset
+from proteo.datasets.ftd_folds import FTDDataset
 from config_utils import CONFIG_FILE, read_config_from_file
 from proteo.train import construct_datasets
 import itertools
+import torch.nn as nn
 
 def load_and_prepare_data(config):
     # Load data using your existing function
     train_dataset, test_dataset = construct_datasets(config)
-    train_dataset_features = train_dataset.x
+    train_dataset_features = train_dataset.x.view(train_dataset.y.shape[0], -1)
     train_dataset_labels = train_dataset.y
     train_dataset_sex = train_dataset.sex
     train_dataset_mutation = train_dataset.mutation
     train_dataset_age = train_dataset.age
-    val_dataset_features = test_dataset.x
+    val_dataset_features = test_dataset.x.view(test_dataset.y.shape[0], -1)
     val_dataset_labels = test_dataset.y
     val_dataset_sex = test_dataset.sex
     val_dataset_mutation = test_dataset.mutation
@@ -26,8 +27,23 @@ def load_and_prepare_data(config):
     return train_dataset_features, train_dataset_labels, train_dataset_sex, train_dataset_mutation, train_dataset_age, val_dataset_features, val_dataset_labels, val_dataset_sex, val_dataset_mutation, val_dataset_age
 
 def stack_features(train_features, train_labels, train_sex, train_mutation, train_age, val_features, val_labels, val_sex, val_mutation, val_age):
+    target_shape = train_features.shape[1] // 3
+    if train_sex.shape[1] < target_shape:
+        # Calculate how many times to repeat train_sex along the second axis
+        repeat_times = target_shape // train_sex.shape[1]
+    
+        # Expand train_sex
+        train_sex = np.tile(train_sex, (1, repeat_times))
+        val_sex = np.tile(val_sex, (1, repeat_times))
+        train_mutation = np.tile(train_mutation, (1, repeat_times))
+        val_mutation = np.tile(val_mutation, (1, repeat_times))
+        train_age = np.tile(train_age, (1, repeat_times))
+        val_age = np.tile(val_age, (1, repeat_times))
+
     train_combined = np.hstack((train_features, train_sex, train_mutation, train_age))
+    print(train_combined.shape)
     val_combined = np.hstack((val_features, val_sex, val_mutation, val_age))
+    print(val_combined.shape)
     return train_combined, val_combined, train_labels, val_labels
 
 def find_best_alpha(features, labels):
@@ -169,8 +185,8 @@ def main():
     lasso_results = run_lasso_folds(config)
     
     # Run SVR with k-fold cross validation
-    print("\nRunning SVR...")
-    svr_results = run_svr_folds(config)
+    #print("\nRunning SVR...")
+    #svr_results = run_svr_folds(config)
 
 if __name__ == "__main__":
     main()

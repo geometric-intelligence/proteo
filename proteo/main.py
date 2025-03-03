@@ -69,13 +69,8 @@ def train_func(train_loop_config):
         'hidden_channels': train_loop_config['hidden_channels'],
         'heads': train_loop_config['heads'],
         'num_layers': train_loop_config['num_layers'],
-        'fc_dim': train_loop_config['fc_dim'],
-        'fc_dropout': train_loop_config['fc_dropout'],
-        'fc_act': train_loop_config['fc_act'],
         'weight_initializer': train_loop_config['weight_initializer'],
         'channel_list': train_loop_config['channel_list'],
-        'norm': train_loop_config['norm'],
-        'plain_last': train_loop_config['plain_last'],
     }
     config[model].update(train_loop_config_model)
     # Remove keys that were already updated in nested configuration
@@ -249,6 +244,10 @@ def main():
         'sex': config.sex_choices,
         'modality': config.modality_choices,
         'y_val': config.y_val_choices,
+        'fc_dim': config.fc_dim_choices,
+        'fc_dropout': config.fc_dropout_choices,
+        'fc_act': config.fc_act_choices,
+        'use_feature_encoder': config.use_feature_encoder_choices,
     }
 
 
@@ -258,49 +257,29 @@ def main():
             'num_layers': [None],
             'hidden_channels': config.gat_v4_hidden_channels,  # list of candidate values
             'heads': config.gat_v4_heads,
-            'fc_dim': config.gat_v4_fc_dim,
-            'fc_dropout': config.gat_v4_fc_dropout,
-            'fc_act': config.gat_v4_fc_act,
             'weight_initializer': config.gat_v4_weight_initializer,
             'channel_list': [None],  # not used
-            'norm': [None],
-            'plain_last': [None]
         },
         'gat': {
             'num_layers': config.gat_num_layers,
             'hidden_channels': config.gat_hidden_channels,
             'heads': config.gat_heads,
-            'fc_dim': [None],
-            'fc_dropout': [None],
-            'fc_act': [None],
             'weight_initializer': [None],
             'channel_list': [None],
-            'norm': [None],
-            'plain_last': [None]
         },
         'gcn': {
             'num_layers': config.gcn_num_layers,
             'hidden_channels': config.gcn_hidden_channels,
             'heads': [None],
-            'fc_dim': [None],
-            'fc_dropout': [None],
-            'fc_act': [None],
             'weight_initializer': [None],
             'channel_list': [None],
-            'norm': [None],
-            'plain_last': [None]
         },
         'mlp': {
             'num_layers': [None],
             'hidden_channels': [None],
             'heads': [None],
-            'fc_dim': [None],
-            'fc_dropout': [None],
-            'fc_act': [None],
             'weight_initializer': [None],
             'channel_list': config.mlp_channel_lists,
-            'norm': config.mlp_norms,
-            'plain_last': config.mlp_plain_last
         }
     }
 

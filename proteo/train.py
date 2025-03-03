@@ -32,6 +32,7 @@ import torch
 from config_utils import CONFIG_FILE, Config, read_config_from_file
 from focal_loss.focal_loss import FocalLoss
 from models.gat_v4 import GATv4
+from models.readout import Readout
 from pytorch_lightning import callbacks as pl_callbacks
 from pytorch_lightning import strategies as pl_strategies
 from torch.optim import Adam
@@ -44,7 +45,7 @@ from torch.optim.lr_scheduler import (
 )
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GAT, GCN, global_mean_pool
-from torch_geometric.nn.models import MLP
+from torch_geometric.utils import to_dense_batch
 
 import proteo.callbacks as proteo_callbacks
 from proteo.datasets.ftd_folds import (
@@ -122,12 +123,14 @@ class Proteo(pl.LightningModule):
                 act=self.config.act,
                 which_layer=self.config_model.which_layer,
                 use_layer_norm=self.config_model.use_layer_norm,
-                fc_dim=self.config_model.fc_dim,
-                fc_dropout=self.config_model.fc_dropout,
-                fc_act=self.config_model.fc_act,
                 num_nodes=self.config.num_nodes,
                 weight_initializer=self.config_model.weight_initializer,
             )
+            if self.config.use_feature_encoder:
+                fc_input_dim = self.config.num_nodes * len(self.config.which_layer)
+            else:
+                fc_input_dim = (self.config.num_nodes * 3) + 3
+            self.readout = Readout(feature_output_dim=self.config.num_nodes, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim)
         elif config.model == 'gat':
             self.model = GAT(
                 in_channels=in_channels,
@@ -139,6 +142,8 @@ class Proteo(pl.LightningModule):
                 dropout=self.config.dropout,
                 act=self.config.act,
             )
+            fc_input_dim = (self.config.num_nodes * 2) -1 #-1 bc modulo division
+            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim)
         elif config.model == 'gcn':
             self.model = GCN(
                 in_channels=in_channels,
@@ -148,16 +153,14 @@ class Proteo(pl.LightningModule):
                 dropout=self.config.dropout,
                 act=self.config.act,
             )
+            fc_input_dim = (self.config.num_nodes * 2) -1 #-1 bc modulo division
+            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim)
         elif config.model == "mlp":
-            dropout = self.config.dropout
-            dropout = [dropout] * (len(self.config_model.channel_list) - 1) #repeat same dropout for all layers
-            self.model = MLP(
-                channel_list = self.config_model.channel_list,
-                dropout = dropout,
-                act=self.config.act,
-                norm = self.config_model.norm,
-                plain_last = self.config_model.plain_last
-            )
+            if self.config.use_feature_encoder:
+                fc_input_dim = (self.config.num_nodes * 2) -1
+            else:
+                fc_input_dim = config.num_nodes + 3
+            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config_model.channel_list, fc_dropout=self.config.dropout, fc_act=self.config.act, out_channels=out_channels, fc_input_dim=fc_input_dim, use_feature_encoder=self.config.use_feature_encoder)
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -173,28 +176,30 @@ class Proteo(pl.LightningModule):
         batch.batch: torch.Tensor of shape [num_nodes * batch_size]
         """
         if self.config.model == "gat-v4":
-            pred, aux = self.model(batch.x, batch.edge_index, batch)
-            self.x0.append(aux[0])  # check which format is best here.
+            graph_features, aux = self.model(batch.x, batch.edge_index, batch) #[bs, 3*nodes]
+            pred = self.readout_class.forward(graph_features, batch) #[bs, 1]
+            self.x0.append(aux[0]) 
             self.x1.append(aux[1])
             self.x2.append(aux[2])
             self.multiscale.append(aux[3])
             return pred
         if self.config.model == 'gat':
-            # This returns a pred value for each node in the big graph
-            pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
-            # Aggregate node features into graph-level features
-            return global_mean_pool(pred_nodes, batch.batch)
+            graph_features = self.model(batch.x, batch.edge_index, batch=batch.batch) #[bs*num_nodes, hidden_channels] -> [bs*num_nodes, 1]
+            graph_features = graph_features.squeeze(-1) #[bs*num_nodes]
+            graph_features, _ = to_dense_batch(graph_features, batch=batch.batch) #[bs, num_nodes]
+            pred = self.readout.forward(graph_features, batch) # [bs, 1]
+            return pred
         if self.config.model == 'gcn':
-            pred_nodes = self.model(batch.x, batch.edge_index, batch=batch.batch)
-            return global_mean_pool(pred_nodes, batch.batch)
+            graph_features = self.model(batch.x, batch.edge_index, batch=batch.batch) #[bs*num_nodes, 1]
+            graph_features = graph_features.squeeze(-1) #[bs*num_nodes]
+            graph_features, _ = to_dense_batch(graph_features, batch=batch.batch) #[bs, num_nodes]
+            pred = self.readout.forward(graph_features, batch) # [bs, 1]
+            return pred
         if self.config.model == 'mlp':
-            if self.config.use_master_nodes:
-                input_dim = self.config.num_nodes + len(self.config.master_nodes)
-            else:
-                input_dim = self.config.num_nodes
-            batch_size = batch.x.shape[0]//input_dim
-            batch.x = batch.x.view(batch_size, input_dim)
-            return self.model(batch.x)
+            input = batch.x.squeeze(-1) # [bs*num_nodes, 1]
+            input, _ = to_dense_batch(input, batch=batch.batch) # [bs, num_nodes]
+            pred = self.readout.forward(input, batch) # [bs, 1]
+            return pred
         raise NotImplementedError('Model not implemented yet')
 
     def training_step(self, batch):
