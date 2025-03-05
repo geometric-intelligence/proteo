@@ -4,7 +4,7 @@ import os
 import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd
-from proteo.datasets.ftd import FTDDataset
+from proteo.datasets.ftd_folds import FTDDataset
 from checkpoint_analysis import load_checkpoint, load_config
 from proteo.train import construct_datasets
 from sklearn.model_selection import train_test_split
@@ -14,7 +14,7 @@ def load_patient_demographics(config):
     root = config.data_dir
     random_state = config.random_state
     train_dataset = FTDDataset(root, "train", config)
-    _, _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
+    _, _, _, filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col= train_dataset.load_csv_data_pre_pt_files(config)
     # Splitting indices only
     train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_did_labels, test_did_labels, train_gene_col, test_gene_col = train_test_split(filtered_sex_col, filtered_mutation_col, filtered_age_col, filtered_did_col, filtered_gene_col, test_size=0.20, random_state=random_state)
     return train_did_labels, test_did_labels, train_sex_labels, test_sex_labels, train_mutation_labels, test_mutation_labels, train_age_labels, test_age_labels, train_gene_col, test_gene_col

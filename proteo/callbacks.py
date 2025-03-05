@@ -44,21 +44,6 @@ class CustomWandbCallback(Callback):
                 gradients = param.grad.detach().cpu()
                 pl_module.logger.experiment.log({"gradients": wandb.Histogram(gradients.numpy())})
 
-    # def on_validation_batch_end(self, trainer, pl_module, outputs, *args):
-    #     if not trainer.sanity_checking:
-    #         loss = outputs
-    #         pl_module.log(
-    #             'val_loss',
-    #             loss,
-    #             on_step=False,
-    #             on_epoch=True,
-    #             sync_dist=True,
-    #             prog_bar=True,
-    #             batch_size=1,
-    #         )
-    #         pl_module.log('val_RMSE', math.sqrt(loss), on_step=False, on_epoch=True, sync_dist=True)
-            
-
     def on_train_epoch_end(self, trainer, pl_module):
         """Save train predictions, targets, and parameters as histograms.
 
@@ -249,10 +234,3 @@ def reshape_targets(val_targets):
     '''When using multiclass classification, the targets need to be reshaped'''
     reshaped_targets = [tensor.view(-1, 1) for tensor in val_targets]
     return reshaped_targets
-
-
-# TODO: Not currently being used
-def reverse_log_transform(y, y_mean, y_std):
-    log_data = (y * y_std) + y_mean
-    original_data = torch.exp(log_data)
-    return original_data

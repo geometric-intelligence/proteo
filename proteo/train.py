@@ -121,7 +121,7 @@ class Proteo(pl.LightningModule):
                 heads=self.config_model.heads,
                 dropout=self.config.dropout,
                 act=self.config.act,
-                which_layer=self.config_model.which_layer,
+                which_layer=self.config.which_layer,
                 use_layer_norm=self.config_model.use_layer_norm,
                 num_nodes=self.config.num_nodes,
                 weight_initializer=self.config_model.weight_initializer,
@@ -130,7 +130,7 @@ class Proteo(pl.LightningModule):
                 fc_input_dim = self.config.num_nodes * len(self.config.which_layer)
             else:
                 fc_input_dim = (self.config.num_nodes * 3) + 3
-            self.readout = Readout(feature_output_dim=self.config.num_nodes, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim)
+            self.readout = Readout(feature_output_dim=self.config.num_nodes, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels,fc_input_dim=fc_input_dim, use_feature_encoder=self.config.use_feature_encoder)
         elif config.model == 'gat':
             self.model = GAT(
                 in_channels=in_channels,
@@ -143,7 +143,7 @@ class Proteo(pl.LightningModule):
                 act=self.config.act,
             )
             fc_input_dim = (self.config.num_nodes * 2) -1 #-1 bc modulo division
-            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim)
+            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim, use_feature_encoder=self.config.use_feature_encoder)
         elif config.model == 'gcn':
             self.model = GCN(
                 in_channels=in_channels,
@@ -154,7 +154,7 @@ class Proteo(pl.LightningModule):
                 act=self.config.act,
             )
             fc_input_dim = (self.config.num_nodes * 2) -1 #-1 bc modulo division
-            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim)
+            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config.fc_dim, fc_dropout=self.config.fc_dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim, use_feature_encoder=self.config.use_feature_encoder)
         elif config.model == "mlp":
             if self.config.use_feature_encoder:
                 fc_input_dim = (self.config.num_nodes * 2) -1
@@ -177,7 +177,7 @@ class Proteo(pl.LightningModule):
         """
         if self.config.model == "gat-v4":
             graph_features, aux = self.model(batch.x, batch.edge_index, batch) #[bs, 3*nodes]
-            pred = self.readout_class.forward(graph_features, batch) #[bs, 1]
+            pred = self.readout.forward(graph_features, batch) #[bs, 1]
             self.x0.append(aux[0]) 
             self.x1.append(aux[1])
             self.x2.append(aux[2])
