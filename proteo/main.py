@@ -115,7 +115,7 @@ def train_func(train_loop_config):
                 "histogram original": wandb.Image(
                     os.path.join(
                         train_dataset.processed_dir,
-                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_orig_histogram.jpg',
+                        f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_random_state_{config.random_state}_orig_histogram.jpg',
                     )
                 )
             }
@@ -125,7 +125,7 @@ def train_func(train_loop_config):
         "histogram": wandb.Image(
             os.path.join(
                 train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_histogram.jpg',
+                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_random_state_{config.random_state}_histogram.jpg',
             )
         ),
         "parameters": wandb.Table(
@@ -145,7 +145,7 @@ def train_func(train_loop_config):
     log_data["adjacency"] = wandb.Image(
         os.path.join(
             train_dataset.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_{config.num_folds}fold_{config.fold}.jpg',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_random_state_{config.random_state}_{config.num_folds}fold_{config.fold}.jpg',
         )
     )
     wandb.log(log_data)

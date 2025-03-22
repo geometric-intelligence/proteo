@@ -147,8 +147,8 @@ class FTDDataset(InMemoryDataset):
         self.mutation_str = f'mutation_{",".join(config.mutation)}'
         self.modality_str = f'{config.modality}'
         self.sex_str = f'sex_{",".join(config.sex)}'
-        self.hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_{self.config.num_folds}fold_{self.config.fold}_histogram.jpg'
-        self.orig_hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_{self.config.num_folds}fold_{self.config.fold}_orig_histogram.jpg'
+        self.hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_{self.config.num_folds}fold_{self.config.fold}_random_state_{self.config.random_state}_histogram.jpg'
+        self.orig_hist_path_str = f'{self.config.y_val}_{self.config.sex}_{self.config.mutation}_{self.config.modality}_{self.config.num_folds}fold_{self.config.fold}_random_state_{self.config.random_state}_orig_histogram.jpg'
 
         super(FTDDataset, self).__init__(root, transform=None, pre_transform=None)
         self.feature_dim = 1  # protein concentration is a scalar, ie, dim 1
@@ -470,7 +470,7 @@ class FTDDataset(InMemoryDataset):
         # Calculate adjacency matrix    
         adj_path = os.path.join(
             self.processed_dir,
-            f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}.csv',
+            f'adjacency_num_nodes_{config.num_nodes}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_random_state_{self.config.random_state}_{self.config.num_folds}fold_{self.config.fold}.csv',
         )
         # Calculate and save adjacency matrix
         if not os.path.exists(adj_path):
@@ -482,7 +482,7 @@ class FTDDataset(InMemoryDataset):
             adj_matrix,
             os.path.join(
                 self.processed_dir,
-                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_{config.num_folds}fold_{config.fold}.jpg',
+                    f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_random_state_{self.config.random_state}_{config.num_folds}fold_{config.fold}.jpg',
                 ),
             )
         return (

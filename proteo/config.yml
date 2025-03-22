@@ -24,7 +24,7 @@ use_gpu: true
 
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
-raw_file_name: "2pass_filtered_merged_dataset_3_12.csv"
+raw_file_name: "2pass_filtered_merged_dataset_3_21.csv"
 # Y Value ("carrier", "nfl", "disease_age", "global_cog_slope", "executive_function", "memory", "clinical_dementia_rating", "cog_z_score", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
@@ -38,14 +38,14 @@ random_state: 42
 
 # WandB
 project: "proteo"
-wandb_offline: false
+wandb_offline: true
 # Controls the frequency of logging within training, 
 # by specifying how many training steps should occur between each logging event.
 log_every_n_steps: 10
 
 # Dataset
 num_nodes: 3634  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
-adj_thresh: 0.7  #0.08 
+adj_thresh: 0.9  #0.08 
 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
@@ -132,9 +132,9 @@ lr_scheduler_choices: ['CosineAnnealingLR'] #'LambdaLR', 'ReduceLROnPlateau',
 dropout_choices: [0.1, 0.5]
 #l1_lambda_min: 0.00001 #remove for kfold
 #l1_lambda_max: 0.1
-act_choices: ['tanh','elu']
+act_choices: ['tanh', 'elu']
 num_nodes_choices: [3634] 
-adj_thresh_choices: [0.1, 0.3, 0.4, 0.5, 0.7]
+adj_thresh_choices: [0.1, 0.3, 0.4, 0.5, 0.7, 0.9] #1 for mlp
 mutation_choices: [['GRN', 'MAPT','C9orf72','CTL']] #,['MAPT'], ['C9orf72']],['CTL']#[['C9orf72', 'MAPT', 'GRN', 'CTL'],['MAPT'], ['GRN'], ['C9orf72'], ['CTL']]
 sex_choices: [['M', 'F']]
 modality_choices: ['csf']
@@ -157,4 +157,4 @@ gat_heads: [2, 4]
 gcn_num_layers: [2, 4, 6]  # only for GAT and GCN
 gcn_hidden_channels: [8, 32, 128]
 #MLP:
-mlp_channel_lists: [[128, 256, 256, 64], [64, 128, 128, 32], [512, 256, 128, 32]]
+mlp_channel_lists: [[416, 256, 128, 32], [384, 256, 128, 32]] #[[128, 256, 256, 64], [64, 128, 128, 32], [512, 256, 128, 32]]

@@ -112,7 +112,6 @@ class Proteo(pl.LightningModule):
         self.focal_loss_weight = focal_loss_weight
         self.min_val_loss = 1000
         self.min_train_loss = 1000
-
         if config.model == 'gat-v4':
             self.model = GATv4(
                 in_channels=in_channels,
@@ -160,7 +159,7 @@ class Proteo(pl.LightningModule):
                 fc_input_dim = (self.config.num_nodes * 2) -1
             else:
                 fc_input_dim = config.num_nodes + 3
-            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config_model.channel_list, fc_dropout=self.config.dropout, fc_act=self.config.act, out_channels=out_channels, fc_input_dim=fc_input_dim, use_feature_encoder=self.config.use_feature_encoder)
+            self.readout = Readout(feature_output_dim=self.config.num_nodes//3, which_layer=self.config.which_layer, fc_dim=self.config_model.channel_list, fc_dropout=self.config.dropout, fc_act=self.config.fc_act, out_channels=out_channels, fc_input_dim=fc_input_dim, use_feature_encoder=self.config.use_feature_encoder)
         else:
             raise NotImplementedError('Model not implemented yet')
 
@@ -523,14 +522,14 @@ def main():
     images_to_log = [
         os.path.join(
             train_dataset.processed_dir,
-            f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_histogram.jpg',
+            f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_random_state_{config.random_state}_histogram.jpg',
         )
     ]
     # Load the single adjacency image if sex-specific adjacency is not enabled
     images_to_log.append(
         os.path.join(
             train_dataset.processed_dir,
-            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_{config.num_folds}fold_{config.fold}.jpg',
+            f'adjacency_{config.adj_thresh}_num_nodes_{config.num_nodes}_adjthresh_{config.adj_thresh}_mutation_{config.mutation}_{config.modality}_sex_{config.sex}_random_state_{config.random_state}_{config.num_folds}fold_{config.fold}.jpg',
         )
     )
 
@@ -540,7 +539,7 @@ def main():
         images_to_log.append(
             os.path.join(
                 train_dataset.processed_dir,
-                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_orig_histogram.jpg',
+                f'{config.y_val}_{config.sex}_{config.mutation}_{config.modality}_{config.num_folds}fold_{config.fold}_random_state_{config.random_state}_orig_histogram.jpg',
             )
         )
 
