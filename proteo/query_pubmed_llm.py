@@ -105,9 +105,9 @@ def parse_pubmed_record(record: str) -> Dict:
         print(f"Error parsing PubMed record: {str(e)}")
         return None
 
-def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> List[Dict]:
+def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> str:
     """
-    Use OpenAI to summarize the papers and extract relevant information.
+    Use OpenAI to summarize the papers and create a narrative summary with citations.
     
     Parameters
     ----------
@@ -118,11 +118,11 @@ def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> List[Dic
         
     Returns
     -------
-    List[Dict]
-        List of summarized paper information
+    str
+        Narrative summary with citations
     """
     if not papers:
-        return []
+        return ""
         
     # Prepare the papers for the LLM
     papers_text = "\n\n".join([
@@ -131,22 +131,27 @@ def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> List[Dic
         for p in papers
     ])
     
-    prompt = f"""You are a research assistant specialized in neuroscience. Analyze these papers about {protein_name} and create a summary table.
+    prompt = f"""You are a research assistant specialized in neuroscience. Analyze these papers about {protein_name} and create a comprehensive summary.
 
     Papers to analyze:
     {papers_text}
 
-    Create a table with the following columns:
-    - AuthorYEAR
-    - Title
-    - Journal
-    - PMID
-    - Human or Animal (which one)
-    - Dementia or neuro pathologies (which one)
-    - Brief summary of findings related to {protein_name}
+    Create a half-page summary that answers these specific questions:
+    1. Has {protein_name} been linked to dementia in humans? If yes, which types of dementia?
+    2. Has {protein_name} been linked to dementia in animal models? If yes, which types of dementia and which animal models?
+    3. Has {protein_name} been linked to other neuropathologies in humans? If yes, which ones?
+    4. Has {protein_name} been linked to other neuropathologies in animal models? If yes, which ones and which animal models?
 
-    Format the response as a CSV table with headers. Do not include any additional text or formatting.
-    Only include information that is explicitly stated in the papers.
+    Important requirements:
+    - Write in clear, academic language
+    - If no link has been found for any question, explicitly state that
+    - For each finding, cite the specific paper(s) it comes from
+    - At the end, provide a References section with all cited papers in APA format
+    - Only include information that is explicitly stated in the papers
+    - Keep the summary focused and concise (half-page)
+    - Use proper scientific terminology
+
+    Format the response as a well-structured text with clear paragraphs and a References section at the end.
     """
 
     try:
@@ -154,7 +159,7 @@ def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> List[Dic
         response = client.chat.completions.create(
             model="gpt-4-0125-preview",  # Using OpenAI's deep research model
             messages=[
-                {"role": "system", "content": "You are a research assistant specialized in neuroscience. Your task is to analyze and summarize scientific papers. Only include information that is explicitly stated in the papers. Respond only with the CSV data, no additional text."},
+                {"role": "system", "content": "You are a research assistant specialized in neuroscience. Your task is to analyze and summarize scientific papers, providing clear citations and a comprehensive overview of the findings. Only include information that is explicitly stated in the papers."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
@@ -164,45 +169,30 @@ def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> List[Dic
             top_p=0.1
         )
         
-        # Parse the CSV response
-        content = response.choices[0].message.content
-        return parse_csv_response(content)
+        return response.choices[0].message.content
         
     except Exception as e:
         print(f"Error querying OpenAI: {str(e)}")
-        return []
+        return ""
 
-def parse_csv_response(content: str) -> List[Dict]:
-    """Parse the CSV response from OpenAI into a list of dictionaries."""
-    try:
-        csv_file = io.StringIO(content)
-        reader = csv.DictReader(csv_file)
-        return list(reader)
-    except Exception as e:
-        print(f"Error parsing CSV response: {str(e)}")
-        return []
+def save_results_to_txt(summary: str, protein_name: str, queries_dir: str):
+    """Save the summary to a text file in the queries_llm directory."""
+    if not summary:
+        return None
+        
+    date = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{protein_name}_summary_{date}.txt"
+    filepath = os.path.join(queries_dir, filename)
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(summary)
+    return filepath
 
 def ensure_queries_directory():
     """Ensure the queries_llm directory exists."""
     queries_dir = os.path.join(os.path.dirname(__file__), '..', 'queries_llm')
     os.makedirs(queries_dir, exist_ok=True)
     return queries_dir
-
-def save_results_to_csv(papers: List[Dict], protein_name: str, queries_dir: str):
-    """Save the results to a CSV file in the queries_llm directory."""
-    if not papers:
-        return None
-        
-    date = datetime.now().strftime("%Y-%m-%d")
-    filename = f"{protein_name}_{date}.csv"
-    filepath = os.path.join(queries_dir, filename)
-    
-    with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-        if papers:
-            writer = csv.DictWriter(csvfile, fieldnames=papers[0].keys())
-            writer.writeheader()
-            writer.writerows(papers)
-    return filepath
 
 def main():
     """Main function to run the protein paper search."""
@@ -224,24 +214,20 @@ def main():
         print(f"Found {len(papers)} papers. Summarizing with AI...\n")
         
         # Summarize papers using LLM
-        summarized_papers = summarize_papers_with_llm(papers, protein_name)
+        summary = summarize_papers_with_llm(papers, protein_name)
         
         # Ensure queries directory exists and save results
         queries_dir = ensure_queries_directory()
-        saved_file = save_results_to_csv(summarized_papers, protein_name, queries_dir)
+        saved_file = save_results_to_txt(summary, protein_name, queries_dir)
         
         # Display results
-        if summarized_papers:
-            print(f"Summarized {len(summarized_papers)} papers:\n")
-            for i, paper in enumerate(summarized_papers, 1):
-                print(f"Paper {i}:")
-                for key, value in paper.items():
-                    print(f"{key}: {value}")
-                print("\n" + "-"*80 + "\n")
+        if summary:
+            print("\nSummary of findings:\n")
+            print(summary)
             if saved_file:
                 print(f"\nResults have been saved to: {saved_file}")
         else:
-            print("No papers were summarized or an error occurred during summarization.")
+            print("No summary was generated or an error occurred during summarization.")
             
     except Exception as e:
         print(f"An error occurred: {str(e)}")

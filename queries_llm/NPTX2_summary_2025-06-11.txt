@@ -1,0 +1,27 @@
+NPTX2 has been implicated in various forms of dementia in humans, including Alzheimer's disease (AD) and frontotemporal dementia (FTD). Specifically, cerebrospinal fluid (CSF) levels of NPTX2 have been associated with cognitive decline in AD (Oh HS et al., 2025; Soldan A et al., 2023; Belbin O et al., 2020) and have been identified as a biomarker in genetic forms of FTD (van der Ende EL et al., 2020). These findings suggest a role for NPTX2 in the synaptic dysfunction underlying these neurodegenerative diseases.
+
+In animal models, NPTX2 has been linked to dementia as well. A study by Severin D et al. (2025) demonstrated that NPTX2 transfection improved synaptic E/I balance and performance in learning tasks in a mouse model, suggesting its potential therapeutic role in addressing cognitive deficits associated with dementia.
+
+Beyond dementia, NPTX2 has been connected to other neuropathologies in humans. For instance, reduced CSF NPTX2 levels have been associated with postoperative delirium (POD), indicating a potential role in acute confusional states (Guo Z et al., 2024). Additionally, NPTX2 has been implicated in neuropathic pain-induced cognitive dysfunction, suggesting a broader role in neurocognitive disorders (Wang R et al., 2021).
+
+In animal models, NPTX2 has been linked to other neuropathologies as well. Kanehisa K et al. (2022) found that NPTX2 is required for facilitating excitatory synaptic inputs onto a specific neuron subset in the spinal dorsal horn (SDH) of mice, implicating it in pain processing pathways. This suggests a role for NPTX2 in sensory processing disorders in addition to its involvement in cognitive and synaptic functions.
+
+In summary, NPTX2 has been linked to dementia in both humans (AD and FTD) and animal models, with evidence supporting its role in synaptic dysfunction and cognitive decline. Additionally, NPTX2 has been associated with other neuropathologies such as POD and neuropathic pain-induced cognitive dysfunction in humans, and pain processing in animal models. These findings underscore the importance of NPTX2 in a range of neurological conditions and highlight its potential as a target for therapeutic intervention.
+
+### References
+
+Belbin, O., Xiao, M. F., Xu, D., Carmona-Iragui, M., Pegueroles, J., Benejam, B., ... & Fortea, J. (2020). Cerebrospinal fluid profile of NPTX2 supports role of Alzheimer's disease-related synaptic dysfunction. *Molecular Neurodegeneration*, 15(1), 30. https://doi.org/10.1186/s13024-020-00378-8
+
+Guo, Z., Hong, X., Wang, X., Chen, W., & Guo, Z. (2024). Association of reduced cerebrospinal fluid NPTX2 levels with postoperative delirium. *Aging Clinical and Experimental Research*. https://doi.org/10.1007/s40520-024-02048-3
+
+Kanehisa, K., Koga, K., Maejima, S., Shiraishi, Y., Asai, K., Shiratori-Hayashi, M., ... & Tsuda, M. (2022). Neuronal pentraxin 2 is required for facilitating excitatory synaptic inputs onto an excitatory neuron subset in the spinal dorsal horn. *Nature Communications*, 13(1), 2449. https://doi.org/10.1038/s41467-022-30200-0
+
+Oh, H. S., Urey, D. Y., Karlsson, L., Zhu, Z., Shen, Y., Farinas, A., ... & Wyss-Coray, T. (2025). A cerebrospinal fluid synaptic protein biomarker for prediction of cognitive decline in Alzheimer's disease. *Nature Medicine*. 
+
+Severin, D., Koh, M. T., Moreno, C., Contreras, D., Contreras, A., Wesselborg, C., ... & Kirkwood, A. (2025). NPTX2 transfection improves synaptic E/I balance and performance in learning tasks in mice. *Progress in Neurobiology*. 
+
+Soldan, A., Oh, S., Ryu, T., Pettigrew, C., Zhu, Y., Moghekar, A., ... & Worley, P. (2023). NPTX2 in cerebrospinal fluid predicts the progression from normal cognition to Alzheimer's disease. *Annals of Neurology*. 
+
+van der Ende, E. L., Xiao, M., Xu, D., Poos, J. M., Panman, J. L., Jiskoot, L. C., ... & van Swieten, J. C. (2020). Neuronal pentraxin 2: a synapse-derived CSF biomarker in genetic frontotemporal dementia. *Journal of Neurology, Neurosurgery, and Psychiatry*, 91(6), 612-621. https://doi.org/10.1136/jnnp-2019-322493
+
+Wang, R., Man, Y., Zhou, M., Zhu, Y., Wang, L., Yang, J. (2021). Neuropathic pain-induced cognitive dysfunction and down-regulation of neuronal pentraxin 2. *NeuroReport*, 32(4), 291-297. https://doi.org/10.1097/WNR.0000000000001595
