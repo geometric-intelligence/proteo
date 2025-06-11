@@ -8,6 +8,7 @@ import io
 import requests
 from Bio import Entrez
 import time
+import tiktoken
 
 def setup_openai():
     """Initialize OpenAI client with API key from environment variables."""
@@ -39,7 +40,7 @@ def query_pubmed(protein_name: str) -> List[Dict]:
     
     try:
         # Search PubMed
-        handle = Entrez.esearch(db="pubmed", term=query, retmax=50, sort="relevance")
+        handle = Entrez.esearch(db="pubmed", term=query, retmax=10, sort="relevance")
         record = Entrez.read(handle)
         handle.close()
         
@@ -78,7 +79,8 @@ def parse_pubmed_record(record: str) -> Dict:
             "Authors": "",
             "Journal": "",
             "Year": "",
-            "Abstract": ""
+            "Abstract": "",
+            "DOI": ""
         }
         
         current_field = ""
@@ -99,11 +101,26 @@ def parse_pubmed_record(record: str) -> Dict:
                     paper_info["Year"] = year
             elif line.startswith("AB  - "):
                 paper_info["Abstract"] = line[6:].strip()
+            elif line.startswith("LID - "):
+                doi_text = line[6:].strip()
+                if "10." in doi_text:
+                    doi_parts = doi_text.split("10.")[1]
+                    doi = "10." + doi_parts.split()[0].split("[")[0].split("]")[0].strip()
+                    paper_info["DOI"] = doi
                 
         return paper_info
     except Exception as e:
         print(f"Error parsing PubMed record: {str(e)}")
         return None
+
+def count_tokens(text: str, model: str = "gpt-4-0125-preview") -> int:
+    """Count the number of tokens in a text string."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+        return len(encoding.encode(text))
+    except Exception as e:
+        print(f"Error counting tokens: {str(e)}")
+        return 0
 
 def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> str:
     """
@@ -127,11 +144,12 @@ def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> str:
     # Prepare the papers for the LLM
     papers_text = "\n\n".join([
         f"PMID: {p['PMID']}\nTitle: {p['Title']}\nAuthors: {p['Authors']}\n"
-        f"Journal: {p['Journal']}\nYear: {p['Year']}\nAbstract: {p['Abstract']}"
+        f"Journal: {p['Journal']}\nYear: {p['Year']}\nAbstract: {p['Abstract']}\nDOI: {p['DOI']}"
         for p in papers
     ])
     
-    prompt = f"""You are a research assistant specialized in neuroscience. Analyze these papers about {protein_name} and create a comprehensive summary.
+    prompt = f"""You are a research assistant specialized in neuroscience. 
+    Analyze these papers about {protein_name} and create a comprehensive summary.
 
     Papers to analyze:
     {papers_text}
@@ -147,12 +165,57 @@ def summarize_papers_with_llm(papers: List[Dict], protein_name: str) -> str:
     - If no link has been found for any question, explicitly state that
     - For each finding, cite the specific paper(s) it comes from
     - At the end, provide a References section with all cited papers in APA format
+    - Each reference MUST include the DOI if available
+    - Format references as: Author(s). (Year). Title. Journal, Volume(Issue), Pages. https://doi.org/DOI
     - Only include information that is explicitly stated in the papers
     - Keep the summary focused and concise (half-page)
     - Use proper scientific terminology
 
     Format the response as a well-structured text with clear paragraphs and a References section at the end.
     """
+
+    # Count tokens in the prompt
+    total_tokens = count_tokens(prompt)
+    max_tokens = 120000  # Setting a safe limit below the model's 128K limit
+    
+    if total_tokens > max_tokens:
+        print(f"\nWarning: Input exceeds token limit ({total_tokens} tokens). Reducing number of papers...")
+        # Reduce papers until we're under the limit
+        while total_tokens > max_tokens and len(papers) > 1:
+            papers = papers[:-1]  # Remove the last paper
+            papers_text = "\n\n".join([
+                f"PMID: {p['PMID']}\nTitle: {p['Title']}\nAuthors: {p['Authors']}\n"
+                f"Journal: {p['Journal']}\nYear: {p['Year']}\nAbstract: {p['Abstract']}\nDOI: {p['DOI']}"
+                for p in papers
+            ])
+            prompt = f"""You are a research assistant specialized in neuroscience. 
+            Analyze these papers about {protein_name} and create a comprehensive summary.
+
+            Papers to analyze:
+            {papers_text}
+
+            Create a half-page summary that answers these specific questions:
+            1. Has {protein_name} been linked to dementia in humans? If yes, which types of dementia?
+            2. Has {protein_name} been linked to dementia in animal models? If yes, which types of dementia and which animal models?
+            3. Has {protein_name} been linked to other neuropathologies in humans? If yes, which ones?
+            4. Has {protein_name} been linked to other neuropathologies in animal models? If yes, which ones and which animal models?
+
+            Important requirements:
+            - Write in clear, academic language
+            - If no link has been found for any question, explicitly state that
+            - For each finding, cite the specific paper(s) it comes from
+            - At the end, provide a References section with all cited papers in APA format
+            - Each reference MUST include the DOI if available
+            - Format references as: Author(s). (Year). Title. Journal, Volume(Issue), Pages. https://doi.org/DOI
+            - Only include information that is explicitly stated in the papers
+            - Keep the summary focused and concise (half-page)
+            - Use proper scientific terminology
+
+            Format the response as a well-structured text with clear paragraphs and a References section at the end.
+            """
+            total_tokens = count_tokens(prompt)
+        
+        print(f"Reduced to {len(papers)} papers to stay within token limit.")
 
     try:
         client = setup_openai()
