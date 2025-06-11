@@ -42,18 +42,28 @@ def query_papers(protein_name: str) -> List[Dict]:
         List of dictionaries containing paper information
     """
     date = datetime.now().strftime("%Y-%m-%d")
-    prompt = f"""Find all relevant neuroscience papers from PubMed about 
-    the protein {protein_name} that can answer the following questions:
-    1. Has {protein_name} been linked to dementia(s), in humans and/or animal models?
-    2. Has {protein_name} been linked to other neuro pathologies, in humans and/or animal models?
+    prompt = f"""You are a research assistant specialized in neuroscience. Your task is to find and summarize ONLY REAL, VERIFIABLE scientific papers from PubMed about the protein {protein_name}.
+
+    IMPORTANT RULES:
+    1. ONLY include papers that you are 100% certain exist
+    2. If you're not completely sure about a paper, DO NOT include it
+    3. Each paper must be verifiable through PubMed
+    4. Include the PubMed ID (PMID) for each paper
+    5. If you can't find enough papers, return fewer results rather than making up papers
+
+    Find one paper where {protein_name} been linked to dementia(s) in humans.
+    Find one paper where {protein_name} been linked to dementia(s) in animal models.
+    Find one paper where {protein_name} been linked to other neuro pathologies, in humans.
+    Find one paper where {protein_name} been linked to other neuro pathologies, in animal models.
+    If you can't find any of these, return an empty list.
     
-    Organize the papers into a table, where each row is a paper and the columns are:
+    Organize the papers into a table with four rows, each row is a paper and the columns are:
     - AuthorYEAR
     - Title
     - Journal
+    - PMID (PubMed ID)
     - Human or Animal (which one)
-    - If dementia, which dementia (AD, FTD, else)?
-    - If other neuro pathologies, which ones?
+    - Dementia or neuro pathologies (which one)
     - Brief summary of findings related to {protein_name}
 
     Format the response as a CSV table with headers. Do not include any additional text or formatting.
@@ -62,13 +72,16 @@ def query_papers(protein_name: str) -> List[Dict]:
     try:
         client = setup_openai()
         response = client.chat.completions.create(
-            model="gpt-4",  # Using GPT-4 for better research capabilities
+            model="gpt-4-0125-preview",  # Using OpenAI's deep research model
             messages=[
-                {"role": "system", "content": "You are a research assistant specialized in neuroscience. Your task is to find and summarize relevant scientific papers from Pubmed. Respond only with the CSV data, no additional text."},
+                {"role": "system", "content": "You are a research assistant specialized in neuroscience. Your task is to find and summarize ONLY REAL, VERIFIABLE scientific papers from Pubmed. Never make up or hallucinate papers. If you're not 100% certain about a paper's existence, do not include it. Respond only with the CSV data, no additional text."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3,  # Lower temperature for more focused and consistent results
-            max_tokens=2000
+            temperature=0.1,  # Very low temperature for more deterministic and factual responses
+            max_tokens=2000,
+            presence_penalty=0.0,  # No penalty for repeating information
+            frequency_penalty=0.0,  # No penalty for using the same words
+            top_p=0.1  # Very low top_p for more focused and conservative responses
         )
         
         # Extract and parse the response
