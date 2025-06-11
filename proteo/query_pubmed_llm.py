@@ -40,7 +40,7 @@ def query_pubmed(protein_name: str) -> List[Dict]:
     
     try:
         # Search PubMed
-        handle = Entrez.esearch(db="pubmed", term=query, retmax=10, sort="relevance")
+        handle = Entrez.esearch(db="pubmed", term=query, retmax=50, sort="relevance")
         record = Entrez.read(handle)
         handle.close()
         
