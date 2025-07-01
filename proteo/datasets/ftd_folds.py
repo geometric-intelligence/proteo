@@ -18,6 +18,7 @@ from scipy.signal.windows import triang
 from scipy.ndimage import convolve1d
 from sklearn.model_selection import KFold
 from typing import Callable, Sequence
+from torchmetrics.clustering import MutualInfoScore, SignalNoiseRatio
 
 
 LABEL_DIM_MAP = {

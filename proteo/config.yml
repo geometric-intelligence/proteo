@@ -24,7 +24,7 @@ use_gpu: true
 
 # Dataset
 dataset_name: "ftd"  # 352 subjects in train, 89 in val
-raw_file_name: "2pass_filtered_merged_dataset_3_21.csv"
+raw_file_name: ALLFTD_dataset_for_nina_louisa_071124_age_adjusted.csv #"2pass_filtered_merged_dataset_3_21.csv"
 # Y Value ("carrier", "nfl", "disease_age", "global_cog_slope", "executive_function", "memory", "clinical_dementia_rating", "cog_z_score", "clinical_dementia_rating_global", "clinical_dementia_rating_binary")
 y_val: "nfl"
 # Plasma or CSF
@@ -45,7 +45,8 @@ log_every_n_steps: 10
 
 # Dataset
 num_nodes: 3634  # Every graph has same num_nodes. FIXME: This should not be hardcoded, this dictates number of top proteins to take, max for csf is 7258, for plasma is 7247
-adj_thresh: 0.9  #0.08 
+adj_thresh: 0.1  #0.08 
+adj_metric: "mutual_info" #, "bicor", "signal_noise_ratio", "max_info_coef"
 
 # Only used for WGCNA analysis, not dataset creation:
 wgcna_minModuleSize: 10
@@ -54,14 +55,14 @@ wgcna_mergeCutHeight: 0.25
 # n_edges(0.5) = 138188; n_edges(0.7) = 31805; n_edges(0.8) = 11367; n_edges(0.9)= 7467; n_edges(0.95)= 7303
 
 # Model
-model: gat-v4
-dropout: 0  # dropout of the gconvs
-act: relu  # act of the gconvs
-fc_dim: [64, 128, 128, 32]
+model: mlp
+dropout: 0.1  # dropout of the gconvs
+act: tanh  # act of the gconvs
+fc_dim: [128, 256, 256, 64]
 fc_dropout: 0.1
-fc_act: relu
+fc_act: tanh
 which_layer: ['layer1', 'layer2', 'layer3', 'sex', 'mutation', 'age'] #USE THIS FOR PRE ENCODER GRAPH LEVEL
-use_feature_encoder: false
+use_feature_encoder: true
 
 gat-v4:
   hidden_channels: [8, 16]
@@ -81,7 +82,7 @@ gcn:
   hidden_channels: 32
 
 mlp:
-  channel_list: [1028, 256, 128, 64]
+  channel_list: [512, 256, 128, 32]
 
 # Training
 batch_size: 8 #for one off training
@@ -94,10 +95,10 @@ lr: 0.0001
 weight_decay: 0 #0.1
 l1_lambda: 0.00001
 optimizer: Adam
-lr_scheduler: LambdaLR
+lr_scheduler: CosineAnnealingLR
 
 # k-fold evaluation
-kfold: true
+kfold: False
 num_folds: 5
 fold: 4
 
